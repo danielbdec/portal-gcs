@@ -585,13 +585,16 @@ export default function ConsultaNotas() {
           sortDir: sortConfig.direction || 'asc',
         };
 
+        // --- INÍCIO DA MODIFICAÇÃO ---
         // busca
         const termo = (busca || '').trim();
-        if (/^\d{44}$/.test(termo)) {
-          body.chave = termo;
-        } else if (termo) {
-          body.fornecedor = termo;
+        if (termo) {
+          // Envia o termo de busca genérico.
+          // O n8n (Monta Query) tratará a busca em nf, chave e fornecedor.
+          body.termo = termo;
         }
+        // --- FIM DA MODIFICAÇÃO ---
+
 
         // mapeia abas: status_nf ou flags por setor
         const statusNf = statusFiltroToStatusNf(filtroStatus);

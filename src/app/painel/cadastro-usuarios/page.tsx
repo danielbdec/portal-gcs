@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Users, Save, UserCheck, UserX, Edit, ShieldCheck, Trash2, PlusCircle, KeyRound, Cog, UserRoundCheck, UserRoundX, Lock } from "lucide-react";
+import NotificationModal from "./NotificationModal"; // Importando o NotificationModal
 
 // --- INTERFACES ---
 interface Funcao {
@@ -31,6 +32,11 @@ interface FuncoesAgrupadas {
 
 // --- COMPONENTES AUXILIARES ---
 
+// Componente de spinner pequeno para botões
+const ButtonSpinner = ({ color = "var(--gcs-blue)" }: { color?: string }) => (
+    <div style={{ width: '18px', height: '18px', border: `2px solid ${color === 'white' ? 'rgba(255,255,255,0.3)' : 'var(--gcs-gray-medium)'}`, borderTop: `2px solid ${color}`, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+);
+
 const LoadingSpinner = ({ text }: { text: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
         <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -57,12 +63,22 @@ const AcessoNegado = () => {
 };
 
 // --- COMPONENTE DE CADASTRO DE FUNÇÕES ---
-function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Funcao[], onFuncaoChange: () => void, isLoading: boolean }) {
+function CadastroFuncoes({ 
+    funcoes, 
+    onFuncaoChange, 
+    isLoading,
+    setNotification // Prop para disparar notificação
+}: { 
+    funcoes: Funcao[], 
+    onFuncaoChange: () => void, 
+    isLoading: boolean,
+    setNotification: (notification: { visible: boolean, type: 'success' | 'error', message: string }) => void 
+}) {
   const [nomeChave, setNomeChave] = useState("");
   const [modulo, setModulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [funcaoEditando, setFuncaoEditando] = useState<Funcao | null>(null);
-  const [mensagem, setMensagem] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Estado de carregamento
 
   const limparFormularioFuncao = () => {
     setNomeChave("");
@@ -72,7 +88,7 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
   };
 
   const salvarFuncao = async () => {
-    setMensagem("");
+    setIsSubmitting(true);
     const isEditing = !!funcaoEditando;
     const endpoint = isEditing ? "/api/portal/altera-funcao" : "/api/portal/cria-funcao";
 
@@ -81,35 +97,48 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
       (dados as any).id = funcaoEditando!.id;
     }
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(dados),
-    });
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dados),
+      });
 
-    if (res.ok) {
-      setMensagem(`Função ${isEditing ? 'atualizada' : 'criada'} com sucesso.`);
-      limparFormularioFuncao();
-      onFuncaoChange();
-    } else {
-      const erro = await res.json();
-      setMensagem("Erro: " + (erro.error || "Ocorreu um problema."));
+      if (res.ok) {
+        setNotification({ visible: true, type: 'success', message: `Função ${isEditing ? 'atualizada' : 'criada'} com sucesso.` });
+        limparFormularioFuncao();
+        onFuncaoChange();
+      } else {
+        const erro = await res.json();
+        throw new Error(erro.error || "Ocorreu um problema.");
+      }
+    } catch (error: any) {
+        setNotification({ visible: true, type: 'error', message: "Erro: " + error.message });
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
   const excluirFuncao = async (id: number) => {
     if (window.confirm("Tem certeza que deseja excluir esta função? Isso pode afetar usuários existentes.")) {
-      const res = await fetch("/api/portal/exclui-funcao", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (res.ok) {
-        setMensagem("Função excluída com sucesso.");
-        onFuncaoChange();
-      } else {
-        const erro = await res.json();
-        setMensagem("Erro ao excluir: " + (erro.error || "Ocorreu um problema."));
+      setIsSubmitting(true);
+      try {
+        const res = await fetch("/api/portal/exclui-funcao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        if (res.ok) {
+          setNotification({ visible: true, type: 'success', message: "Função excluída com sucesso." });
+          onFuncaoChange();
+        } else {
+          const erro = await res.json();
+          throw new Error(erro.error || "Ocorreu um problema.");
+        }
+      } catch (error: any) {
+        setNotification({ visible: true, type: 'error', message: "Erro ao excluir: " + error.message });
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
@@ -128,16 +157,16 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
         Adicionar/Editar Função
       </h3>
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <input type="text" value={modulo} onChange={(e) => setModulo(e.target.value)} placeholder="Módulo (ex: NF Entrada)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }}/>
-        <input type="text" value={nomeChave} onChange={(e) => setNomeChave(e.target.value)} placeholder="Chave (ex: nfEntrada.ver)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }}/>
-        <input type="text" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descrição amigável" className="form-input" style={{ marginBottom: 0, flex: '2 1 300px' }}/>
-        <button onClick={salvarFuncao} className="btn btn-green" style={{ whiteSpace: 'nowrap' }}>
-          {funcaoEditando ? <Save size={18}/> : <PlusCircle size={18}/>}
-          {funcaoEditando ? 'Atualizar' : 'Adicionar'}
+        <input type="text" value={modulo} onChange={(e) => setModulo(e.target.value)} placeholder="Módulo (ex: NF Entrada)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }} disabled={isSubmitting} />
+        <input type="text" value={nomeChave} onChange={(e) => setNomeChave(e.target.value)} placeholder="Chave (ex: nfEntrada.ver)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }} disabled={isSubmitting} />
+        <input type="text" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descrição amigável" className="form-input" style={{ marginBottom: 0, flex: '2 1 300px' }} disabled={isSubmitting} />
+        <button onClick={salvarFuncao} className="btn btn-green" style={{ whiteSpace: 'nowrap' }} disabled={isSubmitting}>
+          {isSubmitting ? <ButtonSpinner color="white" /> : (funcaoEditando ? <Save size={18}/> : <PlusCircle size={18}/>)}
+          {isSubmitting ? "Salvando..." : (funcaoEditando ? 'Atualizar' : 'Adicionar')}
         </button>
-        {funcaoEditando && <button onClick={limparFormularioFuncao} className="btn btn-outline-gray">Cancelar</button>}
+        {funcaoEditando && <button onClick={limparFormularioFuncao} className="btn btn-outline-gray" disabled={isSubmitting}>Cancelar</button>}
       </div>
-      {mensagem && <p style={{ padding: '1rem', borderRadius: '8px', backgroundColor: mensagem.startsWith('Erro') ? '#f8d7da' : '#d4edda', color: mensagem.startsWith('Erro') ? '#721c24' : '#155724' }}>{mensagem}</p>}
+      {/* Mensagem foi removida, agora usa NotificationModal */}
       <hr style={{ margin: '2rem 0', border: 'none', borderTop: '1px solid var(--gcs-border-color)' }} />
       <h4 style={{ marginTop: 0, fontSize: '1.25rem', color: 'var(--gcs-blue)', marginBottom: '1.5rem' }}>
         Funções Cadastradas
@@ -147,9 +176,7 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
             <thead style={{ backgroundColor: 'var(--gcs-gray-light)', textAlign: 'left' }}>
               <tr>
-                {/* INÍCIO DA ALTERAÇÃO */}
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)', width: '80px' }}>ID</th>
-                {/* FIM DA ALTERAÇÃO */}
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Módulo</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Chave</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Descrição</th>
@@ -159,16 +186,14 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
             <tbody>
               {funcoes.map(f => (
                 <tr key={f.id}>
-                  {/* INÍCIO DA ALTERAÇÃO */}
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)', fontFamily: 'monospace', color: 'var(--gcs-gray-dark)' }}>{f.id}</td>
-                  {/* FIM DA ALTERAÇÃO */}
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)' }}>{f.modulo}</td>
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)', fontFamily: 'monospace' }}>{f.nome_chave}</td>
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)' }}>{f.descricao}</td>
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button onClick={() => editarFuncao(f)} className="btn btn-outline-gray" style={{ padding: '8px' }} title="Editar"><Edit size={16}/></button>
-                      <button onClick={() => excluirFuncao(f.id)} className="btn btn-outline-gray" style={{ padding: '8px' }} title="Excluir"><Trash2 size={16}/></button>
+                      <button onClick={() => editarFuncao(f)} className="btn btn-outline-gray" style={{ padding: '8px' }} title="Editar" disabled={isSubmitting}><Edit size={16}/></button>
+                      <button onClick={() => excluirFuncao(f.id)} className="btn btn-outline-gray" style={{ padding: '8px' }} title="Excluir" disabled={isSubmitting}><Trash2 size={16}/></button>
                     </div>
                   </td>
                 </tr>
@@ -196,7 +221,7 @@ function GerenciamentoUsuarioModal({
     onClose: () => void, 
     user: Usuario | null, 
     todasFuncoes: Funcao[],
-    onSave: (data: any) => Promise<void>,
+    onSave: (data: any) => Promise<boolean>, // Modificado para retornar boolean
     funcoesAgrupadas: FuncoesAgrupadas
 }) {
     const [activeModalTab, setActiveModalTab] = useState<'dados' | 'permissoes'>('dados');
@@ -204,6 +229,7 @@ function GerenciamentoUsuarioModal({
     const [statusUsuario, setStatusUsuario] = useState("ativo");
     const [isAdmin, setIsAdmin] = useState(false);
     const [funcoesSelecionadas, setFuncoesSelecionadas] = useState<Set<number>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false); // Estado de carregamento
 
     useEffect(() => {
         if (isOpen && user) {
@@ -217,7 +243,8 @@ function GerenciamentoUsuarioModal({
 
     if (!isOpen) return null;
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        setIsSubmitting(true);
         const dados: any = {
             email,
             status: statusUsuario,
@@ -227,9 +254,14 @@ function GerenciamentoUsuarioModal({
         if (user) {
             dados.id = user.id;
         }
-        onSave(dados).then(() => {
-            onClose();
-        });
+
+        const success = await onSave(dados); // Chama o onSave (salvarUsuario)
+        setIsSubmitting(false);
+
+        if (success) {
+            onClose(); // Fecha o modal apenas se a operação for bem-sucedida
+        }
+        // Se não for sucesso, o modal permanece aberto e a notificação de erro é exibida (pelo componente pai)
     };
     
     const handleFuncaoChange = (funcaoId: number) => {
@@ -244,27 +276,27 @@ function GerenciamentoUsuarioModal({
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }}></div>
+            <div onClick={isSubmitting ? undefined : onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }}></div>
             <div className="content-card" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1001, width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}>
                 <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
                     <Users size={28} />
                     <span>{user ? "Gerenciar Usuário" : "Adicionar Novo Usuário"}</span>
                 </h2>
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--gcs-border-color)', marginBottom: '2rem' }}>
-                    <button className={`tab-button ${activeModalTab === 'dados' ? 'active' : ''}`} onClick={() => setActiveModalTab('dados')}>Dados do Usuário</button>
-                    <button className={`tab-button ${activeModalTab === 'permissoes' ? 'active' : ''}`} onClick={() => setActiveModalTab('permissoes')}>Permissões</button>
+                    <button className={`tab-button ${activeModalTab === 'dados' ? 'active' : ''}`} onClick={() => setActiveModalTab('dados')} disabled={isSubmitting}>Dados do Usuário</button>
+                    <button className={`tab-button ${activeModalTab === 'permissoes' ? 'active' : ''}`} onClick={() => setActiveModalTab('permissoes')} disabled={isSubmitting}>Permissões</button>
                 </div>
                 {activeModalTab === 'dados' && (
                     <div>
                         <label className="form-label">Email</label>
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email do usuário" className="form-input" />
+                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email do usuário" className="form-input" disabled={isSubmitting} />
                         <label className="form-label">Status</label>
-                        <select value={statusUsuario} onChange={(e) => setStatusUsuario(e.target.value)} className="form-select">
+                        <select value={statusUsuario} onChange={(e) => setStatusUsuario(e.target.value)} className="form-select" disabled={isSubmitting}>
                             <option value="ativo">Ativo</option>
                             <option value="inativo">Inativo</option>
                         </select>
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center' }}>
-                            <input type="checkbox" id="is_admin_modal" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ width: '1.2em', height: '1.2em', cursor: 'pointer' }} />
+                            <input type="checkbox" id="is_admin_modal" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ width: '1.2em', height: '1.2em', cursor: 'pointer' }} disabled={isSubmitting} />
                             <label htmlFor="is_admin_modal" style={{ marginLeft: '8px', fontWeight: 500, cursor: 'pointer' }}>É Administrador (Acesso Total)</label>
                         </div>
                     </div>
@@ -277,8 +309,8 @@ function GerenciamentoUsuarioModal({
                                 <legend>{modulo}</legend>
                                 {funcoes.map(funcao => (
                                 <div key={funcao.id} style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center' }}>
-                                    <input type="checkbox" id={`modal-funcao-${funcao.id}`} checked={funcoesSelecionadas.has(funcao.id)} onChange={() => handleFuncaoChange(funcao.id)} disabled={isAdmin} style={{ width: '1.2em', height: '1.2em', cursor: 'pointer' }}/>
-                                    <label htmlFor={`modal-funcao-${funcao.id}`} style={{ marginLeft: '8px', color: isAdmin ? '#999' : 'inherit', cursor: 'pointer' }}>{funcao.descricao}</label>
+                                    <input type="checkbox" id={`modal-funcao-${funcao.id}`} checked={funcoesSelecionadas.has(funcao.id)} onChange={() => handleFuncaoChange(funcao.id)} disabled={isAdmin || isSubmitting} style={{ width: '1.2em', height: '1.2em', cursor: 'pointer' }}/>
+                                    <label htmlFor={`modal-funcao-${funcao.id}`} style={{ marginLeft: '8px', color: (isAdmin || isSubmitting) ? '#999' : 'inherit', cursor: 'pointer' }}>{funcao.descricao}</label>
                                 </div>
                                 ))}
                             </fieldset>
@@ -287,10 +319,10 @@ function GerenciamentoUsuarioModal({
                     </div>
                 )}
                 <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                    <button onClick={onClose} className="btn btn-outline-gray">Cancelar</button>
-                    <button onClick={handleSave} className="btn btn-green">
-                        <Save size={18} />
-                        {user ? "Atualizar Usuário" : "Salvar Usuário"}
+                    <button onClick={onClose} className="btn btn-outline-gray" disabled={isSubmitting}>Cancelar</button>
+                    <button onClick={handleSave} className="btn btn-green" disabled={isSubmitting}>
+                        {isSubmitting ? <ButtonSpinner color="white" /> : <Save size={18} />}
+                        {isSubmitting ? "Salvando..." : (user && user.id ? "Atualizar Usuário" : "Salvar Usuário")}
                     </button>
                 </div>
             </div>
@@ -304,12 +336,15 @@ function CadastroUsuariosInner() {
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
   const [activeTab, setActiveTab] = useState<'usuarios' | 'funcoes'>('usuarios');
-  const [mensagem, setMensagem] = useState("");
+  // Estado de notificação
+  const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [todasFuncoes, setTodasFuncoes] = useState<Funcao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [managingUser, setManagingUser] = useState<Usuario | null>(null);
+  // Estado para spinner do botão "Gerenciar"
+  const [loadingUserId, setLoadingUserId] = useState<number | null>(null);
 
   useEffect(() => {
     if (status === 'loading') {
@@ -373,22 +408,28 @@ function CadastroUsuariosInner() {
     }
   };
 
-  const salvarUsuario = async (dados: any) => {
-    setMensagem(""); 
+  const salvarUsuario = async (dados: any): Promise<boolean> => {
     const isEditing = !!dados.id;
     const endpoint = isEditing ? "/api/portal/altera-usuarios" : "/api/portal/cria-usuarios";
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(dados),
-    });
+    
+    try {
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(dados),
+        });
 
-    if (res.ok) {
-      setMensagem(`Usuário ${isEditing ? 'atualizado' : 'criado'} com sucesso.`);
-      carregarUsuarios();
-    } else {
-      const erro = await res.json();
-      setMensagem("Erro: " + (erro.error || "Ocorreu um problema na operação."));
+        if (res.ok) {
+            setNotification({ visible: true, type: 'success', message: `Usuário ${isEditing ? 'atualizado' : 'criado'} com sucesso.` });
+            carregarUsuarios();
+            return true; // Sucesso
+        } else {
+            const erro = await res.json();
+            throw new Error(erro.error || "Ocorreu um problema na operação.");
+        }
+    } catch (error: any) {
+        setNotification({ visible: true, type: 'error', message: "Erro: " + error.message });
+        return false; // Falha
     }
   };
   
@@ -405,6 +446,7 @@ function CadastroUsuariosInner() {
   };
 
   const openModalForEdit = async (user: Usuario) => {
+    setLoadingUserId(user.id); // Ativa o spinner para este botão
     try {
       const res = await fetch('/api/portal/consulta-usuarios-funcoes', {
         method: 'POST',
@@ -427,9 +469,11 @@ function CadastroUsuariosInner() {
       setManagingUser(completeUser);
       setIsModalOpen(true);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao buscar detalhes do usuário:", error);
-      setMensagem("Erro: Não foi possível carregar as permissões deste usuário.");
+      setNotification({ visible: true, type: 'error', message: "Erro: Não foi possível carregar as permissões deste usuário." });
+    } finally {
+      setLoadingUserId(null); // Desativa o spinner
     }
   };
 
@@ -543,13 +587,13 @@ function CadastroUsuariosInner() {
         {activeTab === 'usuarios' && (
             <div className="content-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h3 style={{ marginTop: 0, fontSize: '1.75rem', color: 'var(--gcs-blue)'}}>Utilizadores Registados</h3>
+                    <h3 style={{ marginTop: 0, fontSize: '1.75rem', color: 'var(--gcs-blue)'}}>Usuários Registrados</h3>
                     <button onClick={openModalForNew} className="btn btn-green">
                         <PlusCircle size={18}/>
                         Adicionar Usuário
                     </button>
                 </div>
-                {mensagem && <p style={{ marginBottom: "1rem", padding: '1rem', borderRadius: '8px', backgroundColor: mensagem.startsWith('Erro') ? '#f8d7da' : '#d4edda', color: mensagem.startsWith('Erro') ? '#721c24' : '#155724' }}>{mensagem}</p>}
+                
                 {isLoading ? <LoadingSpinner text="Carregando usuários..." /> : usuarios.length > 0 ? (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {usuarios.map((u) => (
@@ -576,9 +620,20 @@ function CadastroUsuariosInner() {
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <button onClick={() => openModalForEdit(u)} className="btn btn-outline-gray" style={{ padding: '8px 16px' }}>
-                                <Cog size={16} />
-                                Gerenciar
+                            <button 
+                                onClick={() => openModalForEdit(u)} 
+                                className="btn btn-outline-gray" 
+                                style={{ padding: '8px 16px', minWidth: '120px', minHeight: '40px' }} // Garante tamanho fixo
+                                disabled={loadingUserId === u.id}
+                            >
+                                {loadingUserId === u.id ? (
+                                    <ButtonSpinner />
+                                ) : (
+                                    <>
+                                        <Cog size={16} />
+                                        Gerenciar
+                                    </>
+                                )}
                             </button>
                         </div>
                         </li>
@@ -592,6 +647,7 @@ function CadastroUsuariosInner() {
                 funcoes={todasFuncoes} 
                 onFuncaoChange={carregarFuncoes} 
                 isLoading={isLoading}
+                setNotification={setNotification} // Passa a função de notificação
             />
         )}
       </div>
@@ -602,6 +658,13 @@ function CadastroUsuariosInner() {
         todasFuncoes={todasFuncoes}
         onSave={salvarUsuario}
         funcoesAgrupadas={funcoesAgrupadas}
+      />
+      {/* Renderiza o modal de notificação */}
+      <NotificationModal
+          visible={notification.visible}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => setNotification({ visible: false, type: 'success', message: '' })}
       />
     </>
   );

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { FaCheckCircle, FaTimesCircle, FaExclamationTriangle, FaListAlt, FaHistory, FaFileInvoice, FaSyncAlt, FaInfoCircle, FaUserFriends, FaSearch, FaTimes, FaSpinner, FaCopy, FaShieldAlt, FaPencilAlt } from "react-icons/fa";
+import { FaCheckCircle, FaTimesCircle, FaExclamationTriangle, FaListAlt, FaHistory, FaFileInvoice, FaSyncAlt, FaInfoCircle, FaUserFriends, FaSearch, FaTimes, FaSpinner, FaCopy, FaShieldAlt, FaPencilAlt, FaPlus } from "react-icons/fa";
 import { Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
 
@@ -516,6 +516,12 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
 
   const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
 
+  // --- Estados para o novo comentário ---
+  const [isAddingComment, setIsAddingComment] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  const MAX_COMMENT_LENGTH = 1000;
+
   const handleOpenFinanceiroModal = (type: 'dda' | 'titulos') => {
     setConsultaFinanceiraType(type);
     setIsFinanceiroModalOpen(true);
@@ -976,6 +982,38 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
     }
   };
 
+  const handleEnviarComentario = async () => {
+    if (!newComment.trim()) {
+        setNotification({ visible: true, type: 'error', message: 'O comentário não pode estar vazio.' });
+        return;
+    }
+    setIsSendingComment(true);
+    try {
+        const response = await fetch('/api/nfe/nfe-historico-manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chave: chave,
+                email_solicitante: session?.user?.email,
+                historico: newComment.trim()
+            }),
+        });
+        const result = await response.json();
+        if (response.ok && result.status === 'ok') {
+            setNotification({ visible: true, type: 'success', message: 'Comentário adicionado com sucesso!' });
+            setNewComment('');
+            setIsAddingComment(false);
+            fetchHistorico(); // Recarrega o histórico para mostrar o novo comentário
+        } else {
+            throw new Error(result.message || 'Falha ao adicionar comentário.');
+        }
+    } catch (error: any) {
+        setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível enviar o comentário.' });
+    } finally {
+        setIsSendingComment(false);
+    }
+  };
+
   if (!visivel) return null;
 
   // --- Componente de Spinner para Abas ---
@@ -1398,7 +1436,80 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                       <div>
                         {loadingHistorico ? <TabSpinner /> : (
                             <>
-                                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaHistory /> Histórico de Movimentações</h3>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><FaHistory /> Histórico de Movimentações</h3>
+                                    {!isAddingComment && (
+                                        <button 
+                                            onClick={() => setIsAddingComment(true)}
+                                            style={{
+                                                background: '#1b4c89',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '5px',
+                                                padding: '8px 16px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontWeight: 'bold',
+                                                fontSize: '14px',
+                                                transition: 'background-color 0.2s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = '#00314A'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = '#1b4c89'}
+                                        >
+                                            <FaPlus size={12} /> Adicionar Comentário
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {isAddingComment && (
+                                    <div style={{ border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem', background: '#f8f9fa' }}>
+                                        <textarea
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            maxLength={MAX_COMMENT_LENGTH}
+                                            placeholder="Digite seu comentário aqui..."
+                                            rows={4}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px',
+                                                borderRadius: '5px',
+                                                border: '1px solid #ccc',
+                                                resize: 'vertical',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box'
+                                            }}
+                                            autoFocus
+                                        />
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                                            <span style={{ fontSize: '12px', color: '#6c757d' }}>
+                                                {MAX_COMMENT_LENGTH - newComment.length} caracteres restantes
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button 
+                                                    onClick={() => { setIsAddingComment(false); setNewComment(''); }}
+                                                    disabled={isSendingComment}
+                                                    style={{ padding: '8px 16px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button 
+                                                    onClick={handleEnviarComentario} 
+                                                    disabled={isSendingComment || !newComment.trim()}
+                                                    style={{ 
+                                                        padding: '8px 16px', borderRadius: '5px', border: 'none', background: '#28a745', color: 'white', 
+                                                        cursor: (isSendingComment || !newComment.trim()) ? 'not-allowed' : 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px',
+                                                        opacity: (isSendingComment || !newComment.trim()) ? 0.7 : 1
+                                                    }}
+                                                >
+                                                    {isSendingComment ? <><FaSpinner className="animate-spin" size={14} /> <span>Enviando...</span></> : 'Enviar'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {(movimentacoes.length === 0) ? (
                                 <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem' }}>Não há movimentações no histórico ainda.</p>
                                 ) : (

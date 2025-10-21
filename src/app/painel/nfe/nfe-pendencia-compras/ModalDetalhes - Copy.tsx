@@ -1198,6 +1198,27 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                           </p>
                           <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                               <button
+                                  onClick={() => setIsManualPedidoModalOpen(true)}
+                                  disabled={isButtonDisabled || isSubmitting || areAssistantButtonsDisabled}
+                                  style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      padding: '10px 20px',
+                                      borderRadius: '5px',
+                                      border: 'none',
+                                      background: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? '#6c757d' : '#17a2b8',
+                                      color: 'white',
+                                      cursor: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 'not-allowed' : 'pointer',
+                                      fontWeight: 'bold',
+                                      transition: 'background-color 0.2s',
+                                      opacity: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 0.6 : 1
+                                  }}
+                              >
+                                  <FaPencilAlt size={14} />
+                                  Pedido Manual
+                              </button>
+                              <button
                                   onClick={handleReprocessar}
                                   disabled={isButtonDisabled || isSubmitting || areAssistantButtonsDisabled}
                                   style={{

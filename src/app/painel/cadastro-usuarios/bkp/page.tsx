@@ -2,8 +2,7 @@
 
 import { Suspense, useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation"; // Importar o useRouter
-// Importando ícones para a nova interface
+import { useRouter } from "next/navigation";
 import { Users, Save, UserCheck, UserX, Edit, ShieldCheck, Trash2, PlusCircle, KeyRound, Cog, UserRoundCheck, UserRoundX, Lock } from "lucide-react";
 
 // --- INTERFACES ---
@@ -12,6 +11,10 @@ interface Funcao {
   nome_chave: string;
   modulo: string;
   descricao: string;
+}
+
+interface FuncaoDoUsuario {
+  funcao_id: number;
 }
 
 interface Usuario {
@@ -53,7 +56,6 @@ const AcessoNegado = () => {
   );
 };
 
-
 // --- COMPONENTE DE CADASTRO DE FUNÇÕES ---
 function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Funcao[], onFuncaoChange: () => void, isLoading: boolean }) {
   const [nomeChave, setNomeChave] = useState("");
@@ -72,12 +74,11 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
   const salvarFuncao = async () => {
     setMensagem("");
     const isEditing = !!funcaoEditando;
-    // TODO: Criar estes endpoints na sua API
     const endpoint = isEditing ? "/api/portal/altera-funcao" : "/api/portal/cria-funcao";
 
     const dados = { nome_chave: nomeChave, modulo, descricao };
     if (isEditing) {
-      (dados as any).id = funcaoEditando.id;
+      (dados as any).id = funcaoEditando!.id;
     }
 
     const res = await fetch(endpoint, {
@@ -98,7 +99,6 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
 
   const excluirFuncao = async (id: number) => {
     if (window.confirm("Tem certeza que deseja excluir esta função? Isso pode afetar usuários existentes.")) {
-      // TODO: Criar este endpoint na sua API
       const res = await fetch("/api/portal/exclui-funcao", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,7 +127,6 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
         <PlusCircle size={28}/>
         Adicionar/Editar Função
       </h3>
-      
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <input type="text" value={modulo} onChange={(e) => setModulo(e.target.value)} placeholder="Módulo (ex: NF Entrada)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }}/>
         <input type="text" value={nomeChave} onChange={(e) => setNomeChave(e.target.value)} placeholder="Chave (ex: nfEntrada.ver)" className="form-input" style={{ marginBottom: 0, flex: '1 1 150px' }}/>
@@ -139,7 +138,6 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
         {funcaoEditando && <button onClick={limparFormularioFuncao} className="btn btn-outline-gray">Cancelar</button>}
       </div>
       {mensagem && <p style={{ padding: '1rem', borderRadius: '8px', backgroundColor: mensagem.startsWith('Erro') ? '#f8d7da' : '#d4edda', color: mensagem.startsWith('Erro') ? '#721c24' : '#155724' }}>{mensagem}</p>}
-
       <hr style={{ margin: '2rem 0', border: 'none', borderTop: '1px solid var(--gcs-border-color)' }} />
       <h4 style={{ marginTop: 0, fontSize: '1.25rem', color: 'var(--gcs-blue)', marginBottom: '1.5rem' }}>
         Funções Cadastradas
@@ -149,6 +147,9 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
             <thead style={{ backgroundColor: 'var(--gcs-gray-light)', textAlign: 'left' }}>
               <tr>
+                {/* INÍCIO DA ALTERAÇÃO */}
+                <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)', width: '80px' }}>ID</th>
+                {/* FIM DA ALTERAÇÃO */}
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Módulo</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Chave</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid var(--gcs-border-color)' }}>Descrição</th>
@@ -158,6 +159,9 @@ function CadastroFuncoes({ funcoes, onFuncaoChange, isLoading }: { funcoes: Func
             <tbody>
               {funcoes.map(f => (
                 <tr key={f.id}>
+                  {/* INÍCIO DA ALTERAÇÃO */}
+                  <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)', fontFamily: 'monospace', color: 'var(--gcs-gray-dark)' }}>{f.id}</td>
+                  {/* FIM DA ALTERAÇÃO */}
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)' }}>{f.modulo}</td>
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)', fontFamily: 'monospace' }}>{f.nome_chave}</td>
                   <td style={{ padding: '12px', borderBottom: '1px solid var(--gcs-border-color)' }}>{f.descricao}</td>
@@ -196,20 +200,18 @@ function GerenciamentoUsuarioModal({
     funcoesAgrupadas: FuncoesAgrupadas
 }) {
     const [activeModalTab, setActiveModalTab] = useState<'dados' | 'permissoes'>('dados');
-    
-    // Estados do formulário, inicializados com os dados do usuário
     const [email, setEmail] = useState("");
     const [statusUsuario, setStatusUsuario] = useState("ativo");
     const [isAdmin, setIsAdmin] = useState(false);
     const [funcoesSelecionadas, setFuncoesSelecionadas] = useState<Set<number>>(new Set());
 
     useEffect(() => {
-        if (isOpen) {
-            setEmail(user?.email || "");
-            setStatusUsuario(user?.status || "ativo");
-            setIsAdmin(user?.is_admin || false);
-            setFuncoesSelecionadas(new Set(user?.funcoes || []));
-            setActiveModalTab('dados'); // Reseta para a primeira aba ao abrir
+        if (isOpen && user) {
+            setEmail(user.email || "");
+            setStatusUsuario(user.status || "ativo");
+            setIsAdmin(user.is_admin || false);
+            setFuncoesSelecionadas(new Set(user.funcoes || []));
+            setActiveModalTab('dados');
         }
     }, [isOpen, user]);
 
@@ -220,13 +222,13 @@ function GerenciamentoUsuarioModal({
             email,
             status: statusUsuario,
             is_admin: isAdmin,
-            funcao_ids: Array.from(funcoesSelecionadas),
+            funcoes: Array.from(funcoesSelecionadas),
         };
         if (user) {
             dados.id = user.id;
         }
         onSave(dados).then(() => {
-            onClose(); // Fecha o modal após salvar
+            onClose();
         });
     };
     
@@ -248,33 +250,25 @@ function GerenciamentoUsuarioModal({
                     <Users size={28} />
                     <span>{user ? "Gerenciar Usuário" : "Adicionar Novo Usuário"}</span>
                 </h2>
-
-                {/* Abas do Modal */}
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--gcs-border-color)', marginBottom: '2rem' }}>
                     <button className={`tab-button ${activeModalTab === 'dados' ? 'active' : ''}`} onClick={() => setActiveModalTab('dados')}>Dados do Usuário</button>
                     <button className={`tab-button ${activeModalTab === 'permissoes' ? 'active' : ''}`} onClick={() => setActiveModalTab('permissoes')}>Permissões</button>
                 </div>
-
-                {/* Conteúdo da Aba de Dados */}
                 {activeModalTab === 'dados' && (
                     <div>
                         <label className="form-label">Email</label>
                         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email do usuário" className="form-input" />
-                        
                         <label className="form-label">Status</label>
                         <select value={statusUsuario} onChange={(e) => setStatusUsuario(e.target.value)} className="form-select">
                             <option value="ativo">Ativo</option>
                             <option value="inativo">Inativo</option>
                         </select>
-                        
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center' }}>
                             <input type="checkbox" id="is_admin_modal" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ width: '1.2em', height: '1.2em', cursor: 'pointer' }} />
                             <label htmlFor="is_admin_modal" style={{ marginLeft: '8px', fontWeight: 500, cursor: 'pointer' }}>É Administrador (Acesso Total)</label>
                         </div>
                     </div>
                 )}
-
-                {/* Conteúdo da Aba de Permissões */}
                 {activeModalTab === 'permissoes' && (
                     <div>
                         {todasFuncoes.length > 0 ? (
@@ -292,7 +286,6 @@ function GerenciamentoUsuarioModal({
                         ) : <p style={{ color: 'var(--gcs-gray-dark)' }}>Nenhuma permissão encontrada. Cadastre funções na aba "Funções do Portal".</p>}
                     </div>
                 )}
-
                 <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                     <button onClick={onClose} className="btn btn-outline-gray">Cancelar</button>
                     <button onClick={handleSave} className="btn btn-green">
@@ -305,7 +298,6 @@ function GerenciamentoUsuarioModal({
     );
 }
 
-
 // --- COMPONENTE PRINCIPAL ---
 function CadastroUsuariosInner() {
   const { data: session, status } = useSession();
@@ -313,34 +305,28 @@ function CadastroUsuariosInner() {
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
   const [activeTab, setActiveTab] = useState<'usuarios' | 'funcoes'>('usuarios');
   const [mensagem, setMensagem] = useState("");
-
-  // Estados de dados
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [todasFuncoes, setTodasFuncoes] = useState<Funcao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [managingUser, setManagingUser] = useState<Usuario | null>(null);
 
-  // --- GUARDA DE ROTA ---
   useEffect(() => {
     if (status === 'loading') {
       setAuthStatus('loading');
       return;
     }
     if (status === 'authenticated') {
-      const user = session.user;
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('admin.gerenciarUsuarios');
-      
+      const user = session.user as any;
+      const hasAccess = user?.is_admin === true || (Array.isArray(user?.funcoes) && user.funcoes.includes('admin.gerenciarUsuarios'));
       if (hasAccess) {
         setAuthStatus('authorized');
-        fetchData(); // Só carrega os dados se o utilizador for autorizado
+        fetchData();
       } else {
         setAuthStatus('unauthorized');
       }
     } else {
-        router.push('/login'); // Redireciona se não estiver autenticado
+        router.push('/login');
     }
   }, [status, session, router]);
   
@@ -391,7 +377,6 @@ function CadastroUsuariosInner() {
     setMensagem(""); 
     const isEditing = !!dados.id;
     const endpoint = isEditing ? "/api/portal/altera-usuarios" : "/api/portal/cria-usuarios";
-    
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -408,13 +393,44 @@ function CadastroUsuariosInner() {
   };
   
   const openModalForNew = () => {
-    setManagingUser(null);
+    const newUserTemplate: Usuario = {
+      id: 0,
+      email: '',
+      status: 'ativo',
+      is_admin: false,
+      funcoes: [],
+    };
+    setManagingUser(newUserTemplate);
     setIsModalOpen(true);
   };
 
-  const openModalForEdit = (user: Usuario) => {
-    setManagingUser(user);
-    setIsModalOpen(true);
+  const openModalForEdit = async (user: Usuario) => {
+    try {
+      const res = await fetch('/api/portal/consulta-usuarios-funcoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao buscar funções do usuário.');
+      }
+
+      const funcoesDoUsuario: FuncaoDoUsuario[] = await res.json();
+      const funcoesIds = funcoesDoUsuario.map(f => f.funcao_id);
+
+      const completeUser = {
+        ...user,
+        funcoes: funcoesIds,
+      };
+
+      setManagingUser(completeUser);
+      setIsModalOpen(true);
+
+    } catch (error) {
+      console.error("Erro ao buscar detalhes do usuário:", error);
+      setMensagem("Erro: Não foi possível carregar as permissões deste usuário.");
+    }
   };
 
   const funcoesAgrupadas = useMemo(() => {
@@ -426,8 +442,6 @@ function CadastroUsuariosInner() {
     }, {} as FuncoesAgrupadas);
   }, [todasFuncoes]);
 
-
-  // Se a sessão ainda está a carregar, mostra um spinner
   if (authStatus === 'loading') {
     return (
         <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
@@ -436,7 +450,6 @@ function CadastroUsuariosInner() {
     );
   }
 
-  // Se o utilizador não está autorizado, mostra a página de acesso negado
   if (authStatus === 'unauthorized') {
     return (
         <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
@@ -509,8 +522,6 @@ function CadastroUsuariosInner() {
       `}</style>
       
       <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
-        
-        {/* CABEÇALHO DA PÁGINA */}
         <div style={{ marginBottom: '2rem' }}>
             <h1 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }}>
                 Controle de Usuários e Acessos
@@ -519,8 +530,6 @@ function CadastroUsuariosInner() {
                 Gerencie os usuários do sistema e as funções que cada um pode acessar.
             </p>
         </div>
-
-        {/* CONTROLES DAS ABAS */}
         <div className="tabs-card" style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '0.5rem 2rem', marginBottom: '2rem', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)', border: '1px solid var(--gcs-border-color)' }}>
             <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--gcs-border-color)' }}>
                 <button className={`tab-button ${activeTab === 'usuarios' ? 'active' : ''}`} onClick={() => setActiveTab('usuarios')}>
@@ -531,8 +540,6 @@ function CadastroUsuariosInner() {
                 </button>
             </div>
         </div>
-
-        {/* CONTEÚDO DAS ABAS */}
         {activeTab === 'usuarios' && (
             <div className="content-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -543,7 +550,6 @@ function CadastroUsuariosInner() {
                     </button>
                 </div>
                 {mensagem && <p style={{ marginBottom: "1rem", padding: '1rem', borderRadius: '8px', backgroundColor: mensagem.startsWith('Erro') ? '#f8d7da' : '#d4edda', color: mensagem.startsWith('Erro') ? '#721c24' : '#155724' }}>{mensagem}</p>}
-                
                 {isLoading ? <LoadingSpinner text="Carregando usuários..." /> : usuarios.length > 0 ? (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {usuarios.map((u) => (
@@ -581,7 +587,6 @@ function CadastroUsuariosInner() {
                 ) : <p style={{ color: 'var(--gcs-gray-dark)' }}>Nenhum utilizador registado de momento.</p>}
             </div>
         )}
-        
         {activeTab === 'funcoes' && (
             <CadastroFuncoes 
                 funcoes={todasFuncoes} 
@@ -590,7 +595,6 @@ function CadastroUsuariosInner() {
             />
         )}
       </div>
-
       <GerenciamentoUsuarioModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
