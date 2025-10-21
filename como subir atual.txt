@@ -1,0 +1,4 @@
+npm run dev:https
+
+--parando servico no pm2
+pm2 stop vendas-smt

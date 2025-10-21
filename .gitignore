@@ -1,0 +1,43 @@
+﻿node_modules/
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+package-lock.json
+
+.next/
+.out/
+.vercel/
+.turbo/
+.cache/
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+
+logs/
+*.log
+tmp/
+temp/
+
+.env
+.env.*
+
+# excluir a pasta pesada
+arquivos/
+
+# uploads públicos (se houver outras pastas)
+public/uploads/
+uploads/
+static/uploads/
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# DBs locais (se existirem)
+*.sqlite
+*.sqlite3
+*.db

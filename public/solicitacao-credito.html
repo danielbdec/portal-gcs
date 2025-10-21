@@ -1,0 +1,434 @@
+
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<title>Solicitação de Crédito</title>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<style>
+    body { font-family: 'Segoe UI', sans-serif; background: #eaf5e3; padding: 2rem; color: #1e4321; }
+    .form-container { max-width: 800px; margin: 0 auto; background: white; border: 2px solid #1e4321; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); }
+    .logo { text-align: center; margin-bottom: 1rem; }
+    .logo img { max-width: 180px; }
+    h2 { text-align: center; color: white; background: linear-gradient(to right, #1e4321, #47763b); padding: 1rem; border-radius: 12px; }
+    label { font-weight: 600; display: block; margin-top: 1rem; }
+    input[type="text"], input[type="file"], select {
+      width: 100%;
+      max-width: 95%;
+      margin: 0 auto;
+      display: block;
+    
+      width: 100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #ccc; background: #f9fff5;
+    }
+    fieldset { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    legend { font-weight: bold; padding: 0 10px; }
+    .input-file-wrapper { position: relative; overflow: hidden; display: block; margin-top: 0.5rem; }
+    .input-file-wrapper input[type=file] {
+      font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0;
+    }
+    .file-button {
+      background: linear-gradient(to right, #1e4321, #47763b); color: white; border: none;
+      font-weight: bold; border-radius: 10px; width: 100%; padding: 10px;
+      text-align: center; cursor: pointer; margin-top: 0.5rem;
+    }
+    button[type="submit"] {
+      background: #8dc63f; color: white; border: none; font-size: 1.2rem;
+      font-weight: 800; height: 56px; border-radius: 30px; margin-top: 2rem; width: 100%; cursor: pointer;
+    }
+    .hidden { display: none; }
+    .ref-item { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr 1fr; gap: 10px; margin-top: 0.5rem; }
+  
+.upload-button {
+  display: inline-block;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  color: white;
+  background: linear-gradient(to right, #1e4321, #47763b);
+  font-weight: bold;
+  text-align: center;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+.upload-button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.upload-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+button[type="submit"] {
+  transition: all 0.3s ease;
+}
+button[type="submit"]:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.obrigatorio {
+  color: red;
+  margin-left: 4px;
+}
+
+.ref-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr 2fr 1fr;
+  gap: 10px;
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: #1e4321;
+  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+}
+
+.socio-box {
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2.5rem;
+  background: #ffffff;
+}
+.socio-box h4 {
+  margin-top: 0;
+  color: #1e4321;
+}
+.socio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.socio-grid label {
+  margin-top: 0.5rem;
+  display: block;
+}
+.socio-box button {
+  margin-top: 1rem;
+  float: right;
+}
+
+.socio-box button.upload-button {
+  background: #8b1e1e;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.5rem;
+}
+
+.socio-box button.upload-button {
+  background: #8b1e1e;
+  font-size: 0.95rem;
+  padding: 0.7rem 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.socio-box button.upload-button {
+  background: #8b1e1e;
+  font-size: 0.95rem;
+  padding: 0.8rem 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  display: block;
+  width: 100%;
+}
+</style>
+</head>
+<body>
+<div class="form-container">
+<div class="logo"><img alt="Logo" src="https://www.celeirosementes.com.br/assets/img/logo.png"/></div>
+<h2>Solicitação de Crédito</h2>
+<form id="credito-form">
+<label>Tipo de Pessoa</label>
+<select id="tipoPessoa" name="tipo_pessoa" required="">
+<option value="">Selecione...</option>
+<option value="pf">Pessoa Física</option>
+<option value="pj">Pessoa Jurídica</option>
+</select>
+<div class="hidden" id="camposPF">
+<fieldset>
+<legend>Dados Pessoais</legend>
+<label>CPF<span class="obrigatorio"> *</span></label><input name="cpf" required="True" type="text"/>
+<label>Identidade / Órgão Emissor<span class="obrigatorio"> *</span></label><input name="identidade_emissor" required="True" type="text"/>
+<label>Estado Civil</label>
+<select name="estado_civil" required="True">
+<option value="">Selecione</option>
+<option value="solteiro">Solteiro</option>
+<option value="uniao_estavel">União Estável</option>
+<option value="casado">Casado</option>
+<option value="divorciado">Divorciado</option>
+<option value="viuvo">Viúvo</option>
+</select>
+</fieldset>
+<fieldset>
+<legend>Dados do Cônjuge</legend>
+<label>Nome Completo<span class="obrigatorio"> *</span></label><input name="nome_conjuge" required="True" type="text"/>
+<label>CPF<span class="obrigatorio"> *</span></label><input name="cpf_conjuge" required="True" type="text"/>
+<label>Identidade / Órgão Emissor<span class="obrigatorio"> *</span></label><input name="rg_conjuge" required="True" type="text"/>
+</fieldset>
+<fieldset>
+<legend>Contato</legend>
+<label>Endereço Residencial<span class="obrigatorio"> *</span></label><input name="endereco_residencial" required="True" type="text"/>
+<label>Cidade<span class="obrigatorio"> *</span></label><input name="cidade" required="True" type="text"/>
+<label>Estado<span class="obrigatorio"> *</span></label><input name="estado" required="True" type="text"/>
+<label>E-mail de Contato<span class="obrigatorio"> *</span></label><input name="email" required="True" type="text"/>
+<label>Telefone<span class="obrigatorio"> *</span></label><input name="telefone" required="True" type="text"/>
+</fieldset>
+<fieldset>
+<legend>Referências Comerciais - Indique pelo menos 3</legend>
+<div id="ref-container">
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="True" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="True" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="True" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="True" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="True" type="text"/>
+</div>
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="True" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="True" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="True" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="True" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="True" type="text"/>
+</div>
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="True" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="True" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="True" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="True" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="True" type="text"/>
+</div>
+</div>
+</fieldset>
+<fieldset>
+<fieldset>
+<legend>Envio de Documentos Obrigatórios</legend>
+<label>🪪 Documentos pessoais do Produtor e Cônjuge (CPF, RG, Certidão)</label>
+<div class="upload-wrapper">
+<button class="upload-button" onclick="document.getElementById('doc_pessoais_pf').click()" type="button">Selecionar Arquivo</button>
+<input id="doc_pessoais_pf" name="doc_pessoais_pf" required="" style="display: none;" type="file"/>
+</div>
+<label>📬 Comprovante de Endereço (menos de 90 dias)</label>
+<div class="upload-wrapper">
+<button class="upload-button" onclick="document.getElementById('comprovante_endereco_pf').click()" type="button">Selecionar Arquivo</button>
+<input id="comprovante_endereco_pf" name="comprovante_endereco_pf" required="" style="display: none;" type="file"/>
+</div>
+<label>🧾 Imposto de Renda - Últimos 2 anos</label>
+<div class="upload-wrapper">
+<button class="upload-button" onclick="document.getElementById('imposto_renda_pf').click()" type="button">Selecionar Arquivo</button>
+<input id="imposto_renda_pf" name="imposto_renda_pf" required="" style="display: none;" type="file"/>
+</div>
+<label>🌾 CAR | CCIR | Certidão do Imóvel | Arrendamento/Comodato</label>
+<div class="upload-wrapper">
+<button class="upload-button" onclick="document.getElementById('docs_imovel_pf').click()" type="button">Selecionar Arquivo</button>
+<input id="docs_imovel_pf" name="docs_imovel_pf" required="" style="display: none;" type="file"/>
+</div>
+</fieldset>
+</fieldset>
+</div>
+
+<div class="hidden" id="camposPJ">
+<fieldset>
+<legend>Dados da Empresa</legend>
+<label>Razão Social<span class="obrigatorio"> *</span></label>
+<input name="razao_social" required="" type="text"/>
+<label>CNPJ<span class="obrigatorio"> *</span></label>
+<input name="cnpj" required="" type="text"/>
+<label>Inscrição Estadual<span class="obrigatorio"> *</span></label>
+<input name="ie" required="" type="text"/>
+<label>Telefone<span class="obrigatorio"> *</span></label>
+<input name="telefone_pj" required="" type="text"/>
+<label>E-mail de Contato<span class="obrigatorio"> *</span></label>
+<input name="email_pj" required="" type="text"/>
+</fieldset>
+
+
+
+
+<fieldset>
+<legend>Informações sobre Sócios</legend>
+<label>Possui Sócios?<span class="obrigatorio"> *</span></label>
+<select id="possuiSocios" name="possui_socios" onchange="toggleSocios(this.value)" required="">
+<option value="">Selecione</option>
+<option value="sim">Sim</option>
+<option value="nao">Não</option>
+</select>
+</fieldset>
+<div class="hidden" id="sociosContainer">
+<fieldset>
+<legend>Dados dos Sócios</legend>
+<div id="socios-dinamico"></div>
+<button class="upload-button" onclick="adicionarSocio()" style="margin-top: 1rem;" type="button">+ Adicionar Sócio</button>
+</fieldset>
+</div>
+<script>
+function toggleSocios(valor) {
+  const container = document.getElementById("sociosContainer");
+  if (valor === "sim") {
+    container.classList.remove("hidden");
+  } else {
+    container.classList.add("hidden");
+    document.getElementById("socios-dinamico").innerHTML = '';
+  }
+}
+
+function adicionarSocio() {
+  const container = document.getElementById("socios-dinamico");
+  const index = container.children.length + 1;
+  const div = document.createElement("div");
+  div.className = "socio-box";
+  div.innerHTML = `
+    <hr>
+    <label>Nome Completo<span class="obrigatorio"> *</span></label>
+    <input type="text" name="socio_${index}_nome" required>
+    <label>CPF<span class="obrigatorio"> *</span></label>
+    <input type="text" name="socio_${index}_cpf" required>
+    <label>Identidade / Órgão Emissor<span class="obrigatorio"> *</span></label>
+    <input type="text" name="socio_${index}_rg" required>
+    <label>Estado Civil<span class="obrigatorio"> *</span></label>
+    <select name="socio_${index}_estado_civil" required>
+      <option value="">Selecione</option>
+      <option value="solteiro">Solteiro</option>
+      <option value="uniao_estavel">União Estável</option>
+      <option value="casado">Casado</option>
+      <option value="divorciado">Divorciado</option>
+      <option value="viuvo">Viúvo</option>
+    </select>
+    <label>E-mail do Sócio<span class="obrigatorio"> *</span></label>
+    <input type="text" name="socio_${index}_email" required>
+    <label>Nome do Cônjuge</label>
+    <input type="text" name="socio_${index}_conjuge">
+    <label>CPF do Cônjuge</label>
+    <input type="text" name="socio_${index}_cpf_conjuge">
+    <label>E-mail do Cônjuge</label>
+    <input type="text" name="socio_${index}_email_conjuge">
+    <button type="button" onclick="this.parentElement.remove()" class="upload-button" style="background:#8b1e1e;margin-top:10px;">- Remover Sócio</button>
+  `;
+  container.appendChild(div);
+}
+</script>
+<fieldset>
+<legend>Referências Comerciais - Indique pelo menos 4</legend>
+<div class="ref-header">
+<div>Empresa<span class="obrigatorio"> *</span></div>
+<div>DDD<span class="obrigatorio"> *</span></div>
+<div>Telefone<span class="obrigatorio"> *</span></div>
+<div>Cidade<span class="obrigatorio"> *</span></div>
+<div>UF<span class="obrigatorio"> *</span></div>
+</div>
+<div id="ref-container-pj">
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="" type="text"/>
+</div>
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="" type="text"/>
+</div>
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="" type="text"/>
+</div>
+<div class="ref-item">
+<input name="ref_empresa[]" placeholder="Empresa" required="" type="text"/>
+<input name="ref_ddd[]" placeholder="DDD" required="" type="text"/>
+<input name="ref_telefone[]" placeholder="Telefone" required="" type="text"/>
+<input name="ref_cidade[]" placeholder="Cidade" required="" type="text"/>
+<input name="ref_uf[]" placeholder="UF" required="" type="text"/>
+</div>
+</div>
+</fieldset>
+</div>
+
+<button type="submit">Enviar</button>
+</form>
+</div>
+
+<script>
+function toggleSocios(valor) {
+  const container = document.getElementById("sociosContainer");
+  if (valor === "sim") {
+    container.classList.remove("hidden");
+  } else {
+    container.classList.add("hidden");
+    document.getElementById("socios-dinamico").innerHTML = '';
+  }
+}
+
+function adicionarSocio() {
+  const container = document.getElementById("socios-dinamico");
+  const index = container.children.length + 1;
+  const div = document.createElement("div");
+  div.className = "socio-box";
+  div.innerHTML = `
+    <h4>Sócio ${index}</h4>
+    <div class="socio-grid">
+      <div>
+        <label>Nome Completo<span class="obrigatorio"> *</span></label>
+        <input type="text" name="socio_${index}_nome" required>
+      </div>
+      <div>
+        <label>CPF<span class="obrigatorio"> *</span></label>
+        <input type="text" name="socio_${index}_cpf" required>
+      </div>
+      <div>
+        <label>Identidade / Órgão Emissor<span class="obrigatorio"> *</span></label>
+        <input type="text" name="socio_${index}_rg" required>
+      </div>
+      <div>
+        <label>Estado Civil<span class="obrigatorio"> *</span></label>
+        <select name="socio_${index}_estado_civil" required>
+          <option value="">Selecione</option>
+          <option value="solteiro">Solteiro</option>
+          <option value="uniao_estavel">União Estável</option>
+          <option value="casado">Casado</option>
+          <option value="divorciado">Divorciado</option>
+          <option value="viuvo">Viúvo</option>
+        </select>
+      </div>
+      <div>
+        <label>E-mail do Sócio<span class="obrigatorio"> *</span></label>
+        <input type="text" name="socio_${index}_email" required>
+      </div>
+      <div>
+        <label>Nome do Cônjuge</label>
+        <input type="text" name="socio_${index}_conjuge">
+      </div>
+      <div>
+        <label>CPF do Cônjuge</label>
+        <input type="text" name="socio_${index}_cpf_conjuge">
+      </div>
+      <div>
+        <label>E-mail do Cônjuge</label>
+        <input type="text" name="socio_${index}_email_conjuge">
+      </div>
+    </div>
+    <button type="button" onclick="this.parentElement.remove()" class="upload-button" style="background:#8b1e1e;">- Remover Sócio</button>
+  `;
+  container.appendChild(div);
+}
+</script>
+
+
+<script>
+document.getElementById('tipoPessoa').addEventListener('change', function() {
+  const pf = document.getElementById('camposPF');
+  const pj = document.getElementById('camposPJ');
+  pf.classList.add('hidden');
+  pj.classList.add('hidden');
+  if (this.value === 'pf') pf.classList.remove('hidden');
+  if (this.value === 'pj') pj.classList.remove('hidden');
+});
+</script>
+</body>
+</html>

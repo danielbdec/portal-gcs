@@ -1,0 +1,25 @@
+/* Submenu interno: recuo e cor consistentes */
+:where(.ant-menu-light) .ant-menu-submenu .ant-menu {
+  background: transparent !important;
+  padding-left: 0 !important;
+}
+
+:where(.ant-menu-light) .ant-menu-submenu .ant-menu-item {
+  padding-left: 32px !important;
+  color: white !important;
+}
+
+:where(.ant-menu-light) .ant-menu-submenu .ant-menu-item a {
+  color: white !important;
+}
+
+:where(.ant-menu-light) .ant-menu-submenu .ant-menu-item-selected {
+  background-color: transparent !important;
+  color: white !important;
+}
+
+/* Força alinhamento e cor do pai com os outros itens */
+:where(.ant-menu-light) .ant-menu-submenu-title {
+  padding-left: 12px !important;
+  color: white !important;
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "email": "daniel.carvalho@gcsagro.com.br",
+    "perfil": "admin"
+  },
+  {
+    "email": "leonardo.alves@gcsagro.com.br",
+    "perfil": "admin",
+    "status": "ativo"
+  }
+
+]
