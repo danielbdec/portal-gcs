@@ -18,7 +18,11 @@ interface ItemNota {
     valor_unitario_bate?: string;
     qtd?: number;
     moeda?: number;
-    data_ultima_ptax?: string;
+    // --- ALTERAÇÃO 1: Adicionar campos opcionais para preservar o estado pré-existente ---
+    registro_pedido?: number | null;
+    ultima_ptax?: number | null;
+    data_ultima_ptax?: string | null;
+    // --- FIM DA ALTERAÇÃO 1 ---
 }
 
 interface PedidoEncontrado {
@@ -418,24 +422,32 @@ const ManualPedidoModal = ({
         }
     }, [isOpen]);
 
+    // --- ALTERAÇÃO 2: Corrigir lógica de inicialização do estado ---
     useEffect(() => {
         if (isOpen) {
             setIsLoadingContent(true);
             const timer = setTimeout(() => {
                 const initialItensManuais = items.map(item => {
-                    const shouldPrepopulate = item.num_pedido && item.valor_unitario_bate?.toLowerCase() === 'sim';
+                    // Um item é considerado "pré-preenchido" se ele já tiver um número de pedido.
+                    // Isso pode ser da automação (valor_unitario_bate === 'sim') ou
+                    // de uma associação manual anterior.
+                    const isPrepopulated = !!item.num_pedido;
+
                     return {
                         item_xml: item.item_xml,
                         descricao_xml: item.descricao_xml,
                         valor_unitario_xml: item.valor_unitario_xml ?? null,
                         qtd: item.qtd ?? null,
                         moeda: item.moeda ?? null,
-                        ultima_ptax: null, 
-                        data_ultima_ptax: null,
-                        num_pedido: shouldPrepopulate ? item.num_pedido : null,
-                        descricao_pedido_api: shouldPrepopulate ? item.descricao_pedido : null,
-                        valor_pedido_api: shouldPrepopulate ? (item.valor_unitario_ped ?? null) : null,
-                        registro_pedido: null,
+                        
+                        // Se estiver pré-preenchido, usamos os dados do 'item' (prop).
+                        // Se não, iniciamos como null.
+                        ultima_ptax: isPrepopulated ? (item.ultima_ptax ?? null) : null,
+                        data_ultima_ptax: isPrepopulated ? (item.data_ultima_ptax ?? null) : null,
+                        num_pedido: isPrepopulated ? item.num_pedido : null,
+                        descricao_pedido_api: isPrepopulated ? item.descricao_pedido : null,
+                        valor_pedido_api: isPrepopulated ? (item.valor_unitario_ped ?? null) : null,
+                        registro_pedido: isPrepopulated ? (item.registro_pedido ?? null) : null,
                     };
                 });
                 setItensManuais(initialItensManuais);
@@ -445,6 +457,7 @@ const ManualPedidoModal = ({
             return () => clearTimeout(timer);
         }
     }, [isOpen, items]);
+    // --- FIM DA ALTERAÇÃO 2 ---
 
     const { totalDiferenca, totalDiferencaPercentual } = useMemo(() => {
         let totalDiff = 0;

@@ -148,15 +148,17 @@ const FilterPopover = ({
     const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
+    const [startDate, setStartDate] = useState(initialFilters.startDate || '');
+    const [endDate, setEndDate] = useState(initialFilters.endDate || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
     const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
     const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador).filter(Boolean)))], [notas]);
+    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador || '-'))).sort()], [notas]);
     const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
 
     const handleApply = () => {
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento });
+        onApplyFilters({ filial, tipo, responsavel, statusLancamento, startDate, endDate });
         setIsOpen(false);
     };
 
@@ -165,7 +167,9 @@ const FilterPopover = ({
         setTipo('Todos');
         setResponsavel('Todos');
         setStatusLancamento('Todos');
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+        setStartDate('');
+        setEndDate('');
+        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
         setIsOpen(false);
     };
 
@@ -191,7 +195,7 @@ const FilterPopover = ({
                     top: '100%',
                     right: 0,
                     marginTop: '8px',
-                    width: '300px',
+                    width: '360px',
                     backgroundColor: 'white',
                     borderRadius: '8px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -202,6 +206,17 @@ const FilterPopover = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
                         <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Inicial</label>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Final</label>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
                     </div>
 
                     <div style={{ marginBottom: '1rem' }}>
@@ -321,7 +336,7 @@ export default function ConsultaNotas() {
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const itensPorPagina = 10;
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -379,16 +394,37 @@ export default function ConsultaNotas() {
   }, [lastUpdated]);
 
   const statusDisponiveis = useMemo(() => {
-    return ["Todos", "Compras", "Fiscal", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
+    return ["Todos", "Compras", "Fiscal", "Enviadas", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
   }, []);
   
   const notasFiltradasPorAvancado = useMemo(() => {
     return (notas || []).filter((nota) => {
         const filialOk = advancedFilters.filial === 'Todas' || nota.filial === advancedFilters.filial;
         const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || nota.comprador === advancedFilters.responsavel;
+        const responsavelOk = advancedFilters.responsavel === 'Todos' || (nota.comprador || '-') === advancedFilters.responsavel;
         const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        return filialOk && tipoOk && responsavelOk && statusLancamentoOk;
+        
+        let dateOk = true;
+        if (advancedFilters.startDate || advancedFilters.endDate) {
+            const parts = nota.dt_recebimento.split('/');
+            if (parts.length === 3) {
+                // Converte DD/MM/YYYY para YYYY-MM-DD para comparação de strings
+                const notaDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                const start = advancedFilters.startDate;
+                const end = advancedFilters.endDate;
+
+                if (start && notaDateStr < start) {
+                    dateOk = false;
+                }
+                if (end && notaDateStr > end) {
+                    dateOk = false;
+                }
+            } else {
+                dateOk = false; 
+            }
+        }
+
+        return filialOk && tipoOk && responsavelOk && statusLancamentoOk && dateOk;
     });
   }, [notas, advancedFilters]);
   
@@ -419,6 +455,8 @@ export default function ConsultaNotas() {
       
       counts['Compras'] = sourcePendentes.filter(n => n.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO').length;
       counts['Fiscal'] = sourcePendentes.filter(n => n.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO').length;
+      counts['Enviadas'] = sourcePendentes.filter(n => n.status_envio_unidade?.trim().toUpperCase() === 'SIM').length;
+
 
       return counts;
   }, [notasFiltradasPorAvancado]);
@@ -432,7 +470,7 @@ export default function ConsultaNotas() {
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos';
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos' || advancedFilters.startDate !== '' || advancedFilters.endDate !== '';
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
@@ -550,6 +588,8 @@ export default function ConsultaNotas() {
         statusOk = nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO';
       } else if (filtroStatus === 'Fiscal') {
         statusOk = nota.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO';
+      } else if (filtroStatus === 'Enviadas') {
+        statusOk = nota.status_envio_unidade?.trim().toUpperCase() === 'SIM';
       } else {
         const statusNfEquivalente = {
             "Erro I.A.": "erro i.a.",
@@ -601,6 +641,7 @@ export default function ConsultaNotas() {
     "Falha ERP": "#8B0000",
     "Compras": "#FFC107",
     "Fiscal": "#00314A",
+    "Enviadas": "#17a2b8",
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
@@ -646,6 +687,10 @@ export default function ConsultaNotas() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
     XLSX.writeFile(workbook, "Consulta_Notas_Fiscais.xlsx");
+  };
+
+  const renderLegendText = (value: string) => {
+    return <span style={{ marginLeft: '4px' }}>{value}</span>;
   };
 
   if (authStatus === 'loading') {
@@ -698,7 +743,7 @@ export default function ConsultaNotas() {
         .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
         .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
         .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; }
+        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
         .tab-button { background: none; border: none; cursor: pointer; padding: 8px 12px 12px 12px; font-size: 1rem; font-weight: 500; color: var(--gcs-gray-dark); position: relative; transition: all 0.2s ease-in-out; }
         .tab-button::after { content: ''; position: absolute; bottom: -2px; right: 0; width: 100%; height: 100%; border-style: solid; border-color: transparent; border-image: none; opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in-out; pointer-events: none; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.2)); }
         .tab-button:hover:not(.active) { transform: translateY(-2px); color: var(--gcs-blue); }
@@ -868,7 +913,7 @@ export default function ConsultaNotas() {
             <h4 style={{ margin: 0, color: 'var(--gcs-gray-dark)', fontWeight: 500, fontSize: '1rem' }}>
                 Gráfico por Status
             </h4>
-            <div style={{ width: 280, height: 160 }}>
+            <div style={{ width: 280, height: 180 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart key={chartKey}>
                         <Pie
@@ -878,7 +923,7 @@ export default function ConsultaNotas() {
                             dataKey="value"
                             nameKey="name"
                             cx="50%"
-                            cy="50%"
+                            cy="45%"
                             innerRadius={40}
                             outerRadius={60}
                             paddingAngle={3}
@@ -895,7 +940,8 @@ export default function ConsultaNotas() {
                             align="center" 
                             verticalAlign="bottom" 
                             iconSize={10} 
-                            wrapperStyle={{ fontSize: '12px', marginTop: '10px' }}
+                            wrapperStyle={{ fontSize: '12px' }}
+                            formatter={renderLegendText}
                         />
                     </PieChart>
                 </ResponsiveContainer>
