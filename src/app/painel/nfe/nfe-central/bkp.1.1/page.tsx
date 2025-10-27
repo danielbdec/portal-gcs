@@ -11,11 +11,9 @@ import {
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
-    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
-    CheckSquare, Square
+    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock
 } from "lucide-react";
 import ModalDetalhes from "./ModalDetalhes";
-import NotificationModal from "./NotificationModal"; // Importado
 import React from "react";
 import "antd/dist/reset.css";
 import PriorityRibbonTabs from "./PriorityRibbonTabs";
@@ -66,24 +64,30 @@ const formatTimeAgo = (date: Date | null): string => {
     return `há ${days} dias`;
 };
 
-// Helper para formatar data e hora do Protheus (ISODate)
+// --- MODIFICADO ---
+// Helper para formatar data e hora do Protheus (ISODate) - Exibindo a hora exata da string ISO
 const formatProtheusDateTime = (dateString: string | null | undefined): string => {
     if (!dateString) {
         return '—';
     }
     try {
+        // Tenta criar um objeto Date para validar a string
         const dateTest = new Date(dateString);
         if (isNaN(dateTest.getTime())) {
-            return '—';
+            return '—'; // Retorna se a string não for uma data válida
         }
 
+        // Extrai as partes da data e hora diretamente da string ISO
+        // Ex: "2025-10-23T00:00:00.000Z"
         const year = dateString.substring(0, 4);
         const month = dateString.substring(5, 7);
         const day = dateString.substring(8, 10);
         const hour = dateString.substring(11, 13);
         const minute = dateString.substring(14, 16);
 
+        // Verifica se conseguiu extrair partes válidas (simples checagem de tamanho)
         if (year.length !== 4 || month.length !== 2 || day.length !== 2 || hour.length !== 2 || minute.length !== 2) {
+             // Tenta tratar caso venha sem Z e sem milissegundos (ex: 2025-10-23T00:00:00)
              if(dateString.length >= 16){
                 const hourAlt = dateString.substring(11, 13);
                 const minuteAlt = dateString.substring(14, 16);
@@ -91,16 +95,18 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
                     return `${day}/${month}/${year} ${hourAlt}:${minuteAlt}`;
                 }
              }
-             return '—';
+             return '—'; // Retorna se o formato não parecer ISO
         }
 
+        // Formata manualmente como dd/MM/yyyy HH:mm
         return `${day}/${month}/${year} ${hour}:${minute}`;
 
     } catch (error) {
         console.error("Erro ao formatar data Protheus:", error);
-        return '—';
+        return '—'; // Retorna em caso de erro inesperado
     }
 };
+// --- FIM MODIFICAÇÃO ---
 
 
 interface Nota {
@@ -122,7 +128,6 @@ interface Nota {
   status_compras?: string;
   status_fiscal?: string;
   dt_lcto_protheus?: string;
-  conferido?: 'S' | 'N' | null;
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
@@ -200,6 +205,7 @@ const FilterPopover = ({
     const [endDateProtheus, setEndDateProtheus] = useState(initialFilters.endDateProtheus || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
+    // Usa as listas completas passadas por props
     const filiaisUnicas = useMemo(() => allFiliais, [allFiliais]);
     const tiposUnicos = useMemo(() => allTipos, [allTipos]);
     const responsaveisUnicos = useMemo(() => allCompradores, [allCompradores]);
@@ -391,12 +397,6 @@ export default function ConsultaNotas() {
   const [totaisAbas, setTotaisAbas] = useState<Record<string, number>>({});
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
 
-  const [isConfirmConferenciaOpen, setIsConfirmConferenciaOpen] = useState(false);
-  const [conferenciaNota, setConferenciaNota] = useState<Nota | null>(null);
-  const [newConferenciaStatus, setNewConferenciaStatus] = useState<'S' | 'N' | null>(null);
-  const [isSubmittingConferencia, setIsSubmittingConferencia] = useState(false);
-  const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
-
   const [advancedFilters, setAdvancedFilters] = useState({
     filial: 'Todas',
     tipo: 'Todos',
@@ -573,10 +573,10 @@ export default function ConsultaNotas() {
           sortBy: sortKeyToBackend(sortConfig.key),
           sortDir: sortConfig.direction || 'asc',
           termo: (busca || '').trim() || undefined,
-          filial: advancedFilters.filial === 'Todas' ? undefined : advancedFilters.filial,
-          tipo: advancedFilters.tipo === 'Todos' ? undefined : advancedFilters.tipo,
-          responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
-          statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
+          filial: advancedFilters.filial,
+          tipo: advancedFilters.tipo,
+          responsavel: advancedFilters.responsavel,
+          statusLancamento: advancedFilters.statusLancamento,
           startDate: advancedFilters.startDate || undefined,
           endDate: advancedFilters.endDate || undefined,
           startDateProtheus: advancedFilters.startDateProtheus || undefined,
@@ -612,28 +612,10 @@ export default function ConsultaNotas() {
         setTotalPendentes(Number(payload?.pendentes_total ?? 0));
         setTotalNotasHoje(Number(payload?.notas_hoje ?? 0));
 
-        // Atualiza listas de filtros APENAS se vierem dados válidos
-        if (Array.isArray(payload?.distinct_filiais) && payload.distinct_filiais.length > 0) {
-            setAllFiliais(payload.distinct_filiais);
-        } else if (!advancedFilters.filial || advancedFilters.filial === 'Todas') { // Reseta se não houver filtro aplicado
-             setAllFiliais(['Todos']);
-        }
-        if (Array.isArray(payload?.distinct_tipos) && payload.distinct_tipos.length > 0) {
-             setAllTipos(payload.distinct_tipos);
-        } else if (!advancedFilters.tipo || advancedFilters.tipo === 'Todos') {
-             setAllTipos(['Todos']);
-        }
-         if (Array.isArray(payload?.distinct_compradores) && payload.distinct_compradores.length > 0) {
-             setAllCompradores(payload.distinct_compradores);
-        } else if (!advancedFilters.responsavel || advancedFilters.responsavel === 'Todos') {
-             setAllCompradores(['Todos']);
-        }
-         if (Array.isArray(payload?.distinct_status) && payload.distinct_status.length > 0) {
-             setAllStatusLancamento(payload.distinct_status);
-        } else if (!advancedFilters.statusLancamento || advancedFilters.statusLancamento === 'Todos') {
-             setAllStatusLancamento(['Todos']);
-        }
-
+        setAllFiliais(Array.isArray(payload?.distinct_filiais) ? payload.distinct_filiais : ['Todos']);
+        setAllTipos(Array.isArray(payload?.distinct_tipos) ? payload.distinct_tipos : ['Todos']);
+        setAllCompradores(Array.isArray(payload?.distinct_compradores) ? payload.distinct_compradores : ['Todos']);
+        setAllStatusLancamento(Array.isArray(payload?.distinct_status) ? payload.distinct_status : ['Todos']);
 
         setChartKey(prevKey => prevKey + 1);
         setLastUpdated(new Date());
@@ -644,7 +626,6 @@ export default function ConsultaNotas() {
         setTotaisAbas({});
         setTotalPendentes(0);
         setTotalNotasHoje(0);
-        // Reseta filtros em caso de erro grave
         setAllFiliais(['Todos']);
         setAllTipos(['Todos']);
         setAllCompradores(['Todos']);
@@ -661,10 +642,10 @@ export default function ConsultaNotas() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
-    setPaginaAtual(1); // Resetar para a primeira página ao ordenar
+    setPaginaAtual(1);
   };
 
-  const notasPaginadas = notas; // A paginação agora é feita no backend
+  const notasPaginadas = notas;
 
   const coresStatus: Record<string, string> = {
     "Erro I.A.": "#ff6f61",
@@ -688,19 +669,18 @@ export default function ConsultaNotas() {
   };
 
   const handleExportXLSX = () => {
-    const headers = ["Conferido", "Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
+    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
 
     const data = notasPaginadas.map(nota => {
       return [
-        nota.conferido === 'S' ? 'Sim' : 'Não',
         nota.status_lancamento || '',
         nota.filial,
         nota.nf,
         nota.serie,
         nota.tipo_nf || '',
         nota.nome_fornecedor,
-        `${nota.dt_recebimento} ${nota.hr_Recebimento}`,
-        formatProtheusDateTime(nota.dt_lcto_protheus),
+        `${nota.dt_recebimento} ${nota.hr_Recebimento}`, // Mantido como string direta
+        formatProtheusDateTime(nota.dt_lcto_protheus), // Usa a formatação manual
         nota.status_envio_unidade || '',
         nota.status_compras || '',
         nota.status_fiscal || '',
@@ -714,115 +694,15 @@ export default function ConsultaNotas() {
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
     worksheet['!cols'] = [
-        { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
-        { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-        { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },
+        { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, // Status, Filial, Nota, Serie, Tipo
+        { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, // Fornecedor, Recebimento, Lancamento, St Unidade, St Compras
+        { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },             // St Fiscal, Obs, Responsavel, Chave
     ];
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
     XLSX.writeFile(workbook, "Consulta_Notas_Fiscais_Pagina.xlsx");
   };
-
-  // --- FUNÇÕES DE CONFERÊNCIA (CHECKBOX) ---
-
-  // 1. Abre o modal de confirmação
-  const handleCheckboxClick = (nota: Nota) => {
-      if (isSubmittingConferencia) return; // Impede cliques duplos
-      const newStatus = nota.conferido === 'S' ? 'N' : 'S';
-      setConferenciaNota(nota);
-      setNewConferenciaStatus(newStatus);
-      setIsConfirmConferenciaOpen(true);
-  };
-
-  // 2. Fecha o modal de confirmação
-  const handleCloseConferencia = () => {
-      if (isSubmittingConferencia) return;
-      setIsConfirmConferenciaOpen(false);
-      setConferenciaNota(null);
-      setNewConferenciaStatus(null);
-  };
-
-  // 3. Chamada à API após clicar em "Sim"
-  const handleConfirmConferencia = async () => {
-      console.log("handleConfirmConferencia: Iniciando..."); // Log 1
-
-      // 1. Verifica a sessão
-      if (!session?.user?.email) {
-          console.error("handleConfirmConferencia: Erro - Sessão ou email do usuário não encontrado."); // Log 2
-          setNotification({ visible: true, type: 'error', message: 'Erro: Sessão do usuário não encontrada. Faça login novamente.' });
-          setIsConfirmConferenciaOpen(false);
-          return;
-      }
-      console.log("handleConfirmConferencia: Sessão OK, Email:", session.user.email); // Log 3
-
-      // 2. Verifica os dados da nota
-      if (!conferenciaNota || !newConferenciaStatus) {
-          console.error("handleConfirmConferencia: Erro - Dados da nota ou novo status ausentes."); // Log 4
-          setNotification({ visible: true, type: 'error', message: 'Erro: Informações da nota não encontradas. Tente novamente.' });
-          setIsConfirmConferenciaOpen(false);
-          return;
-      }
-      console.log("handleConfirmConferencia: Dados da nota OK:", { chave: conferenciaNota.chave, novoStatus: newConferenciaStatus }); // Log 5
-
-      // 3. Inicia o envio
-      setIsSubmittingConferencia(true);
-      console.log("handleConfirmConferencia: Enviando para API /api/nfe/nfe-conferencia..."); // Log 6
-
-      try {
-          const bodyPayload = {
-              chave: conferenciaNota.chave,
-              email_solicitante: session.user.email,
-              conferido: newConferenciaStatus
-          };
-          console.log("handleConfirmConferencia: Payload:", JSON.stringify(bodyPayload)); // Log 7
-
-          const response = await fetch('/api/nfe/nfe-conferencia', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(bodyPayload)
-          });
-          console.log("handleConfirmConferencia: Resposta da API recebida, Status HTTP:", response.status); // Log 8
-
-          let result: any = {};
-          try {
-              result = await response.json();
-              console.log("handleConfirmConferencia: Corpo da Resposta (JSON):", result); // Log 9
-          } catch (jsonError) {
-              const textResponse = await response.text().catch(() => "Erro ao ler corpo da resposta");
-              console.error("handleConfirmConferencia: Resposta não é JSON. Resposta como Texto:", textResponse); // Log 10
-              result = { status: 'error', message: `Erro ${response.status}: ${response.statusText}. Resposta do servidor não é JSON.` };
-          }
-
-          if (response.ok && result?.status === 'ok') {
-              console.log("handleConfirmConferencia: Sucesso! Status HTTP OK e status interno 'ok'."); // Log 11
-              setNotification({ visible: true, type: 'success', message: `Nota ${newConferenciaStatus === 'S' ? 'marcada' : 'desmarcada'} com sucesso!` });
-              fetchNotas(); // Recarrega os dados
-          } else {
-              console.error("handleConfirmConferencia: Falha - Resposta não OK ou status interno diferente de 'ok'."); // Log 12
-              const errorMessage = result?.message || `Erro ao se comunicar com o servidor (HTTP ${response.status})`;
-              throw new Error(errorMessage);
-          }
-
-      } catch (error: any) {
-          console.error("handleConfirmConferencia: Erro no bloco catch:", error); // Log 13
-          setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível realizar a operação.' });
-      } finally {
-          console.log("handleConfirmConferencia: Bloco finally executado."); // Log 14
-          setIsSubmittingConferencia(false);
-          setIsConfirmConferenciaOpen(false);
-          setConferenciaNota(null);
-          setNewConferenciaStatus(null);
-      }
-  };
-
-  // 4. Fecha o modal de notificação
-  const handleCloseNotification = () => {
-      setNotification({ visible: false, type: 'success', message: '' });
-      console.log("handleCloseNotification: Notificação fechada."); // Log 15
-  };
-  // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
-
 
   const renderLegendText = (value: string) => {
     return <span style={{ marginLeft: '4px' }}>{value}</span>;
@@ -875,47 +755,6 @@ export default function ConsultaNotas() {
       </g>
     );
   };
-
-  // --- COMPONENTE CHECKBOX FINAL (RESTAURADO COM LÓGICA CORRIGIDA) ---
-  const ConferidoCheckbox = ({ conferido, onClick }: { conferido: 'S' | 'N' | null | undefined, onClick: () => void }) => {
-    // Log removido, pois confirmamos que o valor chega corretamente.
-    // console.log(`ConferidoCheckbox FINAL - Recebido: '${conferido}'`);
-
-    const isChecked = conferido === 'S';
-    // Usa as variáveis CSS originais para cor
-    const color = isChecked ? 'var(--gcs-green)' : 'var(--gcs-gray-dark)';
-
-    return (
-        <button
-            onClick={onClick}
-            title={isChecked ? "Desmarcar conferência" : "Marcar como conferido"}
-            disabled={isSubmittingConferencia} // Usa a variável do escopo pai
-            style={{
-                background: 'none',
-                border: 'none', // Sem borda extra
-                cursor: isSubmittingConferencia ? 'wait' : 'pointer',
-                padding: '4px', // Padding original
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: color, // Cor baseada no estado
-                opacity: isSubmittingConferencia ? 0.5 : 1, // Opacidade se estiver submetendo
-                // Animação de giro pode ser adicionada aqui se desejar,
-                // mas requer passar qual nota está sendo processada.
-                // Ex: animation: isProcessingThisNota ? 'spin 1s linear infinite' : 'none'
-            }}
-        >
-            {/* Renderização condicional direta dos ícones */}
-            {isChecked ? (
-                <CheckSquare size={20} />
-            ) : (
-                <Square size={20} />
-            )}
-            {/* Texto de debug removido */}
-        </button>
-    );
-  };
-
 
   return (<>
     <style>{`
@@ -1263,8 +1102,7 @@ export default function ConsultaNotas() {
             <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: '14px' }}>
               <thead style={{ backgroundColor: "var(--gcs-blue)", color: "#fff", textAlign: "left" }}>
                 <tr>
-                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><CheckSquare size={16} style={{marginRight: '8px'}} /> Conferido</div></th>
-                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
+                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('filial')} className="th-sortable"><Building2 size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
@@ -1292,19 +1130,13 @@ export default function ConsultaNotas() {
 
                   return (
                     <tr
-                      key={nota.chave} // Usar a chave como key é mais seguro
+                      key={index}
                       className="data-row"
                       style={{
                         borderTop: "1px solid var(--gcs-border-color)",
                         backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
                       }}
                     >
-                      <td data-label="Conferido" className="td-conferido" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
-                          <ConferidoCheckbox
-                              conferido={nota.conferido}
-                              onClick={() => handleCheckboxClick(nota)}
-                          />
-                      </td>
                       <td data-label="Status da Nota" className="td-status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <span
                           className="status-badge"
@@ -1333,10 +1165,16 @@ export default function ConsultaNotas() {
                         )}
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
+                      {/* --- MODIFICADO (mantido como antes) --- */}
                       <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
+                      {/* --- FIM MODIFICAÇÃO --- */}
+
+                      {/* --- MODIFICADO (usando a nova função) --- */}
                       <td data-label="Lançamento Protheus" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
                         {formatProtheusDateTime(nota.dt_lcto_protheus)}
                       </td>
+                      {/* --- FIM MODIFICAÇÃO --- */}
+
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
                               statusUnidade={nota.status_envio_unidade}
@@ -1344,6 +1182,7 @@ export default function ConsultaNotas() {
                               statusFiscal={nota.status_fiscal}
                           />
                       </td>
+
                       <td data-label="Observação" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {nota.observacao ? nota.observacao : <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>}
                       </td>
@@ -1389,29 +1228,6 @@ export default function ConsultaNotas() {
       onActionSuccess={fetchNotas}
       statusCompras={notaSelecionada?.status_compras}
       observacao={notaSelecionada?.observacao}
-    />
-
-    <NotificationModal
-        visible={notification.visible}
-        type={notification.type}
-        message={notification.message}
-        onClose={handleCloseNotification}
-    />
-
-    <ConfirmationModal
-        isOpen={isConfirmConferenciaOpen}
-        onClose={handleCloseConferencia}
-        onConfirm={handleConfirmConferencia}
-        title="Confirmar Conferência"
-        message={
-            newConferenciaStatus === 'S'
-                ? "Com essa ação você está confirmando que realizou a conferência dessa nota no Protheus. Deseja continuar?"
-                : "Você tem certeza que deseja desmarcar a conferência desta nota?"
-        }
-        confirmText={isSubmittingConferencia ? "Processando..." : (newConferenciaStatus === 'S' ? "Sim, Continuar" : "Sim, Desmarcar")}
-        confirmColor={newConferenciaStatus === 'S' ? "#28a745" : "#dc3545"}
-        showCancelButton={!isSubmittingConferencia}
-        icon={newConferenciaStatus === 'S' ? <CheckSquare size={40} color="#28a745" /> : <AlertTriangle size={40} color="#f7941d" />}
     />
   </>);
 
