@@ -148,16 +148,17 @@ const FilterPopover = ({
     const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
+    const [startDate, setStartDate] = useState(initialFilters.startDate || '');
+    const [endDate, setEndDate] = useState(initialFilters.endDate || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
     const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
-    // AJUSTE: O filtro avançado de tipo só mostrará NFE, já que é o único tipo relevante agora.
-    const tiposUnicos = useMemo(() => ['Todos', 'NFE'], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador).filter(Boolean)))], [notas]);
+    const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
+    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador || '-'))).sort()], [notas]);
     const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
 
     const handleApply = () => {
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento });
+        onApplyFilters({ filial, tipo, responsavel, statusLancamento, startDate, endDate });
         setIsOpen(false);
     };
 
@@ -166,7 +167,9 @@ const FilterPopover = ({
         setTipo('Todos');
         setResponsavel('Todos');
         setStatusLancamento('Todos');
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+        setStartDate('');
+        setEndDate('');
+        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
         setIsOpen(false);
     };
 
@@ -192,7 +195,7 @@ const FilterPopover = ({
                     top: '100%',
                     right: 0,
                     marginTop: '8px',
-                    width: '300px',
+                    width: '360px',
                     backgroundColor: 'white',
                     borderRadius: '8px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -203,6 +206,17 @@ const FilterPopover = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
                         <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Inicial</label>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Final</label>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
                     </div>
 
                     <div style={{ marginBottom: '1rem' }}>
@@ -304,7 +318,7 @@ const renderActiveShape = (props: any) => {
 };
 
 
-export default function ConsultaNotas() {
+export default function PendenciaDeCompras() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
@@ -322,7 +336,7 @@ export default function ConsultaNotas() {
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const itensPorPagina = 10;
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -380,32 +394,53 @@ export default function ConsultaNotas() {
   }, [lastUpdated]);
 
   const statusDisponiveis = useMemo(() => {
-    return ["Todos", "Compras", "Fiscal", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
+    return ["Todos", "Compras", "Fiscal", "Enviadas", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
   }, []);
-  
-  // AJUSTE: Este useMemo agora filtra apenas por notas do tipo NFE desde o início
-  const notasApenasNFE = useMemo(() => {
-    return (notas || []).filter(n => n.tipo_nf?.trim().toUpperCase() === 'NFE');
-  }, [notas]);
 
+  // FILTRO PRINCIPAL: Apenas notas com pendência de compras, que não sejam CTE e que tenham tipo
+  const notasPendentesDeCompra = useMemo(() => {
+      return (notas || []).filter(nota => 
+          nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO' &&
+          nota.tipo_nf && // Garante que o tipo_nf existe e não é nulo/vazio
+          nota.tipo_nf.trim().toUpperCase() !== 'CTE'
+      );
+  }, [notas]);
+  
   const notasFiltradasPorAvancado = useMemo(() => {
-    // AJUSTE: A base para os filtros avançados agora é 'notasApenasNFE'
-    return notasApenasNFE.filter((nota) => {
+    return (notasPendentesDeCompra || []).filter((nota) => {
         const filialOk = advancedFilters.filial === 'Todas' || nota.filial === advancedFilters.filial;
-        // O filtro de tipo aqui se torna redundante se já filtramos por NFE, mas mantemos por consistência
         const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || nota.comprador === advancedFilters.responsavel;
+        const responsavelOk = advancedFilters.responsavel === 'Todos' || (nota.comprador || '-') === advancedFilters.responsavel;
         const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        return filialOk && tipoOk && responsavelOk && statusLancamentoOk;
+        
+        let dateOk = true;
+        if (advancedFilters.startDate || advancedFilters.endDate) {
+            const parts = nota.dt_recebimento.split('/');
+            if (parts.length === 3) {
+                // Converte DD/MM/YYYY para YYYY-MM-DD para comparação de strings
+                const notaDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                const start = advancedFilters.startDate;
+                const end = advancedFilters.endDate;
+
+                if (start && notaDateStr < start) {
+                    dateOk = false;
+                }
+                if (end && notaDateStr > end) {
+                    dateOk = false;
+                }
+            } else {
+                dateOk = false; 
+            }
+        }
+        
+        return filialOk && tipoOk && responsavelOk && statusLancamentoOk && dateOk;
     });
-  }, [notasApenasNFE, advancedFilters]);
+  }, [notasPendentesDeCompra, advancedFilters]);
   
   const statusCounts = useMemo(() => {
-      // AJUSTE: A fonte dos dados agora é a lista já filtrada por NFE e filtros avançados.
       const source = notasFiltradasPorAvancado;
       const counts: Record<string, number> = { Todos: source.length };
       
-      // Notas pendentes agora são apenas as que não estão concluídas (pois já são todas NFE).
       const sourcePendentes = source.filter(n => n.status_lancamento !== 'Concluído');
 
       const statusNfMap: Record<string, string> = {
@@ -418,15 +453,19 @@ export default function ConsultaNotas() {
 
       Object.keys(statusNfMap).forEach(status => {
           const statusValue = statusNfMap[status];
+          // As abas "Manual" e "Importado" são exceções e devem contar todos, incluindo os concluídos.
           if (status === "Manual" || status === "Importado") {
               counts[status] = source.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
           } else {
+              // As outras abas contarão apenas os pendentes.
               counts[status] = sourcePendentes.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
           }
       });
       
       counts['Compras'] = sourcePendentes.filter(n => n.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO').length;
       counts['Fiscal'] = sourcePendentes.filter(n => n.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO').length;
+      counts['Enviadas'] = sourcePendentes.filter(n => n.status_envio_unidade?.trim().toUpperCase() === 'SIM').length;
+
 
       return counts;
   }, [notasFiltradasPorAvancado]);
@@ -440,7 +479,7 @@ export default function ConsultaNotas() {
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos';
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos' || advancedFilters.startDate !== '' || advancedFilters.endDate !== '';
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
@@ -448,9 +487,8 @@ export default function ConsultaNotas() {
   const notasProcessadasHoje = useMemo(() => {
     const hoje = new Date();
     const hojeString = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-    
-    // AJUSTE: O cálculo agora parte da lista que contém apenas NFE.
-    return notasApenasNFE.filter(nota => {
+
+    return notasPendentesDeCompra.filter(nota => {
         if (!nota.dt_atualizacao) return false;
         
         let notaDateString;
@@ -470,12 +508,11 @@ export default function ConsultaNotas() {
 
         return notaDateString === hojeString;
     }).length;
-  }, [notasApenasNFE]);
+  }, [notasPendentesDeCompra]);
 
   const notasPendentes = useMemo(() => {
-    // AJUSTE: O cálculo de pendentes agora parte da lista que só tem NFE e filtra as não concluídas.
-    return notasApenasNFE.filter(nota => nota.status_lancamento !== 'Concluído').length;
-  }, [notasApenasNFE]);
+    return notasPendentesDeCompra.length;
+  }, [notasPendentesDeCompra]);
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
@@ -540,7 +577,6 @@ export default function ConsultaNotas() {
     };
 
     const notasFiltradasOrdenadas = useMemo(() => {
-    // AJUSTE: A base para a filtragem final agora é 'notasFiltradasPorAvancado'
     let notasFiltradas = notasFiltradasPorAvancado.filter((nota) => {
       const termo = busca.toLowerCase();
       
@@ -558,6 +594,8 @@ export default function ConsultaNotas() {
         statusOk = nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO';
       } else if (filtroStatus === 'Fiscal') {
         statusOk = nota.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO';
+      } else if (filtroStatus === 'Enviadas') {
+        statusOk = nota.status_envio_unidade?.trim().toUpperCase() === 'SIM';
       } else {
         const statusNfEquivalente = {
             "Erro I.A.": "erro i.a.",
@@ -570,7 +608,6 @@ export default function ConsultaNotas() {
         statusOk = nota.status_nf?.trim().toLowerCase() === statusNfEquivalente;
       }
 
-      // A verificação do tipo NFE já foi feita nos memos anteriores, não precisa repetir aqui.
       return statusOk && buscaOk && concluidoOk;
     });
 
@@ -610,6 +647,7 @@ export default function ConsultaNotas() {
     "Falha ERP": "#8B0000",
     "Compras": "#FFC107",
     "Fiscal": "#00314A",
+    "Enviadas": "#17a2b8",
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
@@ -655,6 +693,10 @@ export default function ConsultaNotas() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
     XLSX.writeFile(workbook, "Consulta_Notas_Fiscais.xlsx");
+  };
+
+  const renderLegendText = (value: string) => {
+    return <span style={{ marginLeft: '4px' }}>{value}</span>;
   };
 
   if (authStatus === 'loading') {
@@ -707,7 +749,7 @@ export default function ConsultaNotas() {
         .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
         .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
         .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; }
+        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
         .tab-button { background: none; border: none; cursor: pointer; padding: 8px 12px 12px 12px; font-size: 1rem; font-weight: 500; color: var(--gcs-gray-dark); position: relative; transition: all 0.2s ease-in-out; }
         .tab-button::after { content: ''; position: absolute; bottom: -2px; right: 0; width: 100%; height: 100%; border-style: solid; border-color: transparent; border-image: none; opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in-out; pointer-events: none; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.2)); }
         .tab-button:hover:not(.active) { transform: translateY(-2px); color: var(--gcs-blue); }
@@ -877,7 +919,7 @@ export default function ConsultaNotas() {
             <h4 style={{ margin: 0, color: 'var(--gcs-gray-dark)', fontWeight: 500, fontSize: '1rem' }}>
                 Gráfico por Status
             </h4>
-            <div style={{ width: 280, height: 160 }}>
+            <div style={{ width: 280, height: 180 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart key={chartKey}>
                         <Pie
@@ -887,7 +929,7 @@ export default function ConsultaNotas() {
                             dataKey="value"
                             nameKey="name"
                             cx="50%"
-                            cy="50%"
+                            cy="45%"
                             innerRadius={40}
                             outerRadius={60}
                             paddingAngle={3}
@@ -904,7 +946,8 @@ export default function ConsultaNotas() {
                             align="center" 
                             verticalAlign="bottom" 
                             iconSize={10} 
-                            wrapperStyle={{ fontSize: '12px', marginTop: '10px' }}
+                            wrapperStyle={{ fontSize: '12px' }}
+                            formatter={renderLegendText}
                         />
                     </PieChart>
                 </ResponsiveContainer>
@@ -913,9 +956,8 @@ export default function ConsultaNotas() {
         
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {/* AJUSTE: Ícone trocado de FileText para ShoppingCart */}
                 <ShoppingCart size={32} color="var(--gcs-blue)" />
-                <span>Painel Compras</span>
+                <span>Pendências de Compras</span>
             </h2>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -935,7 +977,7 @@ export default function ConsultaNotas() {
                             <RefreshCcw size={20} />
                         </button>
                         <FilterPopover
-                            notas={notas}
+                            notas={notasPendentesDeCompra}
                             onApplyFilters={handleApplyAdvancedFilters}
                             initialFilters={advancedFilters}
                         />
@@ -1064,7 +1106,7 @@ export default function ConsultaNotas() {
                             <span
                                 className="status-badge"
                                 style={{
-                                    backgroundColor: 'var(--gcs-gray-dark)'
+                                    backgroundColor: nota.tipo_nf.toUpperCase() === 'CTE' ? 'var(--gcs-gray-soft)' : 'var(--gcs-gray-dark)'
                                 }}
                             >
                                 {nota.tipo_nf.toUpperCase()}

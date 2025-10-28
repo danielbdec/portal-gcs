@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { FaCheckCircle, FaTimesCircle, FaExclamationTriangle, FaListAlt, FaHistory, FaFileInvoice, FaSyncAlt, FaInfoCircle, FaUserFriends, FaSearch, FaTimes, FaSpinner, FaCopy, FaShieldAlt, FaPencilAlt } from "react-icons/fa";
+import { FaCheckCircle, FaTimesCircle, FaExclamationTriangle, FaListAlt, FaHistory, FaFileInvoice, FaSyncAlt, FaInfoCircle, FaUserFriends, FaSearch, FaTimes, FaSpinner, FaCopy, FaShieldAlt, FaPencilAlt, FaPlus } from "react-icons/fa";
 import { Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
 
@@ -47,6 +47,10 @@ interface ItemNota {
   qtd?: number;
   moeda?: number;
   data_ultima_ptax?: string;
+  // --- ADICIONADO PARA PRESERVAR ESTADO DO PEDIDO MANUAL ---
+  registro_pedido?: number | null;
+  ultima_ptax?: number | null;
+  // --- FIM DA ADIÇÃO ---
 }
 interface ItemPedidoManual {
     item_xml: number;
@@ -56,6 +60,12 @@ interface ItemPedidoManual {
     descricao_pedido_api: string | null;
     valor_pedido_api: number | null;
     registro_pedido: number | null;
+    // --- ADICIONADO PARA CONSISTÊNCIA ---
+    qtd: number | null;
+    moeda: number | null;
+    ultima_ptax: number | null;
+    data_ultima_ptax: string | null;
+    // --- FIM DA ADIÇÃO ---
 }
 interface ErroExecAuto {
   dt_movimentacao: string;
@@ -307,7 +317,7 @@ const ConfirmationModal = ({
                 <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
                 <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
                     {showCancelButton && (
-                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1ff', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
                     )}
                     <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
                 </div>
@@ -481,11 +491,21 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
   const [itens, setItens] = useState<ItemNota[]>([]);
   const [tesData, setTesData] = useState<TesData | null>(null);
   const [numNF, setNumNF] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true); // Loader principal (Itens/Compras)
   const [respostaInvalida, setRespostaInvalida] = useState(false);
   const [movimentacoes, setMovimentacoes] = useState<any[]>([]);
   const [errosExecAuto, setErrosExecAuto] = useState<ErroExecAuto[]>([]);
   const [activeTab, setActiveTab] = useState<'compras' | 'historico' | 'erros' | 'fiscal' | 'financeiro' | 'responsavel'>('compras');
+  
+  // --- Estados de carregamento e controle para Lazy Loading ---
+  const [loadingHistorico, setLoadingHistorico] = useState<boolean>(false);
+  const [loadingErros, setLoadingErros] = useState<boolean>(false);
+  const [loadingTes, setLoadingTes] = useState<boolean>(false);
+  const [hasLoadedHistorico, setHasLoadedHistorico] = useState<boolean>(false);
+  const [hasLoadedErros, setHasLoadedErros] = useState<boolean>(false);
+  const [hasLoadedTes, setHasLoadedTes] = useState<boolean>(false);
+  // ---
+
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showTransferConfirmModal, setShowTransferConfirmModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -506,6 +526,12 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
 
   const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
 
+  // --- Estados para o novo comentário ---
+  const [isAddingComment, setIsAddingComment] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  const MAX_COMMENT_LENGTH = 1000;
+
   const handleOpenFinanceiroModal = (type: 'dda' | 'titulos') => {
     setConsultaFinanceiraType(type);
     setIsFinanceiroModalOpen(true);
@@ -520,7 +546,7 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
     if (success) {
         if (message.includes('Alterações salvas com sucesso')) {
             setIsManualPedidoModalOpen(false);
-            fetchAllData(true);
+            fetchAllData(true); // Recarrega os dados principais
         }
         else if (
             message.includes('manual com sucesso') ||
@@ -541,6 +567,60 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
+  // --- Funções de Fetch Individuais ---
+
+  const fetchHistorico = useCallback(async () => {
+    if (!chave) return;
+    setLoadingHistorico(true);
+    try {
+        const fetchMovimentacoes = await fetch("/api/nfe/nfe-consulta-historico", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
+        setMovimentacoes(fetchMovimentacoes || []);
+        setHasLoadedHistorico(true);
+    } catch (error) {
+        console.error("Erro ao buscar histórico:", error);
+        setMovimentacoes([]);
+    } finally {
+        setLoadingHistorico(false);
+    }
+  }, [chave]);
+
+  const fetchErros = useCallback(async () => {
+    if (!chave) return;
+    setLoadingErros(true);
+    try {
+        const fetchErrosExecAuto = await fetch("/api/nfe/nfe-consulta-erro-execauto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
+        const validErros = Array.isArray(fetchErrosExecAuto) ? fetchErrosExecAuto.filter((err: any) => err.campo || err.motivo || err.mensagem_original) : [];
+        setErrosExecAuto(validErros);
+        setHasLoadedErros(true);
+    } catch (error) {
+        console.error("Erro ao buscar erros ExecAuto:", error);
+        setErrosExecAuto([]);
+    } finally {
+        setLoadingErros(false);
+    }
+  }, [chave]);
+
+  const fetchTes = useCallback(async () => {
+    if (!chave) return;
+    setLoadingTes(true);
+    try {
+        const fetchTes = await fetch("/api/nfe/nfe-consulta-tes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
+        if (Array.isArray(fetchTes) && fetchTes.length > 0 && fetchTes[0].itens) {
+            setTesData(fetchTes[0]);
+        } else {
+            setTesData(null);
+        }
+        setHasLoadedTes(true);
+    } catch (error) {
+        console.error("Erro ao buscar dados da TES:", error);
+        setTesData(null);
+    } finally {
+        setLoadingTes(false);
+    }
+  }, [chave]);
+
+  // --- Função de Carga Principal (Apenas Itens/Compras) ---
+
   const fetchAllData = useCallback(async (isRefresh = false) => {
     if (!visivel || !chave) return;
 
@@ -548,23 +628,27 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
         setLoading(true);
     }
 
+    // Reseta todos os estados de dados e flags de lazy load
     setItens([]);
     setMovimentacoes([]);
     setErrosExecAuto([]);
     setTesData(null);
+    setHasLoadedHistorico(false);
+    setHasLoadedErros(false);
+    setHasLoadedTes(false);
+
+    // Reseta estados de controle
     setActiveTab('compras');
     setIsSubmitting(false);
     setSelectedComprador(null);
     setMotivoTransferencia('');
     setInternalStatusTes(status_tes);
 
+    // Carrega apenas os dados essenciais (Itens)
     const fetchDetalhes = fetch("/api/nfe/nfe-consulta-notas-itens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
-    const fetchMovimentacoes = fetch("/api/nfe/nfe-consulta-historico", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
-    const fetchErrosExecAuto = fetch("/api/nfe/nfe-consulta-erro-execauto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
-    const fetchTes = fetch("/api/nfe/nfe-consulta-tes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chave }) }).then(res => res.json());
-
+    
     try {
-        const [detalhesData, movimentacoesData, errosData, tesApiResponse] = await Promise.all([ fetchDetalhes, fetchMovimentacoes, fetchErrosExecAuto, fetchTes ]);
+        const detalhesData = await fetchDetalhes;
 
         if (Array.isArray(detalhesData) && detalhesData.length > 0) {
             const nota = detalhesData[0];
@@ -591,27 +675,47 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
             }
             setRespostaInvalida(true);
         }
-        setMovimentacoes(movimentacoesData || []);
-        const validErros = Array.isArray(errosData) ? errosData.filter((err: any) => err.campo || err.motivo || err.mensagem_original) : [];
-        setErrosExecAuto(validErros);
-
-        if (Array.isArray(tesApiResponse) && tesApiResponse.length > 0 && tesApiResponse[0].itens) {
-            setTesData(tesApiResponse[0]);
-        } else {
-            setTesData(null);
-        }
-
+        // As outras chamadas (movimentacoes, erros, tes) foram removidas daqui
     } catch (error) {
         console.error("Erro ao buscar dados do modal:", error);
         setRespostaInvalida(true);
     } finally {
-        setLoading(false);
+        setLoading(false); // Desativa o loader principal
     }
   }, [visivel, chave, status_tes]);
 
+  // Efeito para carregar dados principais ao abrir o modal
   useEffect(() => {
     fetchAllData(false);
   }, [fetchAllData]);
+
+  // --- Efeito para Lazy Loading das Abas ---
+  useEffect(() => {
+    if (!visivel) return; // Não fazer nada se o modal estiver fechado
+
+    // Verifica a aba ativa e carrega se ainda não foi carregada
+    switch (activeTab) {
+        case 'historico':
+            if (!hasLoadedHistorico) {
+                fetchHistorico();
+            }
+            break;
+        case 'erros':
+            if (!hasLoadedErros) {
+                fetchErros();
+            }
+            break;
+        case 'fiscal':
+            if (!hasLoadedTes) {
+                fetchTes();
+            }
+            break;
+        default:
+            // 'compras', 'financeiro', 'responsavel' não disparam fetch ao clicar na aba
+            break;
+    }
+  }, [activeTab, visivel, hasLoadedHistorico, hasLoadedErros, hasLoadedTes, fetchHistorico, fetchErros, fetchTes]);
+
 
   useEffect(() => {
       if (!visivel) {
@@ -841,7 +945,7 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
         const result = await response.json();
         if (response.ok && result.status === 'ok') {
             setNotification({ visible: true, type: 'success', message: 'TES alterada com sucesso!' });
-            fetchAllData(true);
+            fetchAllData(true); // Recarrega tudo
             setIsManualTesModalOpen(false);
 
         } else {
@@ -888,7 +992,47 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
     }
   };
 
+  const handleEnviarComentario = async () => {
+    if (!newComment.trim()) {
+        setNotification({ visible: true, type: 'error', message: 'O comentário não pode estar vazio.' });
+        return;
+    }
+    setIsSendingComment(true);
+    try {
+        const response = await fetch('/api/nfe/nfe-historico-manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chave: chave,
+                email_solicitante: session?.user?.email,
+                historico: newComment.trim()
+            }),
+        });
+        const result = await response.json();
+        if (response.ok && result.status === 'ok') {
+            setNotification({ visible: true, type: 'success', message: 'Comentário adicionado com sucesso!' });
+            setNewComment('');
+            setIsAddingComment(false);
+            fetchHistorico(); // Recarrega o histórico para mostrar o novo comentário
+        } else {
+            throw new Error(result.message || 'Falha ao adicionar comentário.');
+        }
+    } catch (error: any) {
+        setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível enviar o comentário.' });
+    } finally {
+        setIsSendingComment(false);
+    }
+  };
+
   if (!visivel) return null;
+
+  // --- Componente de Spinner para Abas ---
+  const TabSpinner = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '3rem', paddingBottom: '3rem', minHeight: '200px' }}>
+      <div style={{ width: '30px', height: '30px', border: '3px solid #ccc', borderTop: '3px solid #1b4c89', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <div style={{ marginTop: '1rem', color: '#1b4c89', fontWeight: 'bold' }}>Carregando...</div>
+    </div>
+  );
 
   const renderStatusIcon = (value: string) => {
     const isPositive = value?.toLowerCase() === "sim";
@@ -908,7 +1052,7 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
       const enviado = enviadoPelaUnidade ? enviadoPelaUnidade.toLowerCase() === 'sim' : false;
       const normalizedTesStatus = statusTes?.trim().toUpperCase();
 
-      if (normalizedStatus === 'importado' || normalizedStatus === 'manual' || normalizedStatus === 'erro execauto' || normalizedStatus === 'finalizado') {
+      if (normalizedStatus === 'importado' || normalizedStatus === 'manual' || normalizedStatus === 'finalizado') {
           return 5;
       }
       if (enviado) {
@@ -974,7 +1118,7 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
           break;
       case 'PENDENTE':
           assistantBoxStyle = { background: '#fffbe6', border: '1px solid #ffe58f' };
-          assistantMessage = 'Um ou mais itens apresentam divergências ou não foram vinculados a um pedido. Por favor, verifique no ERP se o pedido está ok, e se estiver utilize o botão de Forçar Reprocessamento, caso contrário, você pode clicar no botão Pedido manual e informar manualmente o pedido dos itens.';
+          assistantMessage = 'Um ou mais itens apresentam divergências ou não foram vinculados a um pedido. Por favor, verifique no ERP se o pedido está ok, e se estiver utilize o botão de Forçar Reprocessamento.'; // Mensagem ajustada
           break;
       case 'EM FILA':
           assistantBoxStyle = { background: '#f8f9fa', border: '1px solid #dee2e6' };
@@ -1197,6 +1341,7 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                               {assistantMessage}
                           </p>
                           <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                              {/* BOTÃO "Pedido Manual" REMOVIDO DAQUI */}
                               <button
                                   onClick={handleReprocessar}
                                   disabled={isButtonDisabled || isSubmitting || areAssistantButtonsDisabled}
@@ -1279,76 +1424,157 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                     )}
                     {activeTab === 'historico' && (
                       <div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaHistory /> Histórico de Movimentações</h3>
-                        {(movimentacoes.length === 0) ? (
-                          <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem' }}>Não há movimentações no histórico ainda.</p>
-                        ) : (
-                        <div style={{ backgroundColor: '#f4f6fb', padding: '1rem', borderRadius: '8px', border: '1px solid #d0d7e2' }}>
-                            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                              {movimentacoes.map((mov, idx) => {
-                                const isSystem = (mov.cod_usuario || '').toLowerCase().includes('integração') || (mov.cod_usuario || '').toLowerCase().includes('sistema');
-                                return (
-                                  <li key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginBottom: idx === movimentacoes.length - 1 ? 0 : '1rem', background: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                    <div style={{
-                                      width: '36px', height: '36px', borderRadius: '50%',
-                                      backgroundColor: isSystem ? '#1b4c89' : '#6c757d',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      color: '#fff', fontWeight: 'bold', fontSize: '0.9rem', flexShrink: 0
-                                    }}>
-                                      {isSystem ? '⚙️' : getInitials(mov.nome || mov.cod_usuario)}
+                        {loadingHistorico ? <TabSpinner /> : (
+                            <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><FaHistory /> Histórico de Movimentações</h3>
+                                    {!isAddingComment && (
+                                        <button 
+                                            onClick={() => setIsAddingComment(true)}
+                                            style={{
+                                                background: '#1b4c89',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '5px',
+                                                padding: '8px 16px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontWeight: 'bold',
+                                                fontSize: '14px',
+                                                transition: 'background-color 0.2s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = '#00314A'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = '#1b4c89'}
+                                        >
+                                            <FaPlus size={12} /> Adicionar Comentário
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {isAddingComment && (
+                                    <div style={{ border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem', background: '#f8f9fa' }}>
+                                        <textarea
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            maxLength={MAX_COMMENT_LENGTH}
+                                            placeholder="Digite seu comentário aqui..."
+                                            rows={4}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px',
+                                                borderRadius: '5px',
+                                                border: '1px solid #ccc',
+                                                resize: 'vertical',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box'
+                                            }}
+                                            autoFocus
+                                        />
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                                            <span style={{ fontSize: '12px', color: '#6c757d' }}>
+                                                {MAX_COMMENT_LENGTH - newComment.length} caracteres restantes
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button 
+                                                    onClick={() => { setIsAddingComment(false); setNewComment(''); }}
+                                                    disabled={isSendingComment}
+                                                    style={{ padding: '8px 16px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button 
+                                                    onClick={handleEnviarComentario} 
+                                                    disabled={isSendingComment || !newComment.trim()}
+                                                    style={{ 
+                                                        padding: '8px 16px', borderRadius: '5px', border: 'none', background: '#28a745', color: 'white', 
+                                                        cursor: (isSendingComment || !newComment.trim()) ? 'not-allowed' : 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px',
+                                                        opacity: (isSendingComment || !newComment.trim()) ? 0.7 : 1
+                                                    }}
+                                                >
+                                                    {isSendingComment ? <><FaSpinner className="animate-spin" size={14} /> <span>Enviando...</span></> : 'Enviar'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div style={{ flexGrow: 1 }}>
-                                      <strong style={{ color: '#1b4c89' }}>{mov.nome || mov.cod_usuario || 'Sistema'}</strong>
-                                      <div style={{ fontSize: '0.8rem', color: '#777', marginBottom: '0.25rem' }}>{new Date(mov.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}</div>
-                                      <div style={{ fontSize: '0.95rem', color: '#333' }}>{mov.mensagem}</div>
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                        </div>
+                                )}
+
+                                {(movimentacoes.length === 0) ? (
+                                <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem' }}>Não há movimentações no histórico ainda.</p>
+                                ) : (
+                                <div style={{ backgroundColor: '#f4f6fb', padding: '1rem', borderRadius: '8px', border: '1px solid #d0d7e2' }}>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                    {movimentacoes.map((mov, idx) => {
+                                        const isSystem = (mov.cod_usuario || '').toLowerCase().includes('integração') || (mov.cod_usuario || '').toLowerCase().includes('sistema');
+                                        return (
+                                        <li key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginBottom: idx === movimentacoes.length - 1 ? 0 : '1rem', background: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                            <div style={{
+                                            width: '36px', height: '36px', borderRadius: '50%',
+                                            backgroundColor: isSystem ? '#1b4c89' : '#6c757d',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            color: '#fff', fontWeight: 'bold', fontSize: '0.9rem', flexShrink: 0
+                                            }}>
+                                            {isSystem ? '⚙️' : getInitials(mov.nome || mov.cod_usuario)}
+                                            </div>
+                                            <div style={{ flexGrow: 1 }}>
+                                            <strong style={{ color: '#1b4c89' }}>{mov.nome || mov.cod_usuario || 'Sistema'}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: '#777', marginBottom: '0.25rem' }}>{new Date(mov.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}</div>
+                                            <div style={{ fontSize: '0.95rem', color: '#333' }}>{mov.mensagem}</div>
+                                            </div>
+                                        </li>
+                                        );
+                                    })}
+                                    </ul>
+                                </div>
+                                )}
+                            </>
                         )}
                       </div>
                     )}
                     {activeTab === 'erros' && (
                       <div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaExclamationTriangle /> Ocorrências de Erro ExecAuto</h3>
-                        {(errosExecAuto.length === 0) ? (
-                          <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem' }}>Não há erros a serem exibidos para esta nota.</p>
-                        ) : (
-                        <div style={{ backgroundColor: '#fff0f0', padding: '1rem', borderRadius: '8px', border: '1px solid #f5c2c7' }}>
-                            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                              {errosExecAuto.map((err, idx) => {
-                                const fullErrorText = `Data: ${new Date(err.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}\nCampo: ${err.campo || '-'}\nMotivo: ${err.motivo || '-'}\nMensagem: ${err.mensagem_original}`;
-                                return (
-                                  <li key={idx} style={{ position: 'relative', background: '#fff', borderLeft: '4px solid #dc3545', padding: '1rem', borderRadius: '8px', marginBottom: idx === errosExecAuto.length - 1 ? 0 : '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                    <button
-                                      onClick={() => copyToClipboard(fullErrorText)}
-                                      title="Copiar erro"
-                                      style={{
-                                          position: 'absolute', top: '10px', right: '10px', background: '#f8d7da',
-                                          border: '1px solid #f5c6cb', borderRadius: '50%', width: '30px', height: '30px',
-                                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                                      }}
-                                    >
-                                      <FaCopy color="#721c24" />
-                                    </button>
-                                    <div style={{ fontSize: '0.85rem', color: '#dc3545', fontWeight: 'bold', marginBottom: '0.5rem' }}>{new Date(err.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}</div>
-                                    <div style={{ fontSize: '0.95rem', color: '#333', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                      <div><strong>Campo:</strong> {err.campo || '-'}</div>
-                                      <div><strong>Motivo:</strong> {err.motivo || '-'}</div>
-                                      <div>
-                                        <strong>Mensagem:</strong>
-                                        <div style={{ background: '#f8d7da', padding: '0.75rem', borderRadius: '4px', marginTop: '0.5rem' }}>
-                                          <FormattedOriginalMessage message={err.mensagem_original} />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                        </div>
+                        {loadingErros ? <TabSpinner /> : (
+                            <>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaExclamationTriangle /> Ocorrências de Erro ExecAuto</h3>
+                                {(errosExecAuto.length === 0) ? (
+                                <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem' }}>Não há erros a serem exibidos para esta nota.</p>
+                                ) : (
+                                <div style={{ backgroundColor: '#fff0f0', padding: '1rem', borderRadius: '8px', border: '1px solid #f5c2c7' }}>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                    {errosExecAuto.map((err, idx) => {
+                                        const fullErrorText = `Data: ${new Date(err.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}\nCampo: ${err.campo || '-'}\nMotivo: ${err.motivo || '-'}\nMensagem: ${err.mensagem_original}`;
+                                        return (
+                                        <li key={idx} style={{ position: 'relative', background: '#fff', borderLeft: '4px solid #dc3545', padding: '1rem', borderRadius: '8px', marginBottom: idx === errosExecAuto.length - 1 ? 0 : '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                            <button
+                                            onClick={() => copyToClipboard(fullErrorText)}
+                                            title="Copiar erro"
+                                            style={{
+                                                position: 'absolute', top: '10px', right: '10px', background: '#f8d7da',
+                                                border: '1px solid #f5c6cb', borderRadius: '50%', width: '30px', height: '30px',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                                            }}
+                                            >
+                                            <FaCopy color="#721c24" />
+                                            </button>
+                                            <div style={{ fontSize: '0.85rem', color: '#dc3545', fontWeight: 'bold', marginBottom: '0.5rem' }}>{new Date(err.dt_movimentacao).toLocaleString('pt-BR', { timeZone: 'UTC' })}</div>
+                                            <div style={{ fontSize: '0.95rem', color: '#333', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <div><strong>Campo:</strong> {err.campo || '-'}</div>
+                                            <div><strong>Motivo:</strong> {err.motivo || '-'}</div>
+                                            <div>
+                                                <strong>Mensagem:</strong>
+                                                <div style={{ background: '#f8d7da', padding: '0.75rem', borderRadius: '4px', marginTop: '0.5rem' }}>
+                                                <FormattedOriginalMessage message={err.mensagem_original} />
+                                                </div>
+                                            </div>
+                                            </div>
+                                        </li>
+                                        );
+                                    })}
+                                    </ul>
+                                </div>
+                                )}
+                            </>
                         )}
                       </div>
                     )}
@@ -1359,84 +1585,112 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
 
                         return (
                           <div>
-                              <div>
-                                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <Sparkles /> Assistente de TES
-                                  </h3>
+                            {loadingTes ? <TabSpinner /> : (
+                                <>
+                                    <div>
+                                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Sparkles /> Assistente de TES
+                                        </h3>
 
-                                  <div style={{
-                                      background: allItemsHaveTesSuggestion && !isTesPendente ? '#effaf5' : '#fffbe6',
-                                      border: `1px solid ${allItemsHaveTesSuggestion && !isTesPendente ? '#b7e4c7' : '#ffe58f'}`,
-                                      padding: '1rem',
-                                      borderRadius: '8px',
-                                      marginBottom: '1.5rem',
-                                      fontSize: '14px',
-                                      color: '#333'
-                                  }}>
-                                      {isTesPendente ? (
-                                          <div>
-                                              <p style={{ color: '#495057', fontSize: '0.9rem', marginTop: '0.75rem', fontWeight: '500', margin: 0 }}>
-                                                  Aguarde o processamento do assistente fiscal para continuar.
-                                              </p>
-                                          </div>
-                                      ) : (
-                                          <>
-                                              <p style={{ margin: 0, lineHeight: 1.6 }}>
-                                                  {allItemsHaveTesSuggestion
-                                                      ? 'Todos os itens possuem TES classificadas com os critérios treinados.'
-                                                      : 'Um ou mais itens não possuem uma sugestão de TES ou apresentaram erro. Por favor, revise as informações para dar continuidade ao processo.'
-                                                  }
-                                              </p>
-                                          </>
-                                      )}
-                                  </div>
+                                        <div style={{
+                                            background: allItemsHaveTesSuggestion && !isTesPendente ? '#effaf5' : '#fffbe6',
+                                            border: `1px solid ${allItemsHaveTesSuggestion && !isTesPendente ? '#b7e4c7' : '#ffe58f'}`,
+                                            padding: '1rem',
+                                            borderRadius: '8px',
+                                            marginBottom: '1.5rem',
+                                            fontSize: '14px',
+                                            color: '#333'
+                                        }}>
+                                            {isTesPendente && !hasLoadedTes ? ( // Adicionado !hasLoadedTes para mostrar pendente antes do spinner
+                                                <div>
+                                                    <p style={{ color: '#495057', fontSize: '0.9rem', marginTop: '0.75rem', fontWeight: '500' }}>
+                                                        Aguarde o processamento do assistente fiscal para continuar.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p style={{ margin: 0, lineHeight: 1.6 }}>
+                                                        {allItemsHaveTesSuggestion
+                                                            ? 'Todos os itens possuem TES classificadas com os critérios treinados.'
+                                                            : 'Um ou mais itens não possuem uma sugestão de TES ou apresentaram erro. Por favor, revise as informações para dar continuidade ao processo.'
+                                                        }
+                                                    </p>
+                                                    {/* BOTÕES REMOVIDOS DESTA ÁREA */}
+                                                </>
+                                            )}
+                                        </div>
 
-                                  {(!tesData || tesData.itens.length === 0) ? (
-                                      <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1.5rem' }}>
-                                          Informações do assistente de TES não disponíveis para esta nota.
-                                      </p>
-                                  ) : (
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                                          <thead style={{ backgroundColor: '#1b4c89', color: '#fff' }}>
-                                              <tr>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Item</th>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'left' }}>Descrição XML</th>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>TES Sugerida</th>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Classe</th>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Confiança</th>
-                                                  <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'left' }}>Justificativa IA</th>
-                                              </tr>
-                                          </thead>
-                                          <tbody>
-                                              {itens.map((item, index) => {
-                                                  const tesInfo = tesData.itens.find(t => t.nItem === item.item_xml);
-                                                  return (
-                                                      <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff' }}>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{item.item_xml}</td>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd' }}>{item.descricao_xml}</td>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>
-                                                              {tesInfo?.tes_codigo ? tesInfo.tes_codigo : (
-                                                                  <FaExclamationTriangle color="#f7941d" title="TES não informada." />
-                                                              )}
-                                                          </td>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>{tesInfo?.classe || '-'}</td>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                              {tesInfo ? (
-                                                                  <span style={{ color: getConfiancaColor(tesInfo.confianca_pct), fontWeight: 'bold' }}>
-                                                                      {tesInfo.confianca_pct}%
-                                                                  </span>
-                                                              ) : '-'}
-                                                          </td>
-                                                          <td style={{ padding: '8px', border: '1px solid #ddd', fontSize: '13px' }}>
-                                                              {tesInfo?.justificativa_texto || '-'}
-                                                          </td>
-                                                      </tr>
-                                                  );
-                                              })}
-                                          </tbody>
-                                      </table>
-                                  )}
-                              </div>
+                                        {(!tesData || tesData.itens.length === 0) ? (
+                                            <p style={{ textAlign: 'center', color: '#888', paddingTop: '2rem', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1.5rem' }}>
+                                                {(isTesPendente && !hasLoadedTes) 
+                                                    ? 'Aguardando processamento do assistente fiscal...' 
+                                                    : 'Informações do assistente de TES não disponíveis para esta nota.'
+                                                }
+                                            </p>
+                                        ) : (
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                                                <thead style={{ backgroundColor: '#1b4c89', color: '#fff' }}>
+                                                    <tr>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Item</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'left' }}>Descrição XML</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>TES Sugerida</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Classe</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'center' }}>Confiança</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ccc', textAlign: 'left' }}>Justificativa IA</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {itens.map((item, index) => {
+                                                        const tesInfo = tesData.itens.find(t => t.nItem === item.item_xml);
+                                                        return (
+                                                            <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff' }}>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{item.item_xml}</td>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{item.descricao_xml}</td>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>
+                                                                    {tesInfo?.tes_codigo ? tesInfo.tes_codigo : (
+                                                                        <FaExclamationTriangle color="#f7941d" title="TES não informada." />
+                                                                    )}
+                                                                </td>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>{tesInfo?.classe || '-'}</td>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                                    {tesInfo ? (
+                                                                        <span style={{ color: getConfiancaColor(tesInfo.confianca_pct), fontWeight: 'bold' }}>
+                                                                            {tesInfo.confianca_pct}%
+                                                                        </span>
+                                                                    ) : '-'}
+                                                                </td>
+                                                                <td style={{ padding: '8px', border: '1px solid #ddd', fontSize: '13px' }}>
+                                                                    {tesInfo?.justificativa_texto || '-'}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+
+                                    <div style={{ marginTop: '2.5rem' }}>
+                                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaFileInvoice /> Opções Fiscais</h3>
+                                        <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1.5rem' }}>
+                                            {isSubmitting && activeTab === 'fiscal' ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1rem' }}>
+                                                    <div style={{ width: '30px', height: '30px', border: '3px solid #ccc', borderTop: '3px solid #1b4c89', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                                    <div style={{ marginTop: '0.5rem', fontWeight: 'bold', color: '#1b4c89' }}>Processando...</div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p style={{ color: '#6c757d', marginTop: '0', lineHeight: 1.6 }}>
+                                                        Ao clicar no botão abaixo, você marcará esta nota para ser lançada manualmente no Protheus.
+                                                        Esta ação é irreversível e impedirá o lançamento automático através deste portal.
+                                                    </p>
+                                                    {/* BOTÃO REMOVIDO DESTA ÁREA */}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                           </div>
                       );
                     })()}

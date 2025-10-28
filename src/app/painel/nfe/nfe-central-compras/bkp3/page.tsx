@@ -148,15 +148,17 @@ const FilterPopover = ({
     const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
+    const [startDate, setStartDate] = useState(initialFilters.startDate || '');
+    const [endDate, setEndDate] = useState(initialFilters.endDate || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
     const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
     const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador).filter(Boolean)))], [notas]);
+    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador || '-'))).sort()], [notas]);
     const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
 
     const handleApply = () => {
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento });
+        onApplyFilters({ filial, tipo, responsavel, statusLancamento, startDate, endDate });
         setIsOpen(false);
     };
 
@@ -165,7 +167,9 @@ const FilterPopover = ({
         setTipo('Todos');
         setResponsavel('Todos');
         setStatusLancamento('Todos');
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+        setStartDate('');
+        setEndDate('');
+        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
         setIsOpen(false);
     };
 
@@ -191,7 +195,7 @@ const FilterPopover = ({
                     top: '100%',
                     right: 0,
                     marginTop: '8px',
-                    width: '300px',
+                    width: '360px',
                     backgroundColor: 'white',
                     borderRadius: '8px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -202,6 +206,17 @@ const FilterPopover = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
                         <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Inicial</label>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Final</label>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
                     </div>
 
                     <div style={{ marginBottom: '1rem' }}>
@@ -303,7 +318,7 @@ const renderActiveShape = (props: any) => {
 };
 
 
-export default function PendenciaDeCompras() {
+export default function CentralDeCompras() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
@@ -321,7 +336,7 @@ export default function PendenciaDeCompras() {
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const itensPorPagina = 10;
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -357,7 +372,7 @@ export default function PendenciaDeCompras() {
     }
     if (status === 'authenticated') {
       const user = session.user;
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.pendenciaCompras');
+      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralCompras');
       
       if (hasAccess) {
         setAuthStatus('authorized');
@@ -381,25 +396,37 @@ export default function PendenciaDeCompras() {
   const statusDisponiveis = useMemo(() => {
     return ["Todos", "Compras", "Fiscal", "Enviadas", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
   }, []);
-
-  // FILTRO PRINCIPAL: Apenas notas com pendência de compras, que não sejam CTE e que tenham tipo
-  const notasPendentesDeCompra = useMemo(() => {
-      return (notas || []).filter(nota => 
-          nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO' &&
-          nota.tipo_nf && // Garante que o tipo_nf existe e não é nulo/vazio
-          nota.tipo_nf.trim().toUpperCase() !== 'CTE'
-      );
-  }, [notas]);
   
   const notasFiltradasPorAvancado = useMemo(() => {
-    return (notasPendentesDeCompra || []).filter((nota) => {
+    return (notas || []).filter((nota) => {
         const filialOk = advancedFilters.filial === 'Todas' || nota.filial === advancedFilters.filial;
         const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || nota.comprador === advancedFilters.responsavel;
+        const responsavelOk = advancedFilters.responsavel === 'Todos' || (nota.comprador || '-') === advancedFilters.responsavel;
         const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        return filialOk && tipoOk && responsavelOk && statusLancamentoOk;
+        
+        let dateOk = true;
+        if (advancedFilters.startDate || advancedFilters.endDate) {
+            const parts = nota.dt_recebimento.split('/');
+            if (parts.length === 3) {
+                // Converte DD/MM/YYYY para YYYY-MM-DD para comparação de strings
+                const notaDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                const start = advancedFilters.startDate;
+                const end = advancedFilters.endDate;
+
+                if (start && notaDateStr < start) {
+                    dateOk = false;
+                }
+                if (end && notaDateStr > end) {
+                    dateOk = false;
+                }
+            } else {
+                dateOk = false; 
+            }
+        }
+
+        return filialOk && tipoOk && responsavelOk && statusLancamentoOk && dateOk;
     });
-  }, [notasPendentesDeCompra, advancedFilters]);
+  }, [notas, advancedFilters]);
   
   const statusCounts = useMemo(() => {
       const source = notasFiltradasPorAvancado;
@@ -443,7 +470,7 @@ export default function PendenciaDeCompras() {
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos';
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos' || advancedFilters.startDate !== '' || advancedFilters.endDate !== '';
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
@@ -452,7 +479,7 @@ export default function PendenciaDeCompras() {
     const hoje = new Date();
     const hojeString = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-    return notasPendentesDeCompra.filter(nota => {
+    return notas.filter(nota => {
         if (!nota.dt_atualizacao) return false;
         
         let notaDateString;
@@ -472,11 +499,14 @@ export default function PendenciaDeCompras() {
 
         return notaDateString === hojeString;
     }).length;
-  }, [notasPendentesDeCompra]);
+  }, [notas]);
 
   const notasPendentes = useMemo(() => {
-    return notasPendentesDeCompra.length;
-  }, [notasPendentesDeCompra]);
+    const statusExcluidos = ["manual", "importado"];
+    return notas.filter(nota => {
+      return nota.status_nf && !statusExcluidos.includes(nota.status_nf.trim().toLowerCase());
+    }).length;
+  }, [notas]);
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
@@ -921,7 +951,7 @@ export default function PendenciaDeCompras() {
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <ShoppingCart size={32} color="var(--gcs-blue)" />
-                <span>Pendências de Compras</span>
+                <span>Central de Compras</span>
             </h2>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -941,7 +971,7 @@ export default function PendenciaDeCompras() {
                             <RefreshCcw size={20} />
                         </button>
                         <FilterPopover
-                            notas={notasPendentesDeCompra}
+                            notas={notas}
                             onApplyFilters={handleApplyAdvancedFilters}
                             initialFilters={advancedFilters}
                         />

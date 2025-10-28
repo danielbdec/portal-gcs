@@ -1,3 +1,4 @@
+// page.tsx (Refatorado para Forçar Filtros Permanentes)
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -11,11 +12,12 @@ import {
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
-    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock
+    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
 } from "lucide-react";
-import ModalDetalhes from "./ModalDetalhes"; // Assume que ModalDetalhes está na mesma pasta
+import ModalDetalhes from "./ModalDetalhes";
 import React from "react";
 import "antd/dist/reset.css";
+import PriorityRibbonTabs from "./PriorityRibbonTabs";
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
@@ -63,6 +65,42 @@ const formatTimeAgo = (date: Date | null): string => {
     return `há ${days} dias`;
 };
 
+// Helper para formatar data e hora do Protheus (ISODate)
+const formatProtheusDateTime = (dateString: string | null | undefined): string => {
+    if (!dateString) {
+        return '—';
+    }
+    try {
+        const dateTest = new Date(dateString);
+        if (isNaN(dateTest.getTime())) {
+            return '—';
+        }
+
+        const year = dateString.substring(0, 4);
+        const month = dateString.substring(5, 7);
+        const day = dateString.substring(8, 10);
+        const hour = dateString.substring(11, 13);
+        const minute = dateString.substring(14, 16);
+
+        if (year.length !== 4 || month.length !== 2 || day.length !== 2 || hour.length !== 2 || minute.length !== 2) {
+             if(dateString.length >= 16){
+                const hourAlt = dateString.substring(11, 13);
+                const minuteAlt = dateString.substring(14, 16);
+                if(hourAlt.length === 2 && minuteAlt.length === 2){
+                    return `${day}/${month}/${year} ${hourAlt}:${minuteAlt}`;
+                }
+             }
+             return '—';
+        }
+
+        return `${day}/${month}/${year} ${hour}:${minute}`;
+
+    } catch (error) {
+        console.error("Erro ao formatar data Protheus:", error);
+        return '—';
+    }
+};
+
 
 interface Nota {
   filial: string;
@@ -79,29 +117,29 @@ interface Nota {
   observacao: string;
   comprador: string;
   status_lancamento?: string;
-  status_envio_unidade?: string | null; // Permitir null
+  status_envio_unidade?: string;
   status_compras?: string;
   status_fiscal?: string;
+  dt_lcto_protheus?: string;
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
-    statusUnidade?: string | null; // Permitir null
+    statusUnidade?: string;
     statusCompras?: string;
     statusFiscal?: string;
 }) => {
-    const getIconBgColor = (status: string | undefined | null, completedValue: string): string => {
-        // Verifica explicitamente se é uma string antes de comparar
+    const getIconBgColor = (status: string | undefined, completedValue: string): string => {
         if (typeof status === 'string' && status.trim().toUpperCase() === completedValue) {
             return '#28a745'; // Verde sólido
         }
-        return '#dc3545'; // Vermelho sólido (padrão para pendente/erro/null/undefined)
+        return '#dc3545'; // Vermelho sólido
     };
 
-    let unidadeTitleText = 'Pendente/Não Informado';
+    let unidadeTitleText = 'Pendente';
     if (typeof statusUnidade === 'string') {
         if (statusUnidade.trim().toUpperCase() === 'SIM') {
             unidadeTitleText = 'Enviado';
-        } else if (statusUnidade.trim().toUpperCase() === 'NAO') { // Corrigido para NAO
+        } else if (statusUnidade.trim().toUpperCase() === 'NAO') {
             unidadeTitleText = 'Não Enviado';
         }
     }
@@ -121,7 +159,7 @@ const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
 
     return (
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-            <div title={`Unidade: ${unidadeTitleText}`} style={{ ...iconContainerStyle, backgroundColor: unidadeBgColor }}>
+            <div title={`Fazenda: ${unidadeTitleText}`} style={{ ...iconContainerStyle, backgroundColor: unidadeBgColor }}>
                 <Send size={16} color="white" />
             </div>
             <div title={`Compras: ${statusCompras || 'Pendente'}`} style={{ ...iconContainerStyle, backgroundColor: comprasBgColor }}>
@@ -134,46 +172,62 @@ const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
     );
 };
 
-
 const FilterPopover = ({
-    notas,
+    allTipos,
+    allCompradores,
+    allStatusLancamento,
     onApplyFilters,
     initialFilters
 }: {
-    notas: Nota[],
+    allTipos: string[],
+    allCompradores: string[],
+    allStatusLancamento: string[],
     onApplyFilters: (filters: any) => void,
     initialFilters: any
 }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [filial, setFilial] = useState(initialFilters.filial || 'Todas'); // Mantido, mas não usado
+    // Removido estado local 'filial' pois é um filtro permanente agora
     const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
     const [startDate, setStartDate] = useState(initialFilters.startDate || '');
     const [endDate, setEndDate] = useState(initialFilters.endDate || '');
+    const [startDateProtheus, setStartDateProtheus] = useState(initialFilters.startDateProtheus || '');
+    const [endDateProtheus, setEndDateProtheus] = useState(initialFilters.endDateProtheus || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
-    // Filtra as opções únicas *antes* da filtragem permanente da página
-    const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
-    const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador || '-'))).sort()], [notas]);
-    const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
+    // Removido filiaisUnicas
+    const tiposUnicos = useMemo(() => allTipos, [allTipos]);
+    const responsaveisUnicos = useMemo(() => allCompradores, [allCompradores]);
+    const statusUnicos = useMemo(() => allStatusLancamento, [allStatusLancamento]);
+
 
     const handleApply = () => {
-        // Passa todos os filtros, a lógica da página ignora o de filial
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento, startDate, endDate });
+        onApplyFilters({
+            // filial não é mais enviado daqui
+            tipo, responsavel, statusLancamento,
+            startDate, endDate,
+            startDateProtheus, endDateProtheus
+        });
         setIsOpen(false);
     };
 
     const handleClear = () => {
-        setFilial('Todas'); // Reseta visualmente
+        // filial não é resetada aqui
         setTipo('Todos');
         setResponsavel('Todos');
         setStatusLancamento('Todos');
         setStartDate('');
         setEndDate('');
-        // Envia filtros limpos (exceto filial que será ignorada)
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
+        setStartDateProtheus('');
+        setEndDateProtheus('');
+
+        onApplyFilters({
+            // filial não é mais enviado daqui
+            tipo: 'Todos', responsavel: 'Todos',
+            statusLancamento: 'Todos', startDate: '', endDate: '',
+            startDateProtheus: '', endDateProtheus: ''
+        });
         setIsOpen(false);
     };
 
@@ -214,24 +268,27 @@ const FilterPopover = ({
 
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
                         <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Inicial</label>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Inicial</label>
                             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
                         </div>
                         <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Final</label>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Final</label>
                             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
                         </div>
                     </div>
 
-                    {/* O filtro de Filial não é mais necessário aqui, pois a página já filtra por '0402' */}
-                    {/*
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Filial</label>
-                        <select value={filial} onChange={(e) => setFilial(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {filiaisUnicas.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Inicial</label>
+                            <input type="date" value={startDateProtheus} onChange={(e) => setStartDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Final</label>
+                            <input type="date" value={endDateProtheus} onChange={(e) => setEndDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
                     </div>
-                     */}
+
+                    {/* Removido o select de Filial */}
 
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
@@ -265,118 +322,74 @@ const FilterPopover = ({
 };
 
 
-const ConfirmationModal = ({
-    isOpen,
-    onClose,
-    onConfirm,
-    message,
-    title = "Confirmação Necessária",
-    icon = <AlertTriangle size={40} color="#f7941d" />,
-    confirmText = "OK, Entendi",
-    confirmColor = "#dc3545",
-    showCancelButton = true
-}: {
-    isOpen: boolean,
-    onClose: () => void,
-    onConfirm: () => void,
-    message: string,
-    title?: string,
-    icon?: React.ReactNode,
-    confirmText?: string,
-    confirmColor?: string,
-    showCancelButton?: boolean
-}) => {
-    if (!isOpen) return null;
-    return (
-        <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483648 }}></div>
-            <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 2147483649, maxWidth: '450px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                    {icon}
-                </div>
-                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#333' }}>{title}</h3>
-                <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                    {showCancelButton && (
-                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-                    )}
-                    <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
-                </div>
-            </div>
-        </>
-    );
-};
-
-const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-  return (
-    <g>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius + 8} // Aumenta o raio externo no hover
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-      />
-    </g>
-  );
-};
-
-
-export default function ConsultaNotasEnviadasBA() { // Renomeado o componente para refletir o propósito
+export default function ConsultaNotas() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
 
-  const [notas, setNotas] = useState<Nota[]>([]); // Estado que armazena as notas *já filtradas* pela API
-  const [filtroStatus, setFiltroStatus] = useState<string>("Todos"); // Filtro das abas
-  
-  // DEBOUNCE: buscaRaw é o que o usuário digita, busca é o valor com delay
+  const [notas, setNotas] = useState<Nota[]>([]);
+  const [filtroStatus, setFiltroStatus] = useState<string>("Todos");
+
   const [buscaRaw, setBuscaRaw] = useState<string>("");
   const [busca, setBusca] = useState<string>("");
-  
+
   const [loading, setLoading] = useState<boolean>(true);
   const [notaSelecionada, setNotaSelecionada] = useState<Nota | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
-  const itensPorPagina = 10;
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [totalServidor, setTotalServidor] = useState<number>(0);
+  const [totaisAbas, setTotaisAbas] = useState<Record<string, number>>({});
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  // Filtros avançados ainda podem ser úteis para data, tipo, responsável, etc.
-  const [advancedFilters, setAdvancedFilters] = useState({ /* filial removido */ tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null); // Para o gráfico
-  const [chartKey, setChartKey] = useState(0); // Para forçar re-render do gráfico
+
+  const [advancedFilters, setAdvancedFilters] = useState({
+    // filial removida dos filtros avançados
+    tipo: 'Todos',
+    responsavel: 'Todos',
+    statusLancamento: 'Todos',
+    startDate: '',
+    endDate: '',
+    startDateProtheus: '',
+    endDateProtheus: ''
+  });
+
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
 
-  // DEBOUNCE: useEffect para aplicar o delay na busca
+  const [totalPendentes, setTotalPendentes] = useState<number>(0);
+  const [totalNotasHoje, setTotalNotasHoje] = useState<number>(0);
+
+  // Removido allFiliais do estado
+  const [allTipos, setAllTipos] = useState<string[]>(['Todos']);
+  const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
+  const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
+
+
   useEffect(() => {
     const handler = setTimeout(() => {
         setBusca(buscaRaw);
-        setPaginaAtual(1); // Reseta a página para a 1 a cada nova busca
-    }, 400); // Delay de 400ms
+        setPaginaAtual(1);
+    }, 400);
 
     return () => {
         clearTimeout(handler);
     };
   }, [buscaRaw]);
 
-  // Aplica filtros avançados (exceto filial, que já está fixa)
   const handleApplyAdvancedFilters = (filters: any) => {
-    // Ignora o filtro de filial vindo do popover, mantendo o filtro da página
+    // Não aplica mais filtro de filial daqui
     const { filial, ...restFilters } = filters;
     setAdvancedFilters(restFilters);
     setPaginaAtual(1);
   };
 
-  // Muda a aba de status selecionada
   const handleFiltroStatusChange = (status: string) => {
     setFiltroStatus(status);
     setPaginaAtual(1);
   };
-  
-  // --- GUARDA DE ROTA ---
+
   useEffect(() => {
     if (status === 'loading') {
       setAuthStatus('loading');
@@ -384,217 +397,97 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
     }
     if (status === 'authenticated') {
       const user = session.user;
-      // Verifica a nova permissão
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.notasEnviadas');
-      
+
       if (hasAccess) {
         setAuthStatus('authorized');
-        fetchNotas(); // Busca as notas se autorizado
       } else {
         setAuthStatus('unauthorized');
       }
     } else {
-        // Se não autenticado, redireciona para login (via ClientLayout)
         router.push('/login');
     }
-  }, [status, session, router]); // Adicionado router como dependência
+  }, [status, session, router]);
 
-  // Atualiza o "tempo atrás" a cada minuto
   useEffect(() => {
     setTimeAgo(formatTimeAgo(lastUpdated));
     const interval = setInterval(() => {
         setTimeAgo(formatTimeAgo(lastUpdated));
-    }, 60000); // 1 minuto
+    }, 60000);
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  // Lista de status disponíveis para as abas (mantida, mas 'Enviadas' será sempre o total)
   const statusDisponiveis = useMemo(() => {
-    // Poderia simplificar se alguns status não fizerem mais sentido nesta tela
-    return ["Todos", "Compras", "Fiscal", /* "Enviadas", */ "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
+    // Aba "Enviadas" (pendente) removida, pois esta página SÓ mostra enviadas.
+    return ["Todos", "Compras", "Fiscal", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
   }, []);
-  
-  // Filtra as notas com base nos filtros AVANÇADOS (data, tipo, resp, status da nota)
-  // A filtragem por filial ('0402') e status_envio ('SIM') já aconteceu no fetchNotas
-  const notasFiltradasPorAvancado = useMemo(() => {
-    return (notas || []).filter((nota) => {
-        // const filialOk = true; // Não precisa mais checar filial aqui
-        const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || (nota.comprador || '-') === advancedFilters.responsavel;
-        const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        
-        let dateOk = true;
-        if (advancedFilters.startDate || advancedFilters.endDate) {
-            const parts = nota.dt_recebimento.split('/'); // DD/MM/YYYY
-            if (parts.length === 3) {
-                // Converte DD/MM/YYYY para YYYY-MM-DD para comparação de strings
-                const notaDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                const start = advancedFilters.startDate; // YYYY-MM-DD
-                const end = advancedFilters.endDate; // YYYY-MM-DD
 
-                if (start && notaDateStr < start) {
-                    dateOk = false;
-                }
-                if (end && notaDateStr > end) {
-                    dateOk = false;
-                }
-            } else {
-                dateOk = false; // Data inválida, não inclui
-            }
-        }
 
-        return /* filialOk && */ tipoOk && responsavelOk && statusLancamentoOk && dateOk;
-    });
-  }, [notas, advancedFilters]);
-  
-  // Calcula as contagens para as ABAS e KPIs, baseado nas notas JÁ FILTRADAS por filial e envio
   const statusCounts = useMemo(() => {
-      const source = notasFiltradasPorAvancado; // Usa as notas já filtradas por filial/envio + filtros avançados
-      const counts: Record<string, number> = { Todos: source.length };
-      
-      // Notas pendentes (exclui concluídos, manual, importado) para contagem das abas de status
-      const sourcePendentes = source.filter(n =>
-        n.status_lancamento !== 'Concluído' &&
-        n.status_nf?.trim().toLowerCase() !== 'manual' &&
-        n.status_nf?.trim().toLowerCase() !== 'importado'
-      );
+    if (totaisAbas && Object.keys(totaisAbas).length) return totaisAbas;
+    return {};
+  }, [totaisAbas]);
 
-      // Mapeamento para os status baseados em status_nf
-      const statusNfMap: Record<string, string> = {
-        "Erro I.A.": "erro i.a.",
-        "Não Recebidas": "aguardando",
-        "Importado": "importado", // Contará todos com este status
-        "Manual": "manual", // Contará todos com este status
-        "Falha ERP": "erro execauto"
-      };
 
-      Object.keys(statusNfMap).forEach(status => {
-          const statusValue = statusNfMap[status];
-          // As abas "Manual" e "Importado" contam TUDO (incluindo concluídos) que tem esse status_nf
-          if (status === "Manual" || status === "Importado") {
-              counts[status] = source.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          } else {
-              // As outras abas (Erro IA, Não Recebidas, Falha ERP) contam apenas os PENDENTES com esse status_nf
-              counts[status] = sourcePendentes.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          }
-      });
-      
-      // Contagens baseadas nos status de setor (Compras, Fiscal) - contam apenas os pendentes
-      counts['Compras'] = sourcePendentes.filter(n => n.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      counts['Fiscal'] = sourcePendentes.filter(n => n.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      
-      // A aba "Enviadas" não faz mais sentido como filtro aqui, mas mantemos a contagem total
-      // counts['Enviadas'] = source.length; // Comentado pois a aba foi removida
-
-      return counts;
-  }, [notasFiltradasPorAvancado]);
-
-  // Dados para o gráfico, baseado nas contagens das abas
   const dadosGraficoStatus = useMemo(() => {
-    // Remove 'Enviadas' da lista para o gráfico também
-    const statusParaGrafico = statusDisponiveis.filter(s => s !== 'Enviadas');
-    return statusParaGrafico
-      .filter(key => key !== "Todos" && (statusCounts[key] || 0) > 0) // Inclui apenas status com contagem > 0
+    // Filtra para remover a aba "Enviadas" dos dados do gráfico também
+    return statusDisponiveis
+      .filter(key => key !== "Todos" && key !== "Enviadas" && (statusCounts[key] || 0) > 0)
       .map(name => ({ name, value: statusCounts[name] }));
   }, [statusCounts, statusDisponiveis]);
 
-  // Verifica se algum filtro (aba, busca, avançado) está ativo
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    // Verifica apenas os filtros avançados que *não* são os fixos da página
-    const isAdvancedFiltered = advancedFilters.tipo !== 'Todos' || advancedFilters.responsavel !== 'Todos' || advancedFilters.statusLancamento !== 'Todos' || advancedFilters.startDate !== '' || advancedFilters.endDate !== '';
+    // Verifica se advancedFilters tem algum valor diferente do padrão (excluindo filial)
+    const isAdvancedFiltered = Object.entries(advancedFilters).some(([key, value]) => {
+        if (key === 'startDate' || key === 'endDate' || key === 'startDateProtheus' || key === 'endDateProtheus') {
+            return value !== '';
+        }
+        return value !== 'Todos';
+    });
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
-  
-  // KPI: Notas processadas hoje (inalterado, mas opera sobre notas já filtradas)
-  const notasProcessadasHoje = useMemo(() => {
-    const hoje = new Date();
-    // Formato YYYY-MM-DD
-    const hojeString = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-    // Usa o estado 'notas' que já contém apenas as enviadas da filial 0402
-    return notas.filter(nota => {
-        if (!nota.dt_atualizacao) return false;
-        
-        let notaDateString;
-        
-        // Tenta converter DD/MM/YYYY HH:MM:SS para YYYY-MM-DD
-        if (nota.dt_atualizacao.includes('/')) {
-            const parts = nota.dt_atualizacao.split(' ')[0].split('/'); // Pega só a data DD/MM/YYYY
-            if (parts.length === 3) {
-                notaDateString = `${parts[2]}-${parts[1]}-${parts[0]}`; // Converte para YYYY-MM-DD
-            } else {
-                return false; // Formato inválido
-            }
-        // Tenta usar diretamente se já for YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS...
-        } else if (nota.dt_atualizacao.includes('-')) {
-             // Pega a parte antes do 'T' ou ' ', ou a string inteira se não houver
-            notaDateString = nota.dt_atualizacao.split(' ')[0].split('T')[0];
-        } else {
-            return false; // Formato desconhecido
-        }
 
-        return notaDateString === hojeString;
-    }).length;
-  }, [notas]);
-
-  // KPI: Notas Pendentes (considera TUDO exceto Manual e Importado)
-  const notasPendentes = useMemo(() => {
-    const statusExcluidos = ["manual", "importado"]; // Status que NÃO contam como pendentes
-    // Usa 'notas' (já filtrado por filial/envio)
-    return notas.filter(nota => {
-      // É pendente se status_nf existe E NÃO está na lista de excluídos
-      return nota.status_nf && !statusExcluidos.includes(nota.status_nf.trim().toLowerCase());
-    }).length;
-  }, [notas]);
-
-  // Efeito para sincronizar o estado ativo do gráfico com a aba selecionada
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null); // Nenhum item ativo se 'Todos'
+        setActiveIndex(null);
     } else {
-        // Encontra o índice no array de dados do gráfico que corresponde ao status da aba
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null); // Define ou remove o item ativo
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
     }
   }, [filtroStatus, dadosGraficoStatus]);
-  
-  // Força re-render do gráfico quando o filtro de status muda (para animação)
+
   useEffect(() => {
     setChartKey(prevKey => prevKey + 1);
   }, [filtroStatus]);
 
 
-  // Handlers para interação com o gráfico de pizza
   const onPieEnter = (_: any, index: number) => {
-    setActiveIndex(index); // Destaca a fatia ao passar o mouse
+    setActiveIndex(index);
   };
-  
+
   const onPieLeave = () => {
-    // Ao tirar o mouse, volta a destacar a fatia da aba selecionada (ou nenhuma)
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
     setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
   };
 
-  // Handler para clique no gráfico (muda a aba selecionada)
   const handleChartClick = (data: any) => {
     if (data && data.name) {
         const statusName = data.name;
-        // Verifica se o nome clicado é um status válido das abas
         if(statusDisponiveis.includes(statusName)) {
-            handleFiltroStatusChange(statusName); // Muda a aba
+            handleFiltroStatusChange(statusName);
         }
     }
   };
 
-  // Abre o modal de detalhes para a nota clicada
-  const abrirModalDetalhes = (nota: Nota) => {
+  const abrirModalDetalhes = (nota: any) => {
     if (!nota.chave) {
       console.warn("Nota sem chave:", nota);
       return;
@@ -603,157 +496,176 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
     setModalAberto(true);
   };
 
-  // Função para buscar as notas da API
+  const statusFiltroToStatusNf = (tab: string): string | null => {
+    const map: Record<string, string> = {
+      "Erro I.A.": "erro i.a.",
+      "Não Recebidas": "aguardando",
+      "Importado": "importado",
+      "Manual": "manual",
+      "Falha ERP": "erro execauto",
+    };
+    return map[tab] ?? null;
+  };
+
+  const sortWhitelist = new Set(['dt_atualizacao','dt_recebimento','nf','serie','nome_fornecedor','status_nf','tipo_nf', 'dt_lcto_protheus']);
+  const sortKeyToBackend = (k: keyof Nota | null) => (k && sortWhitelist.has(k as string) ? (k as string) : 'dt_atualizacao');
+
+
   const fetchNotas = async () => {
       try {
         setLoading(true);
-        const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho", {
+
+        // Base da requisição com filtros permanentes
+        const baseBody: any = {
+          page: paginaAtual,
+          pageSize,
+          sortBy: sortKeyToBackend(sortConfig.key),
+          sortDir: sortConfig.direction || 'asc',
+          filial: '0402',
+          status_envio_unidade: 'SIM',
+        };
+
+        // Adiciona filtros avançados (exceto filial)
+        const advancedBody = {
+          termo: (busca || '').trim() || undefined,
+          tipo: advancedFilters.tipo === 'Todos' ? undefined : advancedFilters.tipo,
+          responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
+          statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
+          startDate: advancedFilters.startDate || undefined,
+          endDate: advancedFilters.endDate || undefined,
+          startDateProtheus: advancedFilters.startDateProtheus || undefined,
+          endDateProtheus: advancedFilters.endDateProtheus || undefined,
+        };
+
+        // Adiciona filtros da ABA, se aplicável
+        let tabBody = {};
+        if (filtroStatus && filtroStatus !== 'Todos') {
+            const statusNf = statusFiltroToStatusNf(filtroStatus);
+            if (statusNf) {
+                tabBody = { status_nf: statusNf };
+            } else {
+                if (filtroStatus === 'Compras') {
+                   tabBody = { only_compras_pendentes: true };
+                }
+                if (filtroStatus === 'Fiscal') {
+                   tabBody = { only_fiscal_pendentes: true };
+                }
+                // Nenhuma ação para outros filtros de aba (como "Enviadas" que foi removido)
+            }
+        }
+
+        // Combina todos os filtros, garantindo que os permanentes não sejam sobrescritos
+        const body = {
+            ...baseBody,
+            ...advancedBody,
+            ...tabBody, // Filtros da aba são adicionados por último
+            // Garante que os filtros permanentes estejam presentes mesmo que advanced/tab tentem mudar
+            filial: '0402',
+            status_envio_unidade: 'SIM',
+        };
+
+        // Remove chaves com valor undefined
+        Object.keys(body).forEach(key => body[key] === undefined && delete body[key]);
+
+        console.log("==> Enviando body para API:", JSON.stringify(body, null, 2));
+
+        const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho-paginado", {
           method: "POST",
-          // Não precisa enviar filtros aqui, pois filtramos no frontend
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify(body),
         });
-        const data = await response.json();
-        
-        const allNotas = Array.isArray(data) ? data : [];
+        const payload = await response.json();
 
-        // *** APLICANDO O FILTRO PERMANENTE AQUI ***
-        const filteredNotas = allNotas.filter((nota: Nota) => {
-          // Verifica se status_envio_unidade é uma string 'SIM' (case-insensitive e null-safe)
-          const isEnviada = typeof nota.status_envio_unidade === 'string' &&
-                            nota.status_envio_unidade.trim().toUpperCase() === 'SIM';
-          // Verifica se a filial é '0402'
-          const isFilialBA = nota.filial === '0402';
-          return isEnviada && isFilialBA;
-        });
+        console.log("<== Recebido payload da API:", payload);
 
-        setNotas(filteredNotas); // Armazena apenas as notas filtradas no estado
+        setNotas(Array.isArray(payload?.data) ? payload.data : []);
+        setTotalServidor(Number(payload?.total ?? 0));
+        setTotaisAbas(payload?.tabs || {});
+        setTotalPendentes(Number(payload?.pendentes_total ?? 0));
+        setTotalNotasHoje(Number(payload?.notas_hoje ?? 0));
 
-        setChartKey(prevKey => prevKey + 1); // Atualiza chave do gráfico
-        setLastUpdated(new Date()); // Registra hora da atualização
+        // Atualiza listas de filtros (exceto filial)
+        // Adiciona 'Todos' no início e remove duplicatas
+        const updateFilterList = (currentList: string[], newList: string[] | undefined): string[] => {
+            const validNewItems = Array.isArray(newList) ? newList.filter(item => item && item !== 'Todos') : [];
+            const combined = ['Todos', ...new Set(validNewItems)];
+            // Se a lista atual for apenas ['Todos'] e a nova lista não trouxer nada, mantém ['Todos']
+            if (currentList.length === 1 && currentList[0] === 'Todos' && combined.length === 1) {
+                return currentList;
+            }
+            return combined;
+        };
+
+        setAllTipos(updateFilterList(allTipos, payload?.distinct_tipos));
+        setAllCompradores(updateFilterList(allCompradores, payload?.distinct_compradores));
+        setAllStatusLancamento(updateFilterList(allStatusLancamento, payload?.distinct_status));
+
+        setChartKey(prevKey => prevKey + 1);
+        setLastUpdated(new Date());
       } catch (error) {
         console.error("Erro ao buscar as notas:", error);
-        setNotas([]); // Limpa as notas em caso de erro
+        setNotas([]);
+        setTotalServidor(0);
+        setTotaisAbas({});
+        setTotalPendentes(0);
+        setTotalNotasHoje(0);
+        // Reseta filtros (exceto filial)
+        setAllTipos(['Todos']);
+        setAllCompradores(['Todos']);
+        setAllStatusLancamento(['Todos']);
       } finally {
         setLoading(false);
       }
     };
 
-    // Filtra e Ordena as notas para exibição na tabela
-    const notasFiltradasOrdenadas = useMemo(() => {
-    // Começa com as notas já filtradas por filial/envio + filtros avançados
-    let notasParaExibir = notasFiltradasPorAvancado.filter((nota) => {
-      // Aplica o filtro da BUSCA textual
-      const termo = busca.toLowerCase();
-      const buscaOk = termo === '' || // Se busca vazia, passa
-        nota.nome_fornecedor.toLowerCase().includes(termo) ||
-        nota.nf.includes(termo) ||
-        nota.chave.includes(termo);
 
-      // Aplica o filtro da ABA DE STATUS
-      let statusAbaOk = false;
-      if (filtroStatus === 'Todos') {
-        statusAbaOk = true;
-      } else if (filtroStatus === 'Compras') {
-        statusAbaOk = nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO';
-      } else if (filtroStatus === 'Fiscal') {
-        statusAbaOk = nota.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO';
-      }
-      // REMOVIDO: else if (filtroStatus === 'Enviadas')
-      else {
-          // Mapeia o nome da aba para o valor correspondente em status_nf
-        const statusNfEquivalente = {
-            "Erro I.A.": "erro i.a.",
-            "Não Recebidas": "aguardando",
-            "Importado": "importado",
-            "Manual": "manual",
-            "Falha ERP": "erro execauto"
-        }[filtroStatus] || filtroStatus.toLowerCase(); // Fallback para outros casos
-        
-        statusAbaOk = nota.status_nf?.trim().toLowerCase() === statusNfEquivalente;
-      }
-
-       // A nota só é exibida se passar na busca E no filtro da aba
-      return buscaOk && statusAbaOk;
-    });
-
-    // Aplica a ORDENAÇÃO da tabela
-    if (sortConfig.key) {
-      notasParaExibir.sort((a, b) => {
-        const aValue = a[sortConfig.key!] ?? ''; // Trata null/undefined como string vazia para comparação
-        const bValue = b[sortConfig.key!] ?? ''; // Trata null/undefined como string vazia para comparação
-
-        // Compara como string (case-insensitive para texto) ou número
-        let comparison = 0;
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase());
-        } else if (aValue < bValue) {
-          comparison = -1;
-        } else if (aValue > bValue) {
-          comparison = 1;
-        }
-
-        return sortConfig.direction === 'asc' ? comparison : comparison * -1;
-      });
-    }
-
-    return notasParaExibir;
-  }, [notasFiltradasPorAvancado, busca, filtroStatus, sortConfig]); // Dependências da memoization
-
-  // Handler para solicitar ordenação de uma coluna
   const requestSort = (key: keyof Nota) => {
     let direction: 'asc' | 'desc' = 'asc';
-    // Se já está ordenado por essa chave ascendentemente, inverte para descendente
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setPaginaAtual(1); // Resetar para a primeira página ao ordenar
   };
 
-  // Cálculo de paginação
-  const totalPaginas = Math.ceil(notasFiltradasOrdenadas.length / itensPorPagina);
-  const notasPaginadas = notasFiltradasOrdenadas.slice(
-    (paginaAtual - 1) * itensPorPagina, // Índice inicial
-    paginaAtual * itensPorPagina // Índice final (não inclusivo)
-  );
+  const notasPaginadas = notas; // A paginação agora é feita no backend
 
-  // Mapeamento de cores para o gráfico (Removido 'Enviadas')
   const coresStatus: Record<string, string> = {
     "Erro I.A.": "#ff6f61",
     "Não Recebidas": "var(--gcs-orange)",
     "Importado": "var(--gcs-green)",
     "Manual": "#343a40",
-    "Falha ERP": "#8B0000", // Vermelho escuro
-    "Compras": "#FFC107", // Amarelo
-    "Fiscal": "#00314A", // Azul GCS
-    // "Enviadas": "#17a2b8", // Ciano - Removido
+    "Falha ERP": "#8B0000",
+    "Compras": "#FFC107",
+    "Fiscal": "#00314A",
+    // "Enviadas" removido das cores
   };
 
-  // Componente para ícone de ordenação no cabeçalho da tabela
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
     if (sortConfig.key !== columnKey) {
-      return <ChevronsUpDown size={14} style={{ marginLeft: '4px', color: '#ffffff80' }} />; // Ícone padrão
+      return <ChevronsUpDown size={14} style={{ marginLeft: '4px', color: '#ffffff80' }} />;
     }
     if (sortConfig.direction === 'asc') {
-      return <ArrowUp size={14} style={{ marginLeft: '4px' }} />; // Seta para cima
+      return <ArrowUp size={14} style={{ marginLeft: '4px' }} />;
     }
-    return <ArrowDown size={14} style={{ marginLeft: '4px' }} />; // Seta para baixo
+    return <ArrowDown size={14} style={{ marginLeft: '4px' }} />;
   };
 
-  // Handler para exportar dados da tabela para Excel (XLSX)
   const handleExportXLSX = () => {
-    // Define os cabeçalhos das colunas no Excel
-    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", /* Removido Status Envio */ "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
+    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
 
-    // Mapeia os dados das notas filtradas e ordenadas para o formato de array de arrays
-    const data = notasFiltradasOrdenadas.map(nota => {
+    const data = notasPaginadas.map(nota => {
       return [
         nota.status_lancamento || '',
-        nota.filial,
+        nota.filial, // Filial ainda é exportada
         nota.nf,
         nota.serie,
         nota.tipo_nf || '',
         nota.nome_fornecedor,
-        `${nota.dt_recebimento} ${nota.hr_Recebimento}`, // Combina data e hora
-        // nota.status_envio_unidade || '', // Removido
+        `${nota.dt_recebimento} ${nota.hr_Recebimento}`,
+        formatProtheusDateTime(nota.dt_lcto_protheus),
+        nota.status_envio_unidade || '',
         nota.status_compras || '',
         nota.status_fiscal || '',
         nota.observacao || '',
@@ -762,32 +674,34 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
       ];
     });
 
-    // Cria a estrutura de dados para a planilha (cabeçalhos + dados)
     const worksheetData = [headers, ...data];
-    // Cria a planilha a partir do array de arrays
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
-    // Define larguras aproximadas das colunas (ajustadas)
     worksheet['!cols'] = [
         { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
-        { wch: 40 }, { wch: 20 }, /* Removido um { wch: 20 } */ { wch: 20 }, { wch: 20 },
-        { wch: 50 }, { wch: 25 }, { wch: 50 },
+        { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
+        { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },
     ];
 
-    // Cria um novo workbook (arquivo Excel)
     const workbook = XLSX.utils.book_new();
-    // Adiciona a planilha ao workbook com o nome "Notas Fiscais"
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Enviadas BA"); // Nome da aba alterado
-    // Gera o arquivo e inicia o download
-    XLSX.writeFile(workbook, "Consulta_Notas_Enviadas_BA.xlsx"); // Nome do arquivo alterado
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
+    XLSX.writeFile(workbook, "Consulta_Notas_Fiscais_Pagina.xlsx");
   };
 
-  // Formata o texto da legenda do gráfico
+  // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
+
+
   const renderLegendText = (value: string) => {
     return <span style={{ marginLeft: '4px' }}>{value}</span>;
   };
 
-  // Renderiza estado de carregamento de permissões
+  useEffect(() => {
+    if (authStatus === 'authorized') {
+      fetchNotas();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus, paginaAtual, pageSize, busca, filtroStatus, advancedFilters, sortConfig]);
+
   if (authStatus === 'loading') {
     return (
         <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
@@ -796,7 +710,6 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
     );
   }
 
-  // Renderiza estado de acesso negado
   if (authStatus === 'unauthorized') {
     return (
         <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
@@ -804,10 +717,34 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
         </div>
     );
   }
-  
-  // Renderização principal da página
+
+  const renderActiveShape = (props: any) => {
+    const RADIAN = Math.PI / 180;
+    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+    const sin = Math.sin(-RADIAN * midAngle);
+    const cos = Math.cos(-RADIAN * midAngle);
+    const sx = cx + (outerRadius + 10) * cos;
+    const sy = cy + (outerRadius + 10) * sin;
+    const mx = cx + (outerRadius + 30) * cos;
+    const my = cy + (outerRadius + 30) * sin;
+    const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+    const ey = my;
+    const textAnchor = cos >= 0 ? 'start' : 'end';
+
+    return (
+      <g>
+        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 6} outerRadius={outerRadius + 10} fill={fill} />
+        <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
+        <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333" style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999" style={{ fontSize: '12px' }}>{`(${value} - ${(percent * 100).toFixed(1)}%)`}</text>
+      </g>
+    );
+  };
+
+
   return (<>
-    {/* Estilos CSS específicos da página (mantidos) */}
     <style>{`
         :root {
             --gcs-blue: #00314A;
@@ -819,6 +756,19 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             --gcs-gray-dark: #6c757d;
             --gcs-border-color: #dee2e6;
             --gcs-gray-soft: #adb5bd;
+
+            /* Cores do Funil (usadas pelo novo componente) */
+            --gcs-red-light-bg: #f8d7da;
+            --gcs-red-border: #f1c2c7;
+            --gcs-red-text: #b22c38;
+
+            --gcs-orange-light-bg: #fff8e1;
+            --gcs-orange-border: #FDBA74;
+            --gcs-orange-text: #F58220;
+
+            --gcs-blue-light-bg: #f1f5fb;
+            --gcs-blue-border: #a3b8d1;
+            --gcs-blue-text: #00314A;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
@@ -841,10 +791,10 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
         .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
         .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
         .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
+
         .tab-button { background: none; border: none; cursor: pointer; padding: 8px 12px 12px 12px; font-size: 1rem; font-weight: 500; color: var(--gcs-gray-dark); position: relative; transition: all 0.2s ease-in-out; }
         .tab-button::after { content: ''; position: absolute; bottom: -2px; right: 0; width: 100%; height: 100%; border-style: solid; border-color: transparent; border-image: none; opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in-out; pointer-events: none; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.2)); }
-        .tab-button:hover:not(.active):not(:disabled) { transform: translateY(-2px); color: var(--gcs-blue); } /* Adicionado :not(:disabled) */
+        .tab-button:hover:not(.active) { transform: translateY(-2px); color: var(--gcs-blue); }
         .tab-button.active { color: var(--gcs-orange); font-weight: 600; transform: translateY(-2px); }
         .tab-button.active::after {
             opacity: 1;
@@ -855,6 +805,7 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             border-left: 3px solid transparent;
             border-top-right-radius: 8px;
         }
+
         .th-sortable { cursor: pointer; transition: color 0.2s ease-in-out; user-select: none; display: flex; align-items: center; }
         .th-sortable:hover { color: #ffffffd0; }
         .ant-pagination-item-active { background-color: var(--gcs-blue) !important; border-color: var(--gcs-blue) !important; }
@@ -880,18 +831,17 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .chart-3d-effect .recharts-pie-sector path {
             stroke: #fff;
             stroke-width: 1px;
-            filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.1))
+            filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.1))
                     drop-shadow(2px 2px 0px rgba(0,0,0,0.09))
                     drop-shadow(3px 3px 0px rgba(0,0,0,0.08))
                     drop-shadow(4px 4px 0px rgba(0,0,0,0.07))
                     drop-shadow(5px 5px 0px rgba(0,0,0,0.06));
         }
 
-        /* ESTILOS PARA OS CARDS */
         .kpi-card, .chart-card, .main-content-card, .tabs-card, .content-card {
             background-color: #fff;
             border-radius: 12px;
@@ -904,7 +854,6 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
           padding: 1rem 1.5rem;
         }
 
-        /* Media Queries para responsividade (inalterados) */
         @media (max-width: 1200px) {
             .header-wrapper {
                 flex-direction: column;
@@ -932,20 +881,7 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             .search-input {
                 width: 100%;
             }
-            .filter-tabs-container {
-                gap: 0.5rem;
-                justify-content: flex-start;
-                overflow-x: auto;
-                -ms-overflow-style: none; /* IE and Edge */
-                scrollbar-width: none; /* Firefox */
-            }
-            .filter-tabs-container::-webkit-scrollbar {
-                display: none; /* Chrome, Safari, Opera */
-            }
-            .tab-button {
-                white-space: nowrap;
-                padding: 8px 10px 12px 10px;
-            }
+
              .header-wrapper {
                 gap: 1rem;
              }
@@ -994,13 +930,10 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
         }
     `}</style>
 
-    {/* Container Principal */}
     <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
 
-      {/* Cabeçalho com Gráfico, Título/Busca e KPIs */}
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
-        {/* Card do Gráfico */}
         <div
             className="chart-card clickable-chart chart-3d-effect"
             style={{
@@ -1017,7 +950,7 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             </h4>
             <div style={{ width: 280, height: 180 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                    <PieChart key={chartKey}> {/* Usa a chave para forçar re-render */}
+                    <PieChart key={chartKey}>
                         <Pie
                             activeIndex={activeIndex}
                             activeShape={renderActiveShape}
@@ -1049,18 +982,14 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
                 </ResponsiveContainer>
             </div>
         </div>
-        
-        {/* Card Principal (Título, Busca, Botões) */}
+
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
-            {/* Título da Página (Alterado) */}
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Send size={32} color="var(--gcs-blue)" /> {/* Ícone Send */}
-                <span>Notas Enviadas - GCS Bahia</span>
+                <FileText size={32} color="var(--gcs-blue)" />
+                <span>Notas Enviadas - BA (Filial 0402)</span> {/* Título atualizado */}
             </h2>
-            
-            {/* Controles: Busca e Botões */}
+
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                {/* Input de Busca */}
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <input
                         type="text"
@@ -1071,33 +1000,29 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
                         style={{ padding: "12px 16px", fontSize: "1rem", borderRadius: "8px", border: "1px solid var(--gcs-border-color)", width: "350px" }}
                     />
                 </div>
-                {/* Botões e Indicadores */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', gap: '1rem' }}>
-                        {/* Botão Atualizar */}
                         <button onClick={fetchNotas} title="Atualizar Notas Fiscais" className="btn btn-outline-gray" style={{padding: '9px'}}>
                             <RefreshCcw size={20} />
                         </button>
-                        {/* Botão Filtros Avançados */}
                         <FilterPopover
-                            notas={notas} // Passa as notas atuais para gerar opções
+                            // allFiliais removido das props
+                            allTipos={allTipos}
+                            allCompradores={allCompradores}
+                            allStatusLancamento={allStatusLancamento}
                             onApplyFilters={handleApplyAdvancedFilters}
                             initialFilters={advancedFilters}
-                        />
-                        {/* Botão Exportar Excel */}
+                         />
                         <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
                             <FileDown size={20} />
                         </button>
                     </div>
-                    {/* Indicadores de Atualização e Filtros */}
                     <div style={{ height: 'auto', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-                        {/* Mostra quando foi atualizado */}
                         {timeAgo && !loading && (
                           <span style={{ color: 'var(--gcs-gray-dark)', fontSize: '12px', fontStyle: 'italic' }}>
                               Atualizado {timeAgo}
                           </span>
                         )}
-                        {/* Mostra se filtros estão aplicados */}
                         {areFiltersApplied && !loading && (
                           <span style={{ color: '#dc3545', fontSize: '12px', fontWeight: 'bold' }}>
                               Existem filtros aplicados
@@ -1108,112 +1033,103 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             </div>
         </div>
 
-        {/* Card de KPIs */}
         <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-around' }}>
-            {/* KPI Notas Hoje */}
             <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: 'var(--gcs-gray-dark)', margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
                     Notas Hoje
                 </h4>
                 <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-green)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasProcessadasHoje}
+                    {totalNotasHoje}
                 </p>
             </div>
-            
+
             <hr style={{ width: '80%', border: 'none', borderTop: '1px solid var(--gcs-border-color)', margin: '0.5rem 0' }} />
 
-            {/* KPI Pendentes */}
             <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: 'var(--gcs-gray-dark)', margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
                     Pendentes
                 </h4>
                 <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-orange)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasPendentes}
+                    {totalPendentes}
                 </p>
             </div>
         </div>
       </div>
 
-      {/* Card das Abas de Filtro de Status */}
-      <div className="tabs-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="filter-tabs-container">
-          {/* Mapeia os status disponíveis, exceto 'Enviadas' */}
-          {statusDisponiveis.filter(s => s !== 'Enviadas').map((status) => {
-            const isSelected = filtroStatus === status;
-            const count = statusCounts[status] || 0;
-            // Desabilita abas com contagem zero, exceto 'Todos' e a selecionada
-            const isDisabled = count === 0 && status !== 'Todos' && !isSelected;
-            return (
-              <button
-                key={status}
-                onClick={() => !isDisabled && handleFiltroStatusChange(status)}
-                className={`tab-button ${isSelected ? 'active' : ''}`}
-                disabled={isDisabled}
-                style={{ opacity: isDisabled ? 0.5 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer'}}
-              >
-                {status} ({count})
-              </button>
-            )
-          })}
-        </div>
+      <div className="tabs-card" style={{
+          marginBottom: '1.5rem',
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          boxShadow: 'none'
+      }}>
+        <PriorityRibbonTabs
+          filtroStatus={filtroStatus}
+          statusCounts={statusCounts as any}
+          onChange={(key) => {
+            if (key === "outras") return;
+            // Aba "Enviadas" removida da lógica de clique
+            if (key !== "Enviadas") {
+                handleFiltroStatusChange(key);
+            } else {
+                 handleFiltroStatusChange("Todos"); // Clicar em "Enviadas" (se ainda existir no layout) volta para "Todos"
+            }
+          }}
+        />
       </div>
-      
-      {/* Conteúdo Principal: Tabela ou Mensagens */}
+
       {loading ? (
-        // Indicador de carregamento da tabela
-        <LoadingSpinner text="Carregando notas..." />
-      ) : notasFiltradasOrdenadas.length === 0 ? (
-        // Mensagem se não houver notas para os filtros
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
+          <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }}>
+            Carregando notas...
+          </div>
+        </div>
+      ) : notasPaginadas.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--gcs-gray-dark)", marginTop: "4rem", fontSize: '1.1rem' }}>
-          Nenhuma nota encontrada para os filtros aplicados.
+          Nenhuma nota encontrada para os filtros aplicados (Filial 0402 e Enviadas).
         </div>
       ) : (
-        // Tabela e Paginação
         <>
-          {/* Wrapper para scroll horizontal em telas menores */}
           <div className="responsive-table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--gcs-border-color)", borderRadius: "12px", background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: '14px' }}>
-              {/* Cabeçalho da Tabela */}
               <thead style={{ backgroundColor: "var(--gcs-blue)", color: "#fff", textAlign: "left" }}>
                 <tr>
                   <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
-                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('filial')} className="th-sortable"><Building2 size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" /></div></th>
+                  {/* Coluna Filial removida da tabela, pois é sempre 0402 */}
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_recebimento')} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Recebimento <SortIcon columnKey="dt_recebimento" /></div></th>
+                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_lcto_protheus' as keyof Nota)} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Lançamento Protheus <SortIcon columnKey={"dt_lcto_protheus" as keyof Nota} /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><TrendingUp size={16} style={{marginRight: '8px'}} /> Status Setor</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('observacao')} className="th-sortable"><MessageSquare size={16} style={{marginRight: '8px'}}/> Observação <SortIcon columnKey="observacao" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('comprador')} className="th-sortable"><User size={16} style={{marginRight: '8px'}} /> Responsável <SortIcon columnKey="comprador" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center', borderTopRightRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><Settings2 size={16} style={{marginRight: '8px'}} /> Ações</div></th>
                 </tr>
               </thead>
-              {/* Corpo da Tabela */}
               <tbody>
                 {notasPaginadas.map((nota, index) => {
-                  
+
                   const statusLancamento = nota.status_lancamento;
                   const statusNotaTexto = statusLancamento || 'N/A';
-                  let statusNotaCor = 'var(--gcs-gray-dark)'; // Cor padrão
+                  let statusNotaCor = 'var(--gcs-gray-dark)';
 
                   if (statusLancamento === 'Concluído') {
                       statusNotaCor = 'var(--gcs-green)';
                   } else if (statusLancamento === 'Pendente') {
                       statusNotaCor = 'var(--gcs-orange)';
                   }
-                  // Adicionar outras cores se necessário
 
                   return (
-                    // Linha da Tabela
                     <tr
-                      key={nota.chave} // Usar chave única da nota como key
+                      key={nota.chave} // Usar a chave como key é mais seguro
                       className="data-row"
                       style={{
                         borderTop: "1px solid var(--gcs-border-color)",
-                        backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)" // Zebrado
+                        backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
                       }}
                     >
-                      {/* Células da Linha (com data-label para responsividade) */}
                       <td data-label="Status da Nota" className="td-status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <span
                           className="status-badge"
@@ -1222,7 +1138,7 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
                           {statusNotaTexto}
                         </span>
                       </td>
-                      <td data-label="Filial" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.filial}</td>
+                      {/* Coluna Filial removida */}
                       <td data-label="Nota / Série" style={{ padding: '14px 12px', verticalAlign: 'middle', whiteSpace: "nowrap" }}>
                           <span style={{fontWeight: 'bold', color: '#343a40'}}>{nota.nf}</span>
                           <span style={{color: 'var(--gcs-gray-dark)'}}> / {nota.serie}</span>
@@ -1238,12 +1154,14 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
                                 {nota.tipo_nf.toUpperCase()}
                             </span>
                         ) : (
-                            <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span> // Placeholder se não houver tipo
+                            <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>
                         )}
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
                       <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
-                      
+                      <td data-label="Lançamento Protheus" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+                        {formatProtheusDateTime(nota.dt_lcto_protheus)}
+                      </td>
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
                               statusUnidade={nota.status_envio_unidade}
@@ -1251,14 +1169,12 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
                               statusFiscal={nota.status_fiscal}
                           />
                       </td>
-
                       <td data-label="Observação" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {nota.observacao ? nota.observacao : <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>}
                       </td>
                       <td data-label="Responsável" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>
                         {nota.comprador ? nota.comprador : <span style={{ color: 'var(--gcs-gray-dark)' }} title="Sem responsável">—</span>}
                       </td>
-                      {/* Célula de Ações */}
                       <td data-label="Ações" className="td-actions" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <button
                             onClick={() => abrirModalDetalhes(nota)}
@@ -1275,31 +1191,29 @@ export default function ConsultaNotasEnviadasBA() { // Renomeado o componente pa
             </table>
           </div>
 
-          {/* Paginação */}
           <div style={{ marginTop: "2rem", display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Pagination
               current={paginaAtual}
-              total={notasFiltradasOrdenadas.length}
-              pageSize={itensPorPagina}
+              total={totalServidor}
+              pageSize={pageSize}
               onChange={(page) => setPaginaAtual(page)}
-              showSizeChanger={false} // Esconde opção de mudar itens por página
+              showSizeChanger={false}
+              showTotal={(total, range) => `${range[0]}-${range[1]} de ${total} notas`}
             />
           </div>
         </>
       )}
     </div>
 
-    {/* Renderiza o Modal de Detalhes (controlado pelo estado 'modalAberto') */}
     <ModalDetalhes
       chave={notaSelecionada?.chave || ""}
       visivel={modalAberto}
       onClose={() => setModalAberto(false)}
       nomeFornecedor={notaSelecionada?.nome_fornecedor}
       statusNF={notaSelecionada?.status_nf || ""}
-      onActionSuccess={fetchNotas} // Passa fetchNotas para atualizar a lista após ação no modal
+      onActionSuccess={fetchNotas}
       statusCompras={notaSelecionada?.status_compras}
       observacao={notaSelecionada?.observacao}
-      status_tes={notaSelecionada?.status_fiscal === 'CONCLUÍDO' ? 'PROCESSADA' : 'PENDENTE'} // Exemplo de mapeamento
     />
   </>);
 

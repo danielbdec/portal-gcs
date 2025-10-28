@@ -5,9 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Pagination } from "antd";
 import * as XLSX from 'xlsx';
-import {
-    PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector
-} from "recharts";
+// [REMOVIDO] import de recharts
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
@@ -19,6 +17,7 @@ import NotificationModal from "./NotificationModal"; // Importado
 import React from "react";
 import "antd/dist/reset.css";
 import PriorityRibbonTabs from "./PriorityRibbonTabs";
+import Donut3DStatus from './Donut3DStatus'; // [ADICIONADO] Import do gráfico 3D
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
@@ -408,8 +407,7 @@ export default function ConsultaNotas() {
     endDateProtheus: ''
   });
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [chartKey, setChartKey] = useState(0);
+  // [REMOVIDO] activeIndex e chartKey
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
 
@@ -503,41 +501,13 @@ export default function ConsultaNotas() {
   }, [filtroStatus, busca, advancedFilters]);
 
 
-  useEffect(() => {
-    if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
-    } else {
-        const newActiveIndex = dadosGraficoStatus.findIndex(
-            (data) => data.name === filtroStatus
-        );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
-    }
-  }, [filtroStatus, dadosGraficoStatus]);
+  // [REMOVIDO] useEffect de activeIndex
+  // [REMOVIDO] useEffect de chartKey
 
-  useEffect(() => {
-    setChartKey(prevKey => prevKey + 1);
-  }, [filtroStatus]);
-
-
-  const onPieEnter = (_: any, index: number) => {
-    setActiveIndex(index);
-  };
-
-  const onPieLeave = () => {
-    const newActiveIndex = dadosGraficoStatus.findIndex(
-        (data) => data.name === filtroStatus
-    );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
-  };
-
-  const handleChartClick = (data: any) => {
-    if (data && data.name) {
-        const statusName = data.name;
-        if(statusDisponiveis.includes(statusName)) {
-            handleFiltroStatusChange(statusName);
-        }
-    }
-  };
+  // [REMOVIDO] onPieEnter
+  // [REMOVIDO] onPieLeave
+  
+  // [REMOVIDO] handleChartClick (lógica agora é passada direto no prop onSliceClick)
 
   const abrirModalDetalhes = (nota: any) => {
     if (!nota.chave) {
@@ -634,8 +604,7 @@ export default function ConsultaNotas() {
              setAllStatusLancamento(['Todos']);
         }
 
-
-        setChartKey(prevKey => prevKey + 1);
+        // [REMOVIDO] setChartKey
         setLastUpdated(new Date());
       } catch (error) {
         console.error("Erro ao buscar as notas:", error);
@@ -824,9 +793,7 @@ export default function ConsultaNotas() {
   // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
 
 
-  const renderLegendText = (value: string) => {
-    return <span style={{ marginLeft: '4px' }}>{value}</span>;
-  };
+  // [REMOVIDO] renderLegendText
 
   useEffect(() => {
     if (authStatus === 'authorized') {
@@ -851,30 +818,7 @@ export default function ConsultaNotas() {
     );
   }
 
-  const renderActiveShape = (props: any) => {
-    const RADIAN = Math.PI / 180;
-    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
-    const sin = Math.sin(-RADIAN * midAngle);
-    const cos = Math.cos(-RADIAN * midAngle);
-    const sx = cx + (outerRadius + 10) * cos;
-    const sy = cy + (outerRadius + 10) * sin;
-    const mx = cx + (outerRadius + 30) * cos;
-    const my = cy + (outerRadius + 30) * sin;
-    const ex = mx + (cos >= 0 ? 1 : -1) * 22;
-    const ey = my;
-    const textAnchor = cos >= 0 ? 'start' : 'end';
-
-    return (
-      <g>
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 6} outerRadius={outerRadius + 10} fill={fill} />
-        <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
-        <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333" style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
-        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999" style={{ fontSize: '12px' }}>{`(${value} - ${(percent * 100).toFixed(1)}%)`}</text>
-      </g>
-    );
-  };
+  // [REMOVIDO] renderActiveShape
 
   // --- COMPONENTE CHECKBOX FINAL (RESTAURADO COM LÓGICA CORRIGIDA) ---
   const ConferidoCheckbox = ({ conferido, onClick }: { conferido: 'S' | 'N' | null | undefined, onClick: () => void }) => {
@@ -1000,20 +944,7 @@ export default function ConsultaNotas() {
             cursor: default;
         }
 
-        .clickable-chart .recharts-pie-sector path {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .chart-3d-effect .recharts-pie-sector path {
-            stroke: #fff;
-            stroke-width: 1px;
-            filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.1))
-                    drop-shadow(2px 2px 0px rgba(0,0,0,0.09))
-                    drop-shadow(3px 3px 0px rgba(0,0,0,0.08))
-                    drop-shadow(4px 4px 0px rgba(0,0,0,0.07))
-                    drop-shadow(5px 5px 0px rgba(0,0,0,0.06));
-        }
+        /* [REMOVIDO] Estilos do recharts */
 
         .kpi-card, .chart-card, .main-content-card, .tabs-card, .content-card {
             background-color: #fff;
@@ -1108,7 +1039,7 @@ export default function ConsultaNotas() {
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
         <div
-            className="chart-card clickable-chart chart-3d-effect"
+            className="chart-card" // [REMOVIDO] classes 'clickable-chart' e 'chart-3d-effect'
             style={{
                 flexShrink: 0,
                 display: 'flex',
@@ -1121,39 +1052,17 @@ export default function ConsultaNotas() {
             <h4 style={{ margin: 0, color: 'var(--gcs-gray-dark)', fontWeight: 500, fontSize: '1rem' }}>
                 Gráfico por Status
             </h4>
-            <div style={{ width: 280, height: 180 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart key={chartKey}>
-                        <Pie
-                            activeIndex={activeIndex}
-                            activeShape={renderActiveShape}
-                            data={dadosGraficoStatus}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="45%"
-                            innerRadius={40}
-                            outerRadius={60}
-                            paddingAngle={3}
-                            onMouseEnter={onPieEnter}
-                            onMouseLeave={onPieLeave}
-                            onClick={handleChartClick}
-                        >
-                            {dadosGraficoStatus.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={coresStatus[entry.name] || '#ccc'} />
-                            ))}
-                        </Pie>
-                        <Legend
-                            layout="horizontal"
-                            align="center"
-                            verticalAlign="bottom"
-                            iconSize={10}
-                            wrapperStyle={{ fontSize: '12px' }}
-                            formatter={renderLegendText}
-                        />
-                    </PieChart>
-                </ResponsiveContainer>
+            {/* [MODIFICADO] Bloco do Gráfico */}
+            <div style={{ width: 280, height: 210 }}> {/* Altura ajustada para caber a legenda */}
+                <Donut3DStatus
+                    data={dadosGraficoStatus}
+                    activeStatus={filtroStatus}
+                    onSliceClick={handleFiltroStatusChange}
+                    colors={coresStatus}
+                    height={210} // Passa a altura total para o componente
+                />
             </div>
+            {/* [FIM DA MODIFICAÇÃO] */}
         </div>
 
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
