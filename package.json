@@ -20,6 +20,7 @@
     "@react-google-maps/api": "^2.20.7",
     "@react-three/drei": "9.120.3",
     "@react-three/fiber": "8.17.10",
+    "@react-three/postprocessing": "^3.0.4",
     "@refinedev/antd": "^5.46.1",
     "@refinedev/cli": "^2.16.21",
     "@refinedev/core": "^4.47.1",

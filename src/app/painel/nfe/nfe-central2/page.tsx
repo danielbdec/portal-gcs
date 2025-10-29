@@ -635,15 +635,16 @@ export default function ConsultaNotas() {
 
   const notasPaginadas = notas; // A paginação agora é feita no backend
 
+  // [MODIFICADO] Esta é a alteração que você pediu. Cores muito mais vibrantes.
   const coresStatus: Record<string, string> = {
-    "Erro I.A.": "#ff6f61",
-    "Não Recebidas": "var(--gcs-orange)",
-    "Importado": "var(--gcs-green)",
-    "Manual": "#343a40",
-    "Falha ERP": "#8B0000",
-    "Compras": "#FFC107",
-    "Fiscal": "#00314A",
-    "Enviadas": "#17a2b8",
+    "Erro I.A.": "#F44336",       // Vermelho Vibrante
+    "Não Recebidas": "#FF9800",  // Laranja Vibrante
+    "Importado": "#4CAF50",      // Verde Vibrante
+    "Manual": "#9C27B0",         // Roxo (como sugerido)
+    "Falha ERP": "#E53935",      // Vermelho Forte
+    "Compras": "#FFC107",        // Amarelo/Ouro (Mantido)
+    "Fiscal": "#2196F3",         // Azul Vibrante
+    "Enviadas": "#00BCD4",       // Ciano/Azul Claro Vibrante
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
