@@ -132,7 +132,8 @@ export default function ChatWidget() {
 
           .chat-button:hover {
             transform: scale(1.1);
-            box-shadow: 0 0 0 3px rgba(35,67,37,0.2);
+            /* MUDANÇA AQUI: Cor do shadow atualizada para o novo verde */
+            box-shadow: 0 0 0 3px rgba(95, 178, 70, 0.2);
           }
 
           @media (max-width: 400px) {
@@ -161,7 +162,8 @@ export default function ChatWidget() {
               borderRadius: "50%",
               width: 60,
               height: 60,
-              backgroundColor: "#4E744E",
+              // MUDANÇA AQUI: Cor do "balão" (botão)
+              backgroundColor: "#5FB246", 
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
               color: "white",
               border: "none",
@@ -228,7 +230,8 @@ export default function ChatWidget() {
               fontFamily: "'Segoe UI', Roboto, sans-serif",
             }}
           >
-            <div style={{ padding: "10px", textAlign: "center", background: "linear-gradient(to right, #4E744E, #6EB85D)", borderBottom: "1px solid #eee" }}>
+            {/* MUDANÇA AQUI: Cor do cabeçalho */}
+            <div style={{ padding: "10px", textAlign: "center", background: "linear-gradient(to right, #5FB246, #7ac962)", borderBottom: "1px solid #eee" }}>
 <img src="/logo.png" alt="Logo" style={{ height: 28 }} />
 <div style={{ fontSize: 10, color: "#eefae5", marginTop: 4 }}>🟢 Assistente online</div>
 </div>
@@ -250,7 +253,8 @@ export default function ChatWidget() {
   `}</style>      <style>{`        @keyframes fadeInUp {          from { opacity: 0; transform: translateY(10px); }          to { opacity: 1; transform: translateY(0); }        }        .chat-message-enter {          animation: fadeInUp 0.3s ease forwards;        }      `}</style>
                   {messages.map((msg, i) => (
 <>
-  <div style={{ width: "100%", textAlign: msg.sender === "user" ? "right" : "left", fontSize: 11, fontWeight: "bold", color: msg.sender === "bot" ? "#3c3c3c" : "#4E744E", margin: "4px 0" }}>
+  {/* MUDANÇA AQUI: Cor do texto "Você:" */}
+  <div style={{ width: "100%", textAlign: msg.sender === "user" ? "right" : "left", fontSize: 11, fontWeight: "bold", color: msg.sender === "bot" ? "#3c3c3c" : "#5FB246", margin: "4px 0" }}>
     {msg.sender === "bot" ? "Assistente:" : "Você:"}
   </div>
                     <div key={i} className="chat-message-enter" style={{ display: "flex", justifyContent: msg.sender === "user" ? "flex-end" : "flex-start", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
@@ -344,7 +348,8 @@ export default function ChatWidget() {
               <button
                 onClick={enviarMensagem}
                 style={{
-                  background: "#4E744E",
+                  // MUDANÇA AQUI: Cor do botão de enviar
+                  background: "#5FB246",
                   color: "white",
                   border: "none",
                   padding: "0 16px",

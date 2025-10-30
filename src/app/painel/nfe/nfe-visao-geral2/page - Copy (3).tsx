@@ -140,7 +140,7 @@ export default function StatusOverview() {
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("Todos");
-  const [rankingFilter, setRankingFilter] = useState<RankingFilterType>('geral'); // <-- NOVO ESTADO PARA FILTRO DO RANKING
+  const [rankingFilter, setRankingFilter] = useState<RankingFilterType>('geral'); 
   
   const [chartData, setChartData] = useState<{ 
     dadosPorStatusPizza: any[], 
@@ -304,12 +304,10 @@ export default function StatusOverview() {
     // --- LÓGICA GRÁFICOS 90 DIAS ---
     const lineChartData = new Map<string, { manual: number, automatico: number }>();
     const today = new Date();
-    // Normaliza 'today' para o fim do dia para incluir todos os registros de hoje
     today.setHours(23, 59, 59, 999); 
     
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(today.getDate() - 90);
-    // Normaliza 'ninetyDaysAgo' para o início do dia
     ninetyDaysAgo.setHours(0, 0, 0, 0);
 
     for (const nota of notas) {
@@ -331,7 +329,6 @@ export default function StatusOverview() {
     // --- LÓGICA DO GRÁFICO (Lançados vs Enviados) ---
     const lancadosVsEnviadosMap = new Map<string, { lancados: number, enviados: number }>();
 
-    // 1. Popula 'lancados'
     for (const [dateKey, counts] of lineChartData.entries()) {
         lancadosVsEnviadosMap.set(dateKey, {
             lancados: counts.manual + counts.automatico,
@@ -339,7 +336,6 @@ export default function StatusOverview() {
         });
     }
 
-    // 2. Popula 'enviados'
     for (const envio of rankingEnvio) {
         const parsedDate = parseDate(envio.data_insercao);
         if (parsedDate && parsedDate.dateObj >= ninetyDaysAgo && parsedDate.dateObj <= today) {
@@ -350,7 +346,6 @@ export default function StatusOverview() {
         }
     }
     
-    // 3. Formata, Ordena e Filtra os dados
     const sortedLancadosVsEnviados = Array.from(lancadosVsEnviadosMap.entries())
         .map(([date, counts]) => ({ 
             date: `${date.split('-')[2]}/${date.split('-')[1]}`, 
@@ -363,8 +358,6 @@ export default function StatusOverview() {
     const dadosLancadosVsEnviados = firstActiveDayIndexLvE > -1 ? sortedLancadosVsEnviados.slice(firstActiveDayIndexLvE) : [];
     
     // --- LÓGICA DO GRÁFICO RANKING BAR (COM FILTRO) ---
-    
-    // Define os limites de data para o filtro do ranking
     const todayRanking = new Date();
     todayRanking.setHours(23, 59, 59, 999);
     
@@ -376,7 +369,6 @@ export default function StatusOverview() {
     lastMonth.setDate(todayRanking.getDate() - 30);
     lastMonth.setHours(0, 0, 0, 0);
 
-    // 1. Filtra o array 'rankingEnvio' com base no 'rankingFilter'
     const filteredRankingEnvio = rankingEnvio.filter(envio => {
         if (rankingFilter === 'geral') return true;
         
@@ -392,16 +384,15 @@ export default function StatusOverview() {
         return false;
     });
 
-    // 2. Processa o array já filtrado
     const rankingCounts = new Map<string, number>();
-    for (const envio of filteredRankingEnvio) { // <-- Usa o array filtrado
+    for (const envio of filteredRankingEnvio) { 
         const user = envio.nome_usuario || "Desconhecido";
         rankingCounts.set(user, (rankingCounts.get(user) || 0) + 1);
     }
     const rankingEnvioData = Array.from(rankingCounts.entries())
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
-        .slice(0, 10); // Top 10
+        .slice(0, 10); 
 
     return { 
         totalNotas: notasFiltradas.length, 
@@ -416,13 +407,13 @@ export default function StatusOverview() {
         rankingEnvioData, 
         dadosLancadosVsEnviados 
     };
-  }, [notas, selectedYear, selectedMonth, rankingEnvio, rankingFilter]); // <-- ADICIONA 'rankingFilter' às dependências
+  }, [notas, selectedYear, selectedMonth, rankingEnvio, rankingFilter]);
 
   useEffect(() => {
       if (!loading) {
         const timer = setTimeout(() => setChartData({
              ...computedStats, 
-             dadosPorStatus: computedStats.dadosPorStatusPizza // Renomeia para o gráfico de pizza
+             dadosPorStatus: computedStats.dadosPorStatusPizza 
             }), 100);
         return () => clearTimeout(timer);
       }
@@ -442,13 +433,14 @@ export default function StatusOverview() {
   // --- Estilos para os botões de filtro ---
   const filterStyle: React.CSSProperties = { 
     background: 'none', 
-    border: '1px solid #ccc', 
+    border: '1px solid #ccc', // Borda padrão
     padding: '4px 8px', 
     margin: '0 2px', 
     borderRadius: '4px', 
     cursor: 'pointer', 
     fontSize: '12px',
-    fontWeight: '500'
+    fontWeight: '500',
+    color: '#555' // Cor de texto padrão
   };
   const activeFilterStyle: React.CSSProperties = { 
     ...filterStyle, 
@@ -457,185 +449,397 @@ export default function StatusOverview() {
     borderColor: 'var(--gcs-blue)' 
   };
   
+  // --- ESTILOS PARA O TOOLTIP DE VIDRO ---
+  const glassTooltipStyle: React.CSSProperties = {
+    background: 'rgba(255, 255, 255, 0.25) !important',
+    backdropFilter: 'blur(16px) !important',
+    WebkitBackdropFilter: 'blur(16px) !important',
+    border: '1px solid rgba(255, 255, 255, 0.3) !important',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05) !important'
+  };
+
+  const tooltipLabelStyle: React.CSSProperties = {
+    color: '#00314A', // Título do tooltip em azul
+    fontWeight: 'bold',
+    marginBottom: '5px'
+  };
+
+  const tooltipItemStyle: React.CSSProperties = {
+    color: '#333' // Texto dos itens em cor escura
+  };
+  
   return (
-    <div className="dashboard-container" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto", backgroundColor: "#E9ECEF" }}>
-      {loading ? <LoadingSpinner text="Carregando dados do dashboard..." /> : (
-        <>
-          {/* Cabeçalho */}
-          <div className="header-wrapper">
-              <div className="main-content-card header-content">
-                  <h2 className="page-title">
-                      <LayoutDashboard size={28} color="var(--gcs-blue)" />
-                      <span>Visão Geral</span>
-                  </h2>
-                  <div className="filters-container">
-                      <div>
-                          <label>Ano:</label>
-                          <select value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setSelectedMonth("Todos"); }}>
-                              {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-                          </select>
-                      </div>
-                      <div>
-                          <label>Mês:</label>
-                          <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} disabled={selectedYear === "Todos"}>
-                              {availableMonths.map((month) => <option key={month} value={month}>{month}</option>)}
-                          </select>
-                      </div>
-                  </div>
-              </div>
-          </div>
+    <div className="dashboard-container" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
+      {/* O .content-wrapper é essencial para o z-index do glassmorfismo funcionar */}
+      <div className="content-wrapper">
+        {loading ? <LoadingSpinner text="Carregando dados do dashboard..." /> : (
+          <>
+            {/* Cabeçalho */}
+            <div className="header-wrapper">
+                <div className="main-content-card header-content">
+                    <h2 className="page-title">
+                        <LayoutDashboard size={28} color="var(--gcs-blue)" />
+                        <span>Visão Geral</span>
+                    </h2>
+                    <div className="filters-container">
+                        <div>
+                            <label>Ano:</label>
+                            <select value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setSelectedMonth("Todos"); }}>
+                                {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Mês:</label>
+                            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} disabled={selectedYear === "Todos"}>
+                                {availableMonths.map((month) => <option key={month} value={month}>{month}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-          {/* KPIs */}
-          <div className="kpi-grid">
-            <Card className="kpi-card"><h3 >Notas Processadas</h3><h2>{computedStats.totalNotas}</h2></Card>
-            <Card className="kpi-card"><h3 >Enviadas WhatsApp</h3><h2 style={{ color: "#5FB246" }}>{computedStats.stats.enviadasWhatsApp}</h2></Card>
-            <Card className="kpi-card"><h3 >Pendentes Compras</h3><h2 style={{ color: "#F58220" }}>{computedStats.stats.pendentesCompras}</h2></Card>
-            <Card className="kpi-card"><h3 >Pendentes Fiscal</h3><h2>{computedStats.stats.pendentesFiscal}</h2></Card>
-          </div>
+            {/* KPIs */}
+            <div className="kpi-grid">
+              <Card className="kpi-card"><h3 >Notas Processadas</h3><h2>{computedStats.totalNotas}</h2></Card>
+              <Card className="kpi-card"><h3 >Enviadas WhatsApp</h3><h2 style={{ color: "#5FB246" }}>{computedStats.stats.enviadasWhatsApp}</h2></Card>
+              <Card className="kpi-card"><h3 >Pendentes Compras</h3><h2 style={{ color: "#F58220" }}>{computedStats.stats.pendentesCompras}</h2></Card>
+              <Card className="kpi-card"><h3 >Pendentes Fiscal</h3><h2>{computedStats.stats.pendentesFiscal}</h2></Card>
+            </div>
 
-          {/* Gráficos Principais */}
-          <div className="chart-grid-two-column">
-            <Card title="Notas por Status (Filtro)" className="kpi-card">
-              <ResponsiveContainer width="100%" height={300}><PieChart><Pie data={chartData.dadosPorStatusPizza} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>{chartData.dadosPorStatusPizza.map((entry, index) => (<Cell key={`cell-${index}`} fill={coresStatusPizza[entry.name.toLowerCase() as keyof typeof coresStatusPizza]} />))}</Pie><Tooltip /><Legend verticalAlign="bottom" height={36} /></PieChart></ResponsiveContainer>
-            </Card>
-            <Card title={`Lançamentos no Protheus (Ano: ${selectedYear})`} className="kpi-card">
-              {selectedYear === "Todos" ? <div className="chart-placeholder">Selecione um ano para ver o detalhamento mensal.</div> : (
-                <ResponsiveContainer width="100%" height={300}><BarChart data={chartData.dadosPorMes} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="mes" /><YAxis /><Tooltip /><Legend verticalAlign="bottom" height={36} /><Bar dataKey="manual" name="Manual" fill="#F58220" stackId="a" /><Bar dataKey="automatico" name="Automático" fill="#00314A" stackId="a"><LabelList position="top" content={(props: any) => {const {x, y, width, index} = props; const data = chartData.dadosPorMes[index]; if (!data) return null; const total = data.manual + data.automatico; return (<text x={(x ?? 0) + (width ?? 0) / 2} y={y} fill="#333" textAnchor="middle" dy={-6} fontSize={12} fontWeight="bold">{total > 0 ? total : ''}</text>)}} /></Bar></BarChart></ResponsiveContainer>
-              )}
-            </Card>
-          </div>
-          
-          {/* Gráfico de Linha 90 dias */}
-          <Card title="Lançamentos no Protheus por Dia (Últimos 90 dias)" className="kpi-card chart-full-width">
-            <ResponsiveContainer width="100%" height={350}><LineChart data={chartData.dadosUltimos90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend verticalAlign="bottom" height={36} /><Line type="monotone" dataKey="manual" name="Manual" stroke="#F58220" strokeWidth={2} /><Line type="monotone" dataKey="automatico" name="Automático" stroke="#00314A" strokeWidth={2} /></LineChart></ResponsiveContainer>
-          </Card>
-
-          {/* NOVO GRÁFICO (LANÇADOS VS ENVIADOS) */}
-          <Card title="Lançados vs Enviados (Últimos 90 dias)" className="kpi-card chart-full-width">
-            <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={chartData.dadosLancadosVsEnviados} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend verticalAlign="bottom" height={36} />
-                    <Line type="monotone" dataKey="lancados" name="Total Lançado" stroke="#00314A" strokeWidth={2} />
-                    <Line type="monotone" dataKey="enviados" name="Total Enviado" stroke="#5FB246" strokeWidth={2} />
-                </LineChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Gráfico Tempo Médio */}
-          <Card title={`Tempo Médio de Lançamento (Ano: ${selectedYear})`} className="kpi-card chart-full-width">
-            <ResponsiveContainer width="100%" height={350}><BarChart data={chartData.dadosTempoMedio} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="mes" /><YAxis label={{ value: 'Dias', angle: -90, position: 'insideLeft' }} /><Tooltip formatter={(value: number) => `${value.toFixed(2)} dias`} /><Bar dataKey="dias" name="Média de Dias" fill="#00314A"><LabelList dataKey="dias" position="top" formatter={(value: number) => value > 0 ? value.toFixed(1) : ''} /></Bar></BarChart></ResponsiveContainer>
-          </Card>
-
-          {/* Gráficos de Análise */}
-          <div className="chart-grid-two-column">
-              <Card title="Top 5 Fornecedores com Problemas (Filtro)" className="kpi-card">
-                  {chartData.topFornecedoresProblema.length === 0 ? (<div className="chart-placeholder">Nenhum fornecedor com problema no período.</div>) : (
-                    <ResponsiveContainer width="100%" height={300}><BarChart layout="vertical" data={chartData.topFornecedoresProblema} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} /><Tooltip /><Bar dataKey="count" name="Notas com Problema" fill="#F58220"><LabelList dataKey="count" position="right" /></Bar></BarChart></ResponsiveContainer>
-                  )}
-              </Card>
-              <Card title="Notas Pendentes por Usuário (Filtro)" className="kpi-card">
-                 {chartData.pendentesPorComprador.length === 0 ? (<div className="chart-placeholder">Nenhuma pendência no período.</div>) : (
-                   <ResponsiveContainer width="100%" height={300}><BarChart layout="vertical" data={chartData.pendentesPorComprador} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={120} interval={0} scale="band" /><Tooltip /><Bar dataKey="pendencias" name="Pendências" fill="#00314A"><LabelList dataKey="pendencias" position="right" /></Bar></BarChart></ResponsiveContainer>
-                 )}
-              </Card>
-          </div>
-
-          {/* --- GRÁFICO RANKING DE ENVIO (COM FILTRO) --- */}
-          <Card 
-            title="Ranking de Envio (Qtd de Notas)" 
-            className="kpi-card chart-full-width" 
-            style={{ marginTop: '1rem' }}
-            extra={(
-              <div>
-                <button 
-                  style={rankingFilter === 'geral' ? activeFilterStyle : filterStyle} 
-                  onClick={() => setRankingFilter('geral')}
-                >
-                  Geral
-                </button>
-                <button 
-                  style={rankingFilter === 'mes' ? activeFilterStyle : filterStyle} 
-                  onClick={() => setRankingFilter('mes')}
-                >
-                  Último Mês
-                </button>
-                <button 
-                  style={rankingFilter === 'semana' ? activeFilterStyle : filterStyle} 
-                  onClick={() => setRankingFilter('semana')}
-                >
-                  Última Semana
-                </button>
-              </div>
-            )}
-          >
-            {chartData.rankingEnvioData.length === 0 ? (<div className="chart-placeholder">Nenhum envio por WhatsApp no período selecionado.</div>) : (
+            {/* Gráficos Principais */}
+            <div className="chart-grid-two-column">
+              <Card title="Notas por Status (Filtro)" className="kpi-card">
                 <ResponsiveContainer width="100%" height={300}>
-                    <BarChart layout="vertical" data={chartData.rankingEnvioData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  <PieChart>
+                    <Pie data={chartData.dadosPorStatusPizza} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {chartData.dadosPorStatusPizza.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={coresStatusPizza[entry.name.toLowerCase() as keyof typeof coresStatusPizza]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Card>
+              <Card title={`Lançamentos no Protheus (Ano: ${selectedYear})`} className="kpi-card">
+                {selectedYear === "Todos" ? <div className="chart-placeholder">Selecione um ano para ver o detalhamento mensal.</div> : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={chartData.dadosPorMes} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mes" />
+                      <YAxis />
+                      <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                      <Legend verticalAlign="bottom" height={36} />
+                      <Bar dataKey="manual" name="Manual" fill="#F58220" stackId="a" />
+                      <Bar dataKey="automatico" name="Automático" fill="#00314A" stackId="a">
+                        <LabelList 
+                          position="top" 
+                          content={(props: any) => {
+                            const {x, y, width, index} = props; 
+                            const data = chartData.dadosPorMes[index]; 
+                            if (!data) return null; 
+                            const total = data.manual + data.automatico; 
+                            return (<text x={(x ?? 0) + (width ?? 0) / 2} y={y} fill="#333" textAnchor="middle" dy={-6} fontSize={12} fontWeight="bold">{total > 0 ? total : ''}</text>)
+                          }} 
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </Card>
+            </div>
+            
+            {/* Gráfico de Linha 90 dias */}
+            <Card title="Lançamentos no Protheus por Dia (Últimos 90 dias)" className="kpi-card chart-full-width">
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={chartData.dadosUltimos90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                  <Legend verticalAlign="bottom" height={36} />
+                  <Line type="monotone" dataKey="manual" name="Manual" stroke="#F58220" strokeWidth={2} />
+                  <Line type="monotone" dataKey="automatico" name="Automático" stroke="#00314A" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* NOVO GRÁFICO (LANÇADOS VS ENVIADOS) */}
+            <Card title="Lançados vs Enviados (Últimos 90 dias)" className="kpi-card chart-full-width">
+              <ResponsiveContainer width="100%" height={350}>
+                  <LineChart data={chartData.dadosLancadosVsEnviados} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                      <Legend verticalAlign="bottom" height={36} />
+                      <Line type="monotone" dataKey="lancados" name="Total Lançado" stroke="#00314A" strokeWidth={2} />
+                      <Line type="monotone" dataKey="enviados" name="Total Enviado" stroke="#5FB246" strokeWidth={2} />
+                  </LineChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Gráfico Tempo Médio */}
+            <Card title={`Tempo Médio de Lançamento (Ano: ${selectedYear})`} className="kpi-card chart-full-width">
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={chartData.dadosTempoMedio} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis label={{ value: 'Dias', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip formatter={(value: number) => `${value.toFixed(2)} dias`} contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                  <Bar dataKey="dias" name="Média de Dias" fill="#00314A">
+                    <LabelList dataKey="dias" position="top" formatter={(value: number) => value > 0 ? value.toFixed(1) : ''} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Gráficos de Análise */}
+            <div className="chart-grid-two-column">
+                <Card title="Top 5 Fornecedores com Problemas (Filtro)" className="kpi-card">
+                    {chartData.topFornecedoresProblema.length === 0 ? (<div className="chart-placeholder">Nenhum fornecedor com problema no período.</div>) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart layout="vertical" data={chartData.topFornecedoresProblema} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" allowDecimals={false} />
+                          <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} />
+                          <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                          <Bar dataKey="count" name="Notas com Problema" fill="#F58220">
+                            <LabelList dataKey="count" position="right" />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                </Card>
+                <Card title="Notas Pendentes por Usuário (Filtro)" className="kpi-card">
+                   {chartData.pendentesPorComprador.length === 0 ? (<div className="chart-placeholder">Nenhuma pendência no período.</div>) : (
+                     <ResponsiveContainer width="100%" height={300}>
+                       <BarChart layout="vertical" data={chartData.pendentesPorComprador} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis type="number" allowDecimals={false} />
-                        <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Notas Enviadas" fill="#5FB246">
-                            <LabelList dataKey="count" position="right" />
+                        <YAxis type="category" dataKey="name" width={120} interval={0} scale="band" />
+                        <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                        <Bar dataKey="pendencias" name="Pendências" fill="#00314A">
+                          <LabelList dataKey="pendencias" position="right" />
                         </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            )}
-          </Card>
+                       </BarChart>
+                     </ResponsiveContainer>
+                   )}
+                </Card>
+            </div>
 
-          {/* Tabela */}
-          <Card title="Últimas Notas Processadas (Filtro)" className="kpi-card table-card">
-            <Table columns={columns} dataSource={computedStats.ultimasNotas} pagination={false} scroll={{ x: true }} />
-          </Card>
-        </>
-      )}
+            {/* --- GRÁFICO RANKING DE ENVIO (COM FILTRO) --- */}
+            <Card 
+              title="Ranking de Envio (Qtd de Notas)" 
+              className="kpi-card chart-full-width" 
+              style={{ marginTop: '1rem' }}
+              extra={(
+                <div>
+                  <button 
+                    style={rankingFilter === 'geral' ? activeFilterStyle : filterStyle} 
+                    onClick={() => setRankingFilter('geral')}
+                  >
+                    Geral
+                  </button>
+                  <button 
+                    style={rankingFilter === 'mes' ? activeFilterStyle : filterStyle} 
+                    onClick={() => setRankingFilter('mes')}
+                  >
+                    Último Mês
+                  </button>
+                  <button 
+                    style={rankingFilter === 'semana' ? activeFilterStyle : filterStyle} 
+                    onClick={() => setRankingFilter('semana')}
+                  >
+                    Última Semana
+                  </button>
+                </div>
+              )}
+            >
+              {chartData.rankingEnvioData.length === 0 ? (<div className="chart-placeholder">Nenhum envio por WhatsApp no período selecionado.</div>) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                      <BarChart layout="vertical" data={chartData.rankingEnvioData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" allowDecimals={false} />
+                          <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} />
+                          <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                          <Bar dataKey="count" name="Notas Enviadas" fill="#5FB246">
+                              <LabelList dataKey="count" position="right" />
+                          </Bar>
+                      </BarChart>
+                  </ResponsiveContainer>
+              )}
+            </Card>
 
-      {/* Estilos Globais e Responsivos */}
+            {/* Tabela (AGORA COM A CLASSE "kpi-card") */}
+            <Card title="Últimas Notas Processadas (Filtro)" className="kpi-card chart-full-width" style={{ marginTop: '1rem' }}>
+              <Table columns={columns} dataSource={computedStats.ultimasNotas} pagination={false} scroll={{ x: true }} />
+            </Card>
+          </>
+        )}
+      </div> {/* Fim do .content-wrapper */}
+
+
+      {/* --- ESTILOS GLOBAIS COM GLASMORFISMO CLARO (VERSÃO CORRIGIDA) --- */}
       <style jsx global>{`
-        :root { --gcs-blue: #00314A; --gcs-green: #5FB246; --gcs-orange: #F58220; --gcs-gray-dark: #6c757d; }
-        body { background-color: #E9ECEF; }
-        .dashboard-container { padding: 1rem; } /* Padding menor para mobile */
-        .kpi-card { transition: all 0.3s ease; cursor: pointer; border: 1px solid #dee2e6; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); margin-bottom: 1rem; }
-        .kpi-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1); }
-        .kpi-card h3 { margin: 0 0 0.5rem 0; color: #888; text-align: center; font-size: 0.9rem; }
-        .kpi-card h2 { margin: 0; font-size: 2rem; color: #00314A; text-align: center; }
+        :root { 
+          --gcs-blue: #00314A; 
+          --gcs-green: #5FB246; 
+          --gcs-orange: #F58220; 
+          --gcs-gray-dark: #6c757d; 
+        }
         
+        /* --- FUNDO CINZA SÓLIDO --- */
+        body { 
+          background-color: #E9ECEF !important; /* Fundo sólido */
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          position: relative; 
+          overflow-x: hidden !important; 
+        }
+        
+        /* Remove o fundo animado e as bolhas */
+        @keyframes animateGradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        body {
+          background-image: none !important;
+          animation: none !important;
+        }
+        body::before,
+        body::after {
+          display: none;
+        }
+        
+        .dashboard-container { 
+          padding: 1rem; 
+          position: relative; 
+          z-index: 1; 
+        } 
+
+        .content-wrapper {
+          position: relative;
+          z-index: 2; /* Conteúdo fica acima do fundo */
+        }
+
+        /* --- ESTILO GLASMORFISMO CLARO (COM VALORES AGRESSIVOS) --- */
+        
+        /* 1. Seleciona os cards de KPI (que são Antd Cards) */
+        .kpi-card.ant-card {
+            background: rgba(255, 255, 255, 0.25) !important; /* 25% opaco */
+            backdrop-filter: blur(16px) !important; /* 16px blur */
+            -webkit-backdrop-filter: blur(16px) !important; 
+            border: 1px solid rgba(255, 255, 255, 0.3) !important; 
+            border-radius: 12px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+            transition: all 0.3s ease;
+            margin-bottom: 1rem;
+        }
+        
+        /* 2. Seleciona o card do Título (que é um Div) */
+        .main-content-card {
+            background: rgba(255, 255, 255, 0.25) !important; /* 25% opaco */
+            backdrop-filter: blur(16px) !important; /* 16px blur */
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important; 
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            margin-bottom: 1rem;
+            padding: 1rem;
+        }
+
+        /* 3. Força o corpo e cabeçalho dos Antd Cards a serem transparentes */
+        .kpi-card .ant-card-body,
+        .kpi-card .ant-card-head {
+            background: transparent !important;
+        }
+
+        /* 4. Remove a classe de tabela sólida (que foi removida do JSX) */
+
+        /* 5. Hover para os cards de vidro */
+        .kpi-card.ant-card:hover,
+        .main-content-card:hover {
+            transform: translateY(-5px); 
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1) !important; 
+            background: rgba(255, 255, 255, 0.5) !important; /* Mais opaco no hover */
+        }
+
+        /* --- Textos tema claro --- */
+        .ant-card-head {
+            color: #333 !important; 
+            border-bottom-color: rgba(0, 0, 0, 0.1) !important; 
+        }
+        .kpi-card h3 { margin: 0 0 0.5rem 0; color: #555; text-align: center; font-size: 0.9rem; font-weight: 500; }
+        .kpi-card h2 { margin: 0; font-size: 2rem; color: #00314A; text-align: center; }
+
         /* Layout Grids */
         .kpi-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem; }
-        .chart-grid-two-column { display: grid; gap: 1rem; grid-template-columns: 1fr; margin-bottom: 1rem; } /* Mobile first: 1 coluna */
+        .chart-grid-two-column { display: grid; gap: 1rem; grid-template-columns: 1fr; margin-bottom: 1rem; } 
         .chart-full-width { margin-bottom: 1rem; }
-        .table-card { margin-top: 1rem; }
 
         /* Estilos do cabeçalho */
         .header-wrapper { margin-bottom: 1rem; }
-        .main-content-card { background-color: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); border: 1px solid #dee2e6; }
         .header-content { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
         .page-title { margin: 0; font-size: 1.5rem; font-weight: bold; color: var(--gcs-blue); display: flex; align-items: center; gap: 0.75rem; }
         .filters-container { display: flex; flex-direction: column; gap: 0.8rem; width: 100%; }
         .filters-container div { display: flex; align-items: center; gap: 0.5rem; }
         .filters-container label { font-weight: 500; color: #333; white-space: nowrap; }
-        .filters-container select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; flex-grow: 1; }
+        
+        /* Estilo Claro para Select */
+        .filters-container select { 
+            padding: 6px 10px; 
+            border-radius: 6px; 
+            border: 1px solid #ccc; 
+            flex-grow: 1; 
+            background-color: #fff;
+            color: #333;
+        }
 
+        /* Placeholder do Gráfico */
         .chart-placeholder { height: 300px; display: flex; align-items: center; justify-content: center; color: #888; text-align: center; }
 
+        /* Botões */
         .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
         .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .btn-green { background-color: var(--gcs-green); color: white; }
         .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
-        .recharts-text.recharts-cartesian-axis-tick-value { font-size: 11px; } /* Reduz tamanho da fonte dos eixos */
-        .recharts-legend-item-text { font-size: 12px; } /* Reduz tamanho da fonte da legenda */
+
+        /* Fontes do Recharts */
+        .recharts-text.recharts-cartesian-axis-tick-value { font-size: 11px; }
+        .recharts-legend-item-text { font-size: 12px; }
+
+        /* --- Tabela Antd (AGORA COM GLASMORFISMO) --- */
+        .kpi-card .ant-table {
+          background: transparent !important;
+        }
+        .kpi-card .ant-table-thead > tr > th {
+            background: transparent !important;
+            color: #333 !important;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.2) !important;
+        }
+        .kpi-card .ant-table-tbody > tr > td {
+            background: transparent !important; /* Célula transparente */
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+            color: #333; /* Texto escuro */
+        }
+        .kpi-card .ant-table-tbody > tr.ant-table-row:hover > td {
+            background: rgba(255, 255, 255, 0.3) !important; /* Hover de vidro */
+        }
+        .kpi-card .ant-table-empty .ant-empty-description {
+            color: #555;
+        }
 
         /* --- Media Query para Telas Maiores --- */
         @media (min-width: 768px) {
             .dashboard-container { padding: 2rem; }
-            .kpi-card { margin-bottom: 0; } /* Remove margin bottom no grid */
+            .kpi-card { margin-bottom: 0; } 
             .chart-grid-two-column { grid-template-columns: repeat(2, 1fr); margin-bottom: 2rem; }
             .chart-full-width { margin-bottom: 2rem; }
-            .table-card { margin-top: 2rem; }
+            .kpi-card.chart-full-width[style*="margin-top: 1rem"] { margin-top: 2rem !important; } /* Ajusta o espaçamento da tabela */
             .header-wrapper { margin-bottom: 1.5rem; }
             .main-content-card { padding: 1.5rem; }
             .header-content { flex-direction: row; align-items: center; justify-content: space-between; }
@@ -643,17 +847,17 @@ export default function StatusOverview() {
             .filters-container { flex-direction: row; gap: 1.5rem; width: auto; }
             .filters-container div { gap: 0.8rem; }
             .filters-container select { padding: 8px 12px; min-width: 100px; flex-grow: 0; }
-             .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; } /* Volta ao normal */
-             .recharts-legend-item-text { font-size: unset; } /* Volta ao normal */
+             .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; }
+             .recharts-legend-item-text { font-size: unset; }
         }
         
         /* Estilos para os filtros do Antd Card */
         .ant-card-head-wrapper {
-            flex-wrap: wrap; /* Permite que os filtros quebrem a linha em telas pequenas */
+            flex-wrap: wrap; 
         }
         .ant-card-extra {
-            margin-left: auto; /* Alinha os filtros à direita */
-            padding-left: 10px; /* Adiciona um espaçamento */
+            margin-left: auto; 
+            padding-left: 10px; 
         }
 
       `}</style>

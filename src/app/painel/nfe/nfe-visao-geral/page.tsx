@@ -34,6 +34,18 @@ interface Nota {
   dt_lcto_protheus?: string;
 }
 
+// Interface para os dados do novo gráfico
+interface EnvioWpp {
+  id: number;
+  data_insercao: string;
+  chave_acesso: string;
+  telefone_whatsapp: string;
+  nome_usuario: string;
+  telefone_fmt_canon: string;
+}
+
+type RankingFilterType = 'geral' | 'mes' | 'semana';
+
 const coresStatusPizza: { [key: string]: string } = {
   lançadas: "#5FB246",
   pendentes: "#F58220",
@@ -124,10 +136,31 @@ export default function StatusOverview() {
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
   const [notas, setNotas] = useState<Nota[]>([]);
+  const [rankingEnvio, setRankingEnvio] = useState<EnvioWpp[]>([]); 
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("Todos");
-  const [chartData, setChartData] = useState<{ dadosPorStatusPizza: any[], dadosPorMes: any[], dadosUltimos90Dias: any[], dadosTempoMedio: any[], topFornecedoresProblema: any[], pendentesPorComprador: any[] }>({ dadosPorStatusPizza: [], dadosPorMes: [], dadosUltimos90Dias: [], dadosTempoMedio: [], topFornecedoresProblema: [], pendentesPorComprador: [] });
+  const [rankingFilter, setRankingFilter] = useState<RankingFilterType>('geral'); // <-- NOVO ESTADO PARA FILTRO DO RANKING
+  
+  const [chartData, setChartData] = useState<{ 
+    dadosPorStatusPizza: any[], 
+    dadosPorMes: any[], 
+    dadosUltimos90Dias: any[],
+    dadosLancadosVsEnviados: any[], 
+    dadosTempoMedio: any[], 
+    topFornecedoresProblema: any[], 
+    pendentesPorComprador: any[],
+    rankingEnvioData: any[] 
+  }>({ 
+    dadosPorStatusPizza: [], 
+    dadosPorMes: [], 
+    dadosUltimos90Dias: [],
+    dadosLancadosVsEnviados: [], 
+    dadosTempoMedio: [], 
+    topFornecedoresProblema: [], 
+    pendentesPorComprador: [],
+    rankingEnvioData: [] 
+  });
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -136,7 +169,7 @@ export default function StatusOverview() {
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.visaoGeral');
       if (hasAccess) {
         setAuthStatus('authorized');
-        fetchNotas();
+        fetchAllData(); 
       } else {
         setAuthStatus('unauthorized');
       }
@@ -145,14 +178,37 @@ export default function StatusOverview() {
     }
   }, [status, session, router]);
 
-  const fetchNotas = async () => {
+  const fetchAllData = async () => {
       try {
         setLoading(true);
-        const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho", { method: "POST" });
-        const data = await response.json();
-        setNotas(Array.isArray(data) ? data : []);
+
+        const [resNotas, resRanking] = await Promise.all([
+            fetch("/api/nfe/nfe-consulta-notas-cabecalho", { method: "POST" }),
+            fetch("/api/nfe/nfe-envio-nfe-wpp", { 
+                method: "POST",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            }) 
+        ]);
+
+        if (resNotas.ok) {
+            const dataNotas = await resNotas.json();
+            setNotas(Array.isArray(dataNotas) ? dataNotas : []);
+        } else {
+            console.error("Erro ao buscar as notas:", await resNotas.text());
+            setNotas([]);
+        }
+
+        if (resRanking.ok) {
+            const dataRanking = await resRanking.json();
+            setRankingEnvio(Array.isArray(dataRanking) ? dataRanking : []);
+        } else {
+            console.error("Erro ao buscar o ranking:", await resRanking.text());
+            setRankingEnvio([]);
+        }
+
       } catch (error) {
-        console.error("Erro ao buscar as notas:", error);
+        console.error("Erro ao buscar dados do dashboard:", error);
       } finally {
         setLoading(false);
       }
@@ -245,10 +301,16 @@ export default function StatusOverview() {
     const dadosPorMes = mesesNomes.map(mes => ({ mes, manual: mesesContagem[mes].manual, automatico: mesesContagem[mes].automatico })).filter(d => d.manual > 0 || d.automatico > 0);
     const dadosTempoMedio = mesesNomes.map(mes => ({ mes, dias: mesesContagem[mes].count > 0 ? mesesContagem[mes].totalDias / mesesContagem[mes].count : 0 })).filter(d => d.dias > 0);
     
+    // --- LÓGICA GRÁFICOS 90 DIAS ---
     const lineChartData = new Map<string, { manual: number, automatico: number }>();
     const today = new Date();
+    // Normaliza 'today' para o fim do dia para incluir todos os registros de hoje
+    today.setHours(23, 59, 59, 999); 
+    
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(today.getDate() - 90);
+    // Normaliza 'ninetyDaysAgo' para o início do dia
+    ninetyDaysAgo.setHours(0, 0, 0, 0);
 
     for (const nota of notas) {
         const parsedDate = parseDate(nota.dt_lcto_protheus);
@@ -266,8 +328,95 @@ export default function StatusOverview() {
     const firstActiveDayIndex = sortedLineChartData.findIndex(d => d.manual > 0 || d.automatico > 0);
     const dadosUltimos90Dias = firstActiveDayIndex > -1 ? sortedLineChartData.slice(firstActiveDayIndex) : [];
 
-    return { totalNotas: notasFiltradas.length, stats, dadosPorStatusPizza, ultimasNotas, dadosPorMes, dadosUltimos90Dias, dadosTempoMedio, topFornecedoresProblema, pendentesPorComprador };
-  }, [notas, selectedYear, selectedMonth]);
+    // --- LÓGICA DO GRÁFICO (Lançados vs Enviados) ---
+    const lancadosVsEnviadosMap = new Map<string, { lancados: number, enviados: number }>();
+
+    // 1. Popula 'lancados'
+    for (const [dateKey, counts] of lineChartData.entries()) {
+        lancadosVsEnviadosMap.set(dateKey, {
+            lancados: counts.manual + counts.automatico,
+            enviados: 0
+        });
+    }
+
+    // 2. Popula 'enviados'
+    for (const envio of rankingEnvio) {
+        const parsedDate = parseDate(envio.data_insercao);
+        if (parsedDate && parsedDate.dateObj >= ninetyDaysAgo && parsedDate.dateObj <= today) {
+            const dateKey = parsedDate.dateObj.toISOString().split('T')[0];
+            const entry = lancadosVsEnviadosMap.get(dateKey) || { lancados: 0, enviados: 0 };
+            entry.enviados++;
+            lancadosVsEnviadosMap.set(dateKey, entry);
+        }
+    }
+    
+    // 3. Formata, Ordena e Filtra os dados
+    const sortedLancadosVsEnviados = Array.from(lancadosVsEnviadosMap.entries())
+        .map(([date, counts]) => ({ 
+            date: `${date.split('-')[2]}/${date.split('-')[1]}`, 
+            fullDate: date, 
+            ...counts 
+        }))
+        .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+        
+    const firstActiveDayIndexLvE = sortedLancadosVsEnviados.findIndex(d => d.lancados > 0 || d.enviados > 0);
+    const dadosLancadosVsEnviados = firstActiveDayIndexLvE > -1 ? sortedLancadosVsEnviados.slice(firstActiveDayIndexLvE) : [];
+    
+    // --- LÓGICA DO GRÁFICO RANKING BAR (COM FILTRO) ---
+    
+    // Define os limites de data para o filtro do ranking
+    const todayRanking = new Date();
+    todayRanking.setHours(23, 59, 59, 999);
+    
+    const lastWeek = new Date();
+    lastWeek.setDate(todayRanking.getDate() - 7);
+    lastWeek.setHours(0, 0, 0, 0);
+
+    const lastMonth = new Date();
+    lastMonth.setDate(todayRanking.getDate() - 30);
+    lastMonth.setHours(0, 0, 0, 0);
+
+    // 1. Filtra o array 'rankingEnvio' com base no 'rankingFilter'
+    const filteredRankingEnvio = rankingEnvio.filter(envio => {
+        if (rankingFilter === 'geral') return true;
+        
+        const parsedDate = parseDate(envio.data_insercao);
+        if (!parsedDate) return false;
+        
+        if (rankingFilter === 'semana') {
+            return parsedDate.dateObj >= lastWeek && parsedDate.dateObj <= todayRanking;
+        }
+        if (rankingFilter === 'mes') {
+            return parsedDate.dateObj >= lastMonth && parsedDate.dateObj <= todayRanking;
+        }
+        return false;
+    });
+
+    // 2. Processa o array já filtrado
+    const rankingCounts = new Map<string, number>();
+    for (const envio of filteredRankingEnvio) { // <-- Usa o array filtrado
+        const user = envio.nome_usuario || "Desconhecido";
+        rankingCounts.set(user, (rankingCounts.get(user) || 0) + 1);
+    }
+    const rankingEnvioData = Array.from(rankingCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10); // Top 10
+
+    return { 
+        totalNotas: notasFiltradas.length, 
+        stats, 
+        dadosPorStatusPizza, 
+        ultimasNotas, 
+        dadosPorMes, 
+        dadosUltimos90Dias, 
+        dadosTempoMedio, 
+        topFornecedoresProblema, 
+        pendentesPorComprador,
+        rankingEnvioData, 
+        dadosLancadosVsEnviados 
+    };
+  }, [notas, selectedYear, selectedMonth, rankingEnvio, rankingFilter]); // <-- ADICIONA 'rankingFilter' às dependências
 
   useEffect(() => {
       if (!loading) {
@@ -290,6 +439,24 @@ export default function StatusOverview() {
   if (authStatus === 'loading') return <div style={{ backgroundColor: "#E9ECEF", minHeight: "100vh" }}><LoadingSpinner text="A verificar permissões..." /></div>;
   if (authStatus === 'unauthorized') return <div style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}><AcessoNegado /></div>;
 
+  // --- Estilos para os botões de filtro ---
+  const filterStyle: React.CSSProperties = { 
+    background: 'none', 
+    border: '1px solid #ccc', 
+    padding: '4px 8px', 
+    margin: '0 2px', 
+    borderRadius: '4px', 
+    cursor: 'pointer', 
+    fontSize: '12px',
+    fontWeight: '500'
+  };
+  const activeFilterStyle: React.CSSProperties = { 
+    ...filterStyle, 
+    background: 'var(--gcs-blue)', 
+    color: 'white', 
+    borderColor: 'var(--gcs-blue)' 
+  };
+  
   return (
     <div className="dashboard-container" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto", backgroundColor: "#E9ECEF" }}>
       {loading ? <LoadingSpinner text="Carregando dados do dashboard..." /> : (
@@ -343,6 +510,21 @@ export default function StatusOverview() {
             <ResponsiveContainer width="100%" height={350}><LineChart data={chartData.dadosUltimos90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend verticalAlign="bottom" height={36} /><Line type="monotone" dataKey="manual" name="Manual" stroke="#F58220" strokeWidth={2} /><Line type="monotone" dataKey="automatico" name="Automático" stroke="#00314A" strokeWidth={2} /></LineChart></ResponsiveContainer>
           </Card>
 
+          {/* NOVO GRÁFICO (LANÇADOS VS ENVIADOS) */}
+          <Card title="Lançados vs Enviados (Últimos 90 dias)" className="kpi-card chart-full-width">
+            <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={chartData.dadosLancadosVsEnviados} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" height={36} />
+                    <Line type="monotone" dataKey="lancados" name="Total Lançado" stroke="#00314A" strokeWidth={2} />
+                    <Line type="monotone" dataKey="enviados" name="Total Enviado" stroke="#5FB246" strokeWidth={2} />
+                </LineChart>
+            </ResponsiveContainer>
+          </Card>
+
           {/* Gráfico Tempo Médio */}
           <Card title={`Tempo Médio de Lançamento (Ano: ${selectedYear})`} className="kpi-card chart-full-width">
             <ResponsiveContainer width="100%" height={350}><BarChart data={chartData.dadosTempoMedio} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="mes" /><YAxis label={{ value: 'Dias', angle: -90, position: 'insideLeft' }} /><Tooltip formatter={(value: number) => `${value.toFixed(2)} dias`} /><Bar dataKey="dias" name="Média de Dias" fill="#00314A"><LabelList dataKey="dias" position="top" formatter={(value: number) => value > 0 ? value.toFixed(1) : ''} /></Bar></BarChart></ResponsiveContainer>
@@ -361,6 +543,49 @@ export default function StatusOverview() {
                  )}
               </Card>
           </div>
+
+          {/* --- GRÁFICO RANKING DE ENVIO (COM FILTRO) --- */}
+          <Card 
+            title="Ranking de Envio (Qtd de Notas)" 
+            className="kpi-card chart-full-width" 
+            style={{ marginTop: '1rem' }}
+            extra={(
+              <div>
+                <button 
+                  style={rankingFilter === 'geral' ? activeFilterStyle : filterStyle} 
+                  onClick={() => setRankingFilter('geral')}
+                >
+                  Geral
+                </button>
+                <button 
+                  style={rankingFilter === 'mes' ? activeFilterStyle : filterStyle} 
+                  onClick={() => setRankingFilter('mes')}
+                >
+                  Último Mês
+                </button>
+                <button 
+                  style={rankingFilter === 'semana' ? activeFilterStyle : filterStyle} 
+                  onClick={() => setRankingFilter('semana')}
+                >
+                  Última Semana
+                </button>
+              </div>
+            )}
+          >
+            {chartData.rankingEnvioData.length === 0 ? (<div className="chart-placeholder">Nenhum envio por WhatsApp no período selecionado.</div>) : (
+                <ResponsiveContainer width="100%" height={300}>
+                    <BarChart layout="vertical" data={chartData.rankingEnvioData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} />
+                        <Tooltip />
+                        <Bar dataKey="count" name="Notas Enviadas" fill="#5FB246">
+                            <LabelList dataKey="count" position="right" />
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+            )}
+          </Card>
 
           {/* Tabela */}
           <Card title="Últimas Notas Processadas (Filtro)" className="kpi-card table-card">
@@ -420,6 +645,15 @@ export default function StatusOverview() {
             .filters-container select { padding: 8px 12px; min-width: 100px; flex-grow: 0; }
              .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; } /* Volta ao normal */
              .recharts-legend-item-text { font-size: unset; } /* Volta ao normal */
+        }
+        
+        /* Estilos para os filtros do Antd Card */
+        .ant-card-head-wrapper {
+            flex-wrap: wrap; /* Permite que os filtros quebrem a linha em telas pequenas */
+        }
+        .ant-card-extra {
+            margin-left: auto; /* Alinha os filtros à direita */
+            padding-left: 10px; /* Adiciona um espaçamento */
         }
 
       `}</style>
