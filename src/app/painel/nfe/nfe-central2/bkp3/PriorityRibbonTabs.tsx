@@ -44,8 +44,7 @@ const CHIP = {
   },
   p2: {
     light: { from: "#FFF0E8", to: "#FFE4D4", text: "#7C2D12", ring: "#F4B38D" }, // <-- Antigo
-    // ===== ALTERAÇÃO: P2 (Pendências) para Amarelo no Modo Escuro =====
-    dark:  { from: "rgba(250, 204, 21, 0.22)", to: "rgba(250, 204, 21, 0.12)", text: "#FDE68A", ring: "rgba(250, 204, 21, 0.36)" },
+    dark:  { from: "rgba(234,88,12,.22)", to: "rgba(234,88,12,.12)", text: "#FFEAD9", ring: "rgba(234,88,12,.36)" },
   },
   p3: {
     light: { from: "#EDF3F9", to: "#E5EEF6", text: "#18344F", ring: "#B4C6D8" }, // <-- Antigo
@@ -338,17 +337,11 @@ export default function PriorityRibbonTabs({
           --p2-from: rgba(234,88,12,0.28); --p2-to: rgba(234,88,12,0.14);
           --p3-from: rgba(31,78,121,0.26); --p3-to: rgba(31,78,121,0.12);
         }
-        
-        /* ===== ALTERAÇÃO: Cores do Fundo dos Segmentos (MODO ESCURO) ===== */
         .ribbon[data-theme="dark"]{
-          /* P1 - Vermelho Mais Forte */
-          --p1-from: rgba(225,29,46,0.45); --p1-to: rgba(225,29,46,0.30);
-          /* P2 - Amarelo (era laranja/marrom) */
-          --p2-from: rgba(250, 204, 21, 0.30); --p2-to: rgba(234, 179, 8, 0.20);
-          /* P3 - Azul (sem mudança) */
+          --p1-from: rgba(225,29,46,0.42); --p1-to: rgba(225,29,46,0.24);
+          --p2-from: rgba(234,88,12,0.38); --p2-to: rgba(234,88,12,0.20);
           --p3-from: rgba(31,78,121,0.36); --p3-to: rgba(31,78,121,0.18);
         }
-        /* ============================================================= */
 
         .ribbon{
           --notchRatio: 0.12; /* 120/1000 */
@@ -409,37 +402,6 @@ export default function PriorityRibbonTabs({
         }
 
         /* ===== ALTERAÇÃO: A REGRA .flagsWrap:has(...) FOI REMOVIDA DAQUI ===== */
-        
-        /* ===== ALTERAÇÃO: Cores das Tags e Títulos (MODO ESCURO) ===== */
-        .ribbon[data-theme="dark"] .title {
-            color: #E2E8F0;
-        }
-        .ribbon[data-theme="dark"] .tag {
-          background: rgba(10, 20, 30, 0.5) !important;
-          border-color: rgba(125, 173, 222, 0.2) !important;
-          color: #E2E8F0 !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p1 .tag { 
-          color: #FCA5A5 !important;
-          border-color: #EF4444 !important;
-          background: rgba(239, 68, 68, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p1 .title { color: #FCA5A5 !important; }
-        
-        .ribbon[data-theme="dark"] .seg-p2 .tag { 
-          color: #FDE08A !important;
-          border-color: #FACC15 !important;
-          background: rgba(250, 204, 21, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p2 .title { color: #FDE08A !important; }
-
-        .ribbon[data-theme="dark"] .seg-p3 .tag { 
-          color: #BFDBFE !important;
-          border-color: #3B82F6 !important;
-          background: rgba(59, 130, 246, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p3 .title { color: #BFDBFE !important; }
-        /* =============================================================== */
 
         @media (max-width:1200px){
           .ribbon{ grid-template-columns: 1fr; }

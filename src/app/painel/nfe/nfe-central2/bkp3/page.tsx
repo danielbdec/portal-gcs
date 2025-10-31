@@ -1,32 +1,45 @@
+//
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Pagination } from "antd";
+import { Pagination, Tooltip } from "antd"; // Tooltip importado
 import * as XLSX from 'xlsx';
 import {
-    PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector
+    PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector, Tooltip as RechartsTooltip
 } from "recharts";
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
-    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock
+    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
+    CheckSquare, Square,
+    Sun, Moon 
 } from "lucide-react";
 import ModalDetalhes from "./ModalDetalhes";
-import React from "react";
+// === CORREÇÃO DO CAMINHO DE IMPORTAÇÃO (Mantida) ===
+import NotificationModal from "./NotificationModal"; // Importado
+// ====================================================
+import React from "react"; // Mantido, mas a importação de Hooks deve ser na primeira linha
+import { createPortal } from "react-dom"; // Importando createPortal
 import "antd/dist/reset.css";
+// ===== ALTERAÇÃO: Importar o componente E a lista de status =====
+import PriorityRibbonTabs, { RIBBON_STATUS_LIST } from "./PriorityRibbonTabs"; // Importando PriorityRibbonTabs
+// ==============================================================
+// import Donut3DStatus from "./Donut3DStatus"; // Removido
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
+// ===== ALTERAÇÃO: SPINNER COM CLASSE (para tema) =====
 const LoadingSpinner = ({ text }: { text: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
-        <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }}>
+        <div className="auth-spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ marginTop: '1rem', fontWeight: 'bold' }} className="loading-text">
             {text}
         </div>
     </div>
 );
+// ======================================================
 
 const AcessoNegado = () => {
   const router = useRouter();
@@ -63,6 +76,42 @@ const formatTimeAgo = (date: Date | null): string => {
     return `há ${days} dias`;
 };
 
+// Helper para formatar data e hora do Protheus (ISODate)
+const formatProtheusDateTime = (dateString: string | null | undefined): string => {
+    if (!dateString) {
+        return '—';
+    }
+    try {
+        const dateTest = new Date(dateString);
+        if (isNaN(dateTest.getTime())) {
+            return '—';
+        }
+
+        const year = dateString.substring(0, 4);
+        const month = dateString.substring(5, 7);
+        const day = dateString.substring(8, 10);
+        const hour = dateString.substring(11, 13);
+        const minute = dateString.substring(14, 16);
+
+        if (year.length !== 4 || month.length !== 2 || day.length !== 2 || hour.length !== 2 || minute.length !== 2) {
+             if(dateString.length >= 16){
+                const hourAlt = dateString.substring(11, 13);
+                const minuteAlt = dateString.substring(14, 16);
+                if(hourAlt.length === 2 && minuteAlt.length === 2){
+                    return `${day}/${month}/${year} ${hourAlt}:${minuteAlt}`;
+                }
+             }
+             return '—';
+        }
+
+        return `${day}/${month}/${year} ${hour}:${minute}`;
+
+    } catch (error) {
+        console.error("Erro ao formatar data Protheus:", error);
+        return '—';
+    }
+};
+
 
 interface Nota {
   filial: string;
@@ -82,6 +131,8 @@ interface Nota {
   status_envio_unidade?: string;
   status_compras?: string;
   status_fiscal?: string;
+  dt_lcto_protheus?: string;
+  conferido?: 'S' | 'N' | null;
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
@@ -133,13 +184,40 @@ const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
     );
 };
 
+// ================== INÍCIO DAS ALTERAÇÕES DE ANCORAGEM ==================
+
+/** Encontra o ancestral rolável mais próximo (overflow: auto|scroll) */
+function getScrollParent(node: HTMLElement | null): HTMLElement | null {
+  if (!node) return null;
+  const style = (el: HTMLElement) => getComputedStyle(el);
+  let cur: HTMLElement | null = node.parentElement;
+  while (cur && cur !== document.body) {
+    const s = style(cur);
+    const overflowY = s.overflowY;
+    const overflow = s.overflow;
+    const isScrollable =
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflow === "auto" ||
+      overflow === "scroll";
+    if (isScrollable) return cur;
+    cur = cur.parentElement;
+  }
+  return document.scrollingElement as HTMLElement;
+}
 
 const FilterPopover = ({
-    notas,
+    allFiliais,
+    allTipos,
+    allCompradores,
+    allStatusLancamento,
     onApplyFilters,
     initialFilters
 }: {
-    notas: Nota[],
+    allFiliais: string[],
+    allTipos: string[],
+    allCompradores: string[],
+    allStatusLancamento: string[],
     onApplyFilters: (filters: any) => void,
     initialFilters: any
 }) => {
@@ -150,15 +228,79 @@ const FilterPopover = ({
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
     const [startDate, setStartDate] = useState(initialFilters.startDate || '');
     const [endDate, setEndDate] = useState(initialFilters.endDate || '');
+    const [startDateProtheus, setStartDateProtheus] = useState(initialFilters.startDateProtheus || '');
+    const [endDateProtheus, setEndDateProtheus] = useState(initialFilters.endDateProtheus || '');
+    
     const popoverRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null); // Referência ao botão
+    const [isBrowser, setIsBrowser] = useState(false); // Para garantir que o portal só rode no cliente
 
-    const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
-    const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador || '-'))).sort()], [notas]);
-    const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
+    // --- Nova lógica de ancoragem ---
+    const scrollParentRef = useRef<HTMLElement | null>(null);
+    const POPOVER_WIDTH = 360;
+    const [relPos, setRelPos] = useState<{ top: number; left: number }>({
+        top: -9999,
+        left: -9999,
+    });
+    // --- Fim da nova lógica ---
+
+    const filiaisUnicas = useMemo(() => allFiliais, [allFiliais]);
+    const tiposUnicos = useMemo(() => allTipos, [allTipos]);
+    const responsaveisUnicos = useMemo(() => allCompradores, [allCompradores]);
+    const statusUnicos = useMemo(() => allStatusLancamento, [allStatusLancamento]);
+
+    useEffect(() => {
+        setIsBrowser(true);
+    }, []);
+
+    // --- Nova lógica de ancoragem ---
+    const computeRelativePosition = useCallback(() => {
+        if (!buttonRef.current || !scrollParentRef.current) return;
+
+        const btnRect = buttonRef.current.getBoundingClientRect();
+        const parentRect = scrollParentRef.current.getBoundingClientRect();
+
+        // posição do botão dentro do parent (compensa padding/scroll)
+        const topInParent = btnRect.bottom - parentRect.top + 8; // 8px abaixo do botão
+        const leftInParent = btnRect.right - parentRect.left - POPOVER_WIDTH; // alinhar pela direita
+
+        setRelPos({
+            top: Math.max(0, topInParent),
+            left: Math.max(0, leftInParent),
+        });
+    }, []);
+
+    // Ao abrir: encontra o parent rolável e calcula posição
+    useEffect(() => {
+        if (!isOpen) return;
+        const btn = buttonRef.current;
+        const parent = getScrollParent(btn as any) as HTMLElement | null;
+        scrollParentRef.current = parent || (document.scrollingElement as HTMLElement);
+
+        computeRelativePosition();
+
+        // Ajusta em resize e em mudanças de layout do parent
+        const onResize = () => computeRelativePosition();
+        window.addEventListener("resize", onResize);
+
+        // Observa mudanças de tamanho/posicionamento do botão
+        const ro = new ResizeObserver(() => computeRelativePosition());
+        if (btn) ro.observe(btn);
+
+        return () => {
+            window.removeEventListener("resize", onResize);
+            ro.disconnect();
+        };
+    }, [isOpen, computeRelativePosition]);
+    // --- Fim da nova lógica ---
+
 
     const handleApply = () => {
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento, startDate, endDate });
+        onApplyFilters({
+            filial, tipo, responsavel, statusLancamento,
+            startDate, endDate,
+            startDateProtheus, endDateProtheus
+        });
         setIsOpen(false);
     };
 
@@ -169,93 +311,162 @@ const FilterPopover = ({
         setStatusLancamento('Todos');
         setStartDate('');
         setEndDate('');
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
+        setStartDateProtheus('');
+        setEndDateProtheus('');
+
+        onApplyFilters({
+            filial: 'Todas', tipo: 'Todos', responsavel: 'Todos',
+            statusLancamento: 'Todos', startDate: '', endDate: '',
+            startDateProtheus: '', endDateProtheus: ''
+        });
         setIsOpen(false);
     };
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+            const target = event.target as HTMLElement;
+            const isButton = target.closest('.btn-filter-toggle');
+            
+            if (popoverRef.current && !popoverRef.current.contains(event.target as Node) && !isButton) {
                 setIsOpen(false);
             }
         };
-        document.addEventListener("mousedown", handleClickOutside);
+        
+        if (isOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [popoverRef]);
+    }, [isOpen]);
+
+    
+    // Conteúdo do popover
+    const popoverContent = (
+        <div 
+            ref={popoverRef}
+            className="filter-popover-content"
+            style={{
+                // === CORREÇÃO: Posição ABSOLUTE + Posição Relativa (relPos) ===
+                position: 'absolute',
+                top: relPos.top,
+                left: relPos.left,
+                width: '360px',
+                // ====================================================================
+                backgroundColor: 'white',
+                borderRadius: '8px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                border: '1px solid var(--gcs-border-color)',
+                zIndex: 99999999, // Z-index altíssimo mantido
+                padding: '1rem',
+            }}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
+                <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Inicial</label>
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Final</label>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Inicial</label>
+                    <input type="date" value={startDateProtheus} onChange={(e) => setStartDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Final</label>
+                    <input type="date" value={endDateProtheus} onChange={(e) => setEndDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                </div>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Filial</label>
+                <select value={filial} onChange={(e) => setFilial(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                    {filiaisUnicas.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
+                <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                    {tiposUnicos.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Responsável</label>
+                <select value={responsavel} onChange={(e) => setResponsavel(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                    {responsaveisUnicos.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Status da Nota</label>
+                <select value={statusLancamento} onChange={(e) => setStatusLancamento(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                    {statusUnicos.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button onClick={handleClear} className="btn btn-outline-gray" style={{padding: '8px 16px'}}>Limpar</button>
+                <button onClick={handleApply} className="btn btn-green" style={{padding: '8px 16px'}}>Aplicar</button>
+            </div>
+        </div>
+    );
+
+    // --- Nova lógica de ancoragem ---
+    // Renderiza o popover dentro do SCROLL PARENT
+    const renderPopoverInParent = () => {
+        if (!isOpen || !isBrowser) return null;
+        const parent = scrollParentRef.current;
+        if (!parent) return null;
+        // Usando zIndex alto do popoverContent (99999999)
+        return createPortal(popoverContent, parent);
+    };
+    // --- Fim da nova lógica ---
 
     return (
-        <div style={{ position: 'relative' }} ref={popoverRef}>
-            <button onClick={() => setIsOpen(!isOpen)} title="Filtros Avançados" className="btn btn-outline-gray" style={{padding: '9px'}}>
+        <div style={{ position: 'relative' }}>
+            <button 
+                // --- Nova lógica de ancoragem (onClick) ---
+                onClick={() => {
+                  const next = !isOpen;
+                  setIsOpen(next);
+                  if (!isOpen) {
+                    // calcula e ancora no parent imediatamente
+                    setTimeout(() => {
+                      // garante que scrollParent foi definido
+                      const btn = buttonRef.current;
+                      const parent = getScrollParent(btn as any) as HTMLElement | null;
+                      scrollParentRef.current = parent || (document.scrollingElement as HTMLElement);
+                      computeRelativePosition();
+                    }, 0);
+                  }
+                }}
+                // --- Fim da nova lógica ---
+                title="Filtros Avançados" 
+                className="btn btn-outline-gray btn-filter-toggle" 
+                style={{padding: '9px'}}
+                ref={buttonRef} // Anexar a referência ao botão
+            >
                 <Filter size={20} />
             </button>
 
-            {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    width: '360px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    border: '1px solid var(--gcs-border-color)',
-                    zIndex: 100,
-                    padding: '1rem'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
-                        <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Inicial</label>
-                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Data Final</label>
-                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Filial</label>
-                        <select value={filial} onChange={(e) => setFilial(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {filiaisUnicas.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
-                        <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {tiposUnicos.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Responsável</label>
-                        <select value={responsavel} onChange={(e) => setResponsavel(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {responsaveisUnicos.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Status da Nota</label>
-                        <select value={statusLancamento} onChange={(e) => setStatusLancamento(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {statusUnicos.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                        <button onClick={handleClear} className="btn btn-outline-gray" style={{padding: '8px 16px'}}>Limpar</button>
-                        <button onClick={handleApply} className="btn btn-green" style={{padding: '8px 16px'}}>Aplicar</button>
-                    </div>
-                </div>
-            )}
+            {/* --- Nova lógica de ancoragem (Render) --- */}
+            {renderPopoverInParent()}
+            {/* --- Fim da nova lógica --- */}
         </div>
     );
 };
+// ================== FIM DAS ALTERAÇÕES DE ANCORAGEM ==================
 
 
 const ConfirmationModal = ({
@@ -300,23 +511,6 @@ const ConfirmationModal = ({
     );
 };
 
-const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-  return (
-    <g>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius + 8}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-      />
-    </g>
-  );
-};
-
 
 export default function ConsultaNotas() {
   const { data: session, status } = useSession();
@@ -325,31 +519,80 @@ export default function ConsultaNotas() {
 
   const [notas, setNotas] = useState<Nota[]>([]);
   const [filtroStatus, setFiltroStatus] = useState<string>("Todos");
-  
-  // DEBOUNCE: buscaRaw é o que o usuário digita, busca é o valor com delay
+
   const [buscaRaw, setBuscaRaw] = useState<string>("");
   const [busca, setBusca] = useState<string>("");
-  
+
   const [loading, setLoading] = useState<boolean>(true);
   const [notaSelecionada, setNotaSelecionada] = useState<Nota | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+  // ===== ALTERAÇÃO: CORREÇÃO DO ERRO '1G' =====
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
+  // ============================================
   const [pageSize, setPageSize] = useState<number>(10);
   const [totalServidor, setTotalServidor] = useState<number>(0);
   const [totaisAbas, setTotaisAbas] = useState<Record<string, number>>({});
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos', startDate: '', endDate: '' });
+
+  const [isConfirmConferenciaOpen, setIsConfirmConferenciaOpen] = useState(false);
+  const [conferenciaNota, setConferenciaNota] = useState<Nota | null>(null);
+  const [newConferenciaStatus, setNewConferenciaStatus] = useState<'S' | 'N' | null>(null);
+  const [isSubmittingConferencia, setIsSubmittingConferencia] = useState(false);
+  // O NotificationModal não precisa de z-index ajustado aqui, pois ele usa createPortal no body.
+  const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
+
+  const [advancedFilters, setAdvancedFilters] = useState({
+    filial: 'Todas',
+    tipo: 'Todos',
+    responsavel: 'Todos',
+    statusLancamento: 'Todos',
+    startDate: '',
+    endDate: '',
+    startDateProtheus: '',
+    endDateProtheus: ''
+  });
+
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
 
-  // DEBOUNCE: useEffect para aplicar o delay na busca
+  const [totalPendentes, setTotalPendentes] = useState<number>(0);
+  const [totalNotasHoje, setTotalNotasHoje] = useState<number>(0);
+
+  const [allFiliais, setAllFiliais] = useState<string[]>(['Todos']);
+  const [allTipos, setAllTipos] = useState<string[]>(['Todos']);
+  const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
+  const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
+
+  // --- ESTADO DO TEMA ADICIONADO ---
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // --- EFEITOS DE TEMA ADICIONADOS ---
+  // 1. Carregar tema do localStorage ao montar
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else {
+      setTheme('light'); // Padrão é claro
+    }
+  }, []);
+
+  // 2. Aplicar tema ao body e salvar no localStorage
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(theme);
+  }, [theme]);
+  // --- FIM DOS EFEITOS DE TEMA ---
+
+
   useEffect(() => {
     const handler = setTimeout(() => {
         setBusca(buscaRaw);
-        setPaginaAtual(1); // Reseta a página para a 1 a cada nova busca
-    }, 400); // Delay de 400ms
+        setPaginaAtual(1);
+    }, 400);
 
     return () => {
         clearTimeout(handler);
@@ -365,8 +608,7 @@ export default function ConsultaNotas() {
     setFiltroStatus(status);
     setPaginaAtual(1);
   };
-  
-  // --- GUARDA DE ROTA ---
+
   useEffect(() => {
     if (status === 'loading') {
       setAuthStatus('loading');
@@ -375,12 +617,11 @@ export default function ConsultaNotas() {
     if (status === 'authenticated') {
       const user = session.user;
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralDeNotas');
-      
+
       if (hasAccess) {
         setAuthStatus('authorized');
-        // fetchNotas(); // <<< AJUSTE APLICADO: Chamada removida daqui
       } else {
-        setAuthStatus('unauthorized');
+        router.push('/login');
       }
     } else {
         router.push('/login');
@@ -395,123 +636,40 @@ export default function ConsultaNotas() {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  const statusDisponiveis = useMemo(() => {
-    return ["Todos", "Compras", "Fiscal", "Enviadas", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
-  }, []);
-  
-  const notasFiltradasPorAvancado = useMemo(() => {
-    return (notas || []).filter((nota) => {
-        const filialOk = advancedFilters.filial === 'Todas' || nota.filial === advancedFilters.filial;
-        const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || (nota.comprador || '-') === advancedFilters.responsavel;
-        const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        
-        let dateOk = true;
-        if (advancedFilters.startDate || advancedFilters.endDate) {
-            const parts = nota.dt_recebimento.split('/');
-            if (parts.length === 3) {
-                // Converte DD/MM/YYYY para YYYY-MM-DD para comparação de strings
-                const notaDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                const start = advancedFilters.startDate;
-                const end = advancedFilters.endDate;
+  // ===== ALTERAÇÃO: A lista de status agora é importada do componente =====
+  const statusDisponiveis = RIBBON_STATUS_LIST; // Importado de PriorityRibbonTabs
+  // ========================================================================
 
-                if (start && notaDateStr < start) {
-                    dateOk = false;
-                }
-                if (end && notaDateStr > end) {
-                    dateOk = false;
-                }
-            } else {
-                dateOk = false; 
-            }
-        }
 
-        return filialOk && tipoOk && responsavelOk && statusLancamentoOk && dateOk;
-    });
-  }, [notas, advancedFilters]);
-  
-  // Usa os totais do backend quando disponíveis (página independente)
   const statusCounts = useMemo(() => {
-      if (totaisAbas && Object.keys(totaisAbas).length) return totaisAbas;
+    if (totaisAbas && Object.keys(totaisAbas).length) return totaisAbas;
+    return {};
+  }, [totaisAbas]);
 
-      // Fallback local (se backend não enviar 'tabs')
-      const source = notasFiltradasPorAvancado;
-      const counts: Record<string, number> = { Todos: source.length };
-      
-      const sourcePendentes = source.filter(n => n.status_lancamento !== 'Concluído');
-
-      const statusNfMap: Record<string, string> = {
-        "Erro I.A.": "erro i.a.",
-        "Não Recebidas": "aguardando",
-        "Importado": "importado",
-        "Manual": "manual",
-        "Falha ERP": "erro execauto"
-      };
-
-      Object.keys(statusNfMap).forEach(status => {
-          const statusValue = statusNfMap[status];
-          // As abas "Manual" e "Importado" contam todos
-          if (status === "Manual" || status === "Importado") {
-              counts[status] = source.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          } else {
-              // As outras abas contam apenas pendentes
-              counts[status] = sourcePendentes.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          }
-      });
-      
-      counts['Compras'] = sourcePendentes.filter(n => n.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      counts['Fiscal'] = sourcePendentes.filter(n => n.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      counts['Enviadas'] = sourcePendentes.filter(n => n.status_envio_unidade?.trim().toUpperCase() === 'SIM').length;
-
-      return counts;
-  }, [totaisAbas, notasFiltradasPorAvancado]);
 
   const dadosGraficoStatus = useMemo(() => {
     return statusDisponiveis
       .filter(key => key !== "Todos" && (statusCounts[key] || 0) > 0)
-      .map(name => ({ name, value: statusCounts[name] }));
-  }, [statusCounts, statusDisponiveis]);
+      .map(name => ({ name, value: statusCounts[name] })); // CORRIGIDO: de key para name
+  // ===== ALTERAÇÃO: Removido 'statusDisponiveis' do array de dependência =====
+  }, [statusCounts]);
+  // ==========================================================================
 
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos' || advancedFilters.startDate !== '' || advancedFilters.endDate !== '';
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' ||
+                               advancedFilters.responsavel !== 'Todos' ||
+                               advancedFilters.tipo !== 'Todos' ||
+                               advancedFilters.statusLancamento !== 'Todos' ||
+                               advancedFilters.startDate !== '' ||
+                               advancedFilters.endDate !== '' ||
+                               advancedFilters.startDateProtheus !== '' ||
+                               advancedFilters.endDateProtheus !== '';
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
-  
-  const notasProcessadasHoje = useMemo(() => {
-    const hoje = new Date();
-    const hojeString = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-    return notas.filter(nota => {
-        if (!nota.dt_atualizacao) return false;
-        
-        let notaDateString;
-        
-        if (nota.dt_atualizacao.includes('/')) {
-            const parts = nota.dt_atualizacao.split(' ')[0].split('/');
-            if (parts.length === 3) {
-                notaDateString = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            } else {
-                return false;
-            }
-        } else if (nota.dt_atualizacao.includes('-')) {
-            notaDateString = nota.dt_atualizacao.split(' ')[0].split('T')[0];
-        } else {
-            return false;
-        }
-
-        return notaDateString === hojeString;
-    }).length;
-  }, [notas]);
-
-  const notasPendentes = useMemo(() => {
-    const statusExcluidos = ["manual", "importado"];
-    return notas.filter(nota => {
-      return nota.status_nf && !statusExcluidos.includes(nota.status_nf.trim().toLowerCase());
-    }).length;
-  }, [notas]);
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
@@ -523,16 +681,16 @@ export default function ConsultaNotas() {
         setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
     }
   }, [filtroStatus, dadosGraficoStatus]);
-  
+
   useEffect(() => {
     setChartKey(prevKey => prevKey + 1);
-  }, [filtroStatus]);
+  }, [filtroStatus, theme]); // Adicionado theme aqui para recarregar o gráfico
 
 
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
-  
+
   const onPieLeave = () => {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
@@ -540,6 +698,7 @@ export default function ConsultaNotas() {
     setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
   };
 
+  // ATUALIZADO: Handler para o Donut
   const handleChartClick = (data: any) => {
     if (data && data.name) {
         const statusName = data.name;
@@ -558,7 +717,6 @@ export default function ConsultaNotas() {
     setModalAberto(true);
   };
 
-  // ===== Helpers/mapeamentos para a chamada paginada =====
   const statusFiltroToStatusNf = (tab: string): string | null => {
     const map: Record<string, string> = {
       "Erro I.A.": "erro i.a.",
@@ -567,13 +725,13 @@ export default function ConsultaNotas() {
       "Manual": "manual",
       "Falha ERP": "erro execauto",
     };
-    return map[tab] ?? null; // abas "Compras", "Fiscal", "Enviadas" não mapeiam para status_nf
+    return map[tab] ?? null;
   };
 
-  const sortWhitelist = new Set(['dt_atualizacao','dt_recebimento','nf','serie','nome_fornecedor','status_nf','tipo_nf']);
+  const sortWhitelist = new Set(['dt_atualizacao','dt_recebimento','nf','serie','nome_fornecedor','status_nf','tipo_nf', 'dt_lcto_protheus']);
   const sortKeyToBackend = (k: keyof Nota | null) => (k && sortWhitelist.has(k as string) ? (k as string) : 'dt_atualizacao');
 
-  // ===== Chamada ao novo endpoint paginado =====
+
   const fetchNotas = async () => {
       try {
         setLoading(true);
@@ -583,36 +741,29 @@ export default function ConsultaNotas() {
           pageSize,
           sortBy: sortKeyToBackend(sortConfig.key),
           sortDir: sortConfig.direction || 'asc',
+          termo: (busca || '').trim() || undefined,
+          filial: advancedFilters.filial === 'Todas' ? undefined : advancedFilters.filial,
+          tipo: advancedFilters.tipo === 'Todas' ? undefined : advancedFilters.tipo,
+          responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
+          statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
+          startDate: advancedFilters.startDate || undefined,
+          endDate: advancedFilters.endDate || undefined,
+          startDateProtheus: advancedFilters.startDateProtheus || undefined,
+          endDateProtheus: advancedFilters.endDateProtheus || undefined
         };
 
-        // --- INÍCIO DA MODIFICAÇÃO ---
-        // busca
-        const termo = (busca || '').trim();
-        if (termo) {
-          // Envia o termo de busca genérico.
-          // O n8n (Monta Query) tratará a busca em nf, chave e fornecedor.
-          body.termo = termo;
-        }
-        // --- FIM DA MODIFICAÇÃO ---
-
-
-        // mapeia abas: status_nf ou flags por setor
-        const statusNf = statusFiltroToStatusNf(filtroStatus);
-        if (statusNf) {
-          body.status_nf = statusNf; // Erro I.A., Não Recebidas, Importado, Manual, Falha ERP
-        } else {
-          // abas por setor: filtra no servidor (pendentes)
-          if (filtroStatus === 'Compras')  body.only_compras_pendentes  = true;
-          if (filtroStatus === 'Fiscal')   body.only_fiscal_pendentes   = true;
-          if (filtroStatus === 'Enviadas') body.only_enviadas_pendentes = true;
+        if (filtroStatus && filtroStatus !== 'Todos') {
+            const statusNf = statusFiltroToStatusNf(filtroStatus);
+            if (statusNf) {
+                body.status_nf = statusNf;
+            } else {
+                if (filtroStatus === 'Compras')  body.only_compras_pendentes  = true;
+                if (filtroStatus === 'Fiscal')   body.only_fiscal_pendentes   = true;
+                if (filtroStatus === 'Enviadas') body.only_enviadas_pendentes = true;
+            }
         }
 
-        // filtros avançados
-        if (advancedFilters.tipo && advancedFilters.tipo !== 'Todos') {
-          body.tipo_nf = advancedFilters.tipo.toLowerCase();
-        }
-        if (advancedFilters.startDate) body.dt_ini = advancedFilters.startDate;
-        if (advancedFilters.endDate)   body.dt_fim  = advancedFilters.endDate;
+        console.log("==> Enviando body para API:", JSON.stringify(body, null, 2));
 
         const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho-paginado", {
           method: "POST",
@@ -621,70 +772,57 @@ export default function ConsultaNotas() {
           body: JSON.stringify(body),
         });
         const payload = await response.json();
-        // Esperado: { page, pageSize, total, totalPages, tabs, data: [...] }
+
+        console.log("<== Recebido payload da API:", payload);
+
         setNotas(Array.isArray(payload?.data) ? payload.data : []);
         setTotalServidor(Number(payload?.total ?? 0));
-        setTotaisAbas(payload?.tabs || {}); // <<< totais globais para as abas
-        setChartKey(prevKey => prevKey + 1); 
+        setTotaisAbas(payload?.tabs || {});
+        setTotalPendentes(Number(payload?.pendentes_total ?? 0));
+        setTotalNotasHoje(Number(payload?.notas_hoje ?? 0));
+
+        // Atualiza listas de filtros APENAS se vierem dados válidos
+        if (Array.isArray(payload?.distinct_filiais) && payload.distinct_filiais.length > 0) {
+            setAllFiliais(payload.distinct_filiais);
+        } else if (!advancedFilters.filial || advancedFilters.filial === 'Todas') { // Reseta se não houver filtro aplicado
+             setAllFiliais(['Todos']);
+        }
+        if (Array.isArray(payload?.distinct_tipos) && payload.distinct_tipos.length > 0) {
+             setAllTipos(payload.distinct_tipos);
+        } else if (!advancedFilters.tipo || advancedFilters.tipo === 'Todos') {
+             setAllTipos(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_compradores) && payload.distinct_compradores.length > 0) {
+             setAllCompradores(payload.distinct_compradores);
+        } else if (!advancedFilters.responsavel || advancedFilters.responsavel === 'Todos') {
+             setAllCompradores(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_status) && payload.distinct_status.length > 0) {
+             setAllStatusLancamento(payload.distinct_status);
+        } else if (!advancedFilters.statusLancamento || advancedFilters.statusLancamento === 'Todos') {
+             setAllStatusLancamento(['Todos']);
+        }
+
+
+        setChartKey(prevKey => prevKey + 1);
         setLastUpdated(new Date());
       } catch (error) {
         console.error("Erro ao buscar as notas:", error);
+        setNotas([]);
+        setTotalServidor(0);
+        setTotaisAbas({});
+        setTotalPendentes(0);
+        setTotalNotasHoje(0);
+        // Reseta filtros em caso de erro grave
+        setAllFiliais(['Todos']);
+        setAllTipos(['Todos']);
+        setAllCompradores(['Todos']);
+        setAllStatusLancamento(['Todos']);
       } finally {
         setLoading(false);
       }
     };
 
-    const notasFiltradasOrdenadas = useMemo(() => {
-    let notasFiltradas = notasFiltradasPorAvancado.filter((nota) => {
-      const termo = busca.toLowerCase();
-      
-      const buscaOk =
-        nota.nome_fornecedor.toLowerCase().includes(termo) ||
-        nota.nf.includes(termo) ||
-        nota.chave.includes(termo);
-
-      const concluidoOk = filtroStatus === 'Todos' || filtroStatus === 'Manual' || filtroStatus === 'Importado' || nota.status_lancamento !== 'Concluído';
-
-      let statusOk = false;
-      if (filtroStatus === 'Todos') {
-        statusOk = true;
-      } else if (filtroStatus === 'Compras') {
-        statusOk = nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO';
-      } else if (filtroStatus === 'Fiscal') {
-        statusOk = nota.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO';
-      } else if (filtroStatus === 'Enviadas') {
-        statusOk = nota.status_envio_unidade?.trim().toUpperCase() === 'SIM';
-      } else {
-        const statusNfEquivalente = {
-            "Erro I.A.": "erro i.a.",
-            "Não Recebidas": "aguardando",
-            "Importado": "importado",
-            "Manual": "manual",
-            "Falha ERP": "erro execauto"
-        }[filtroStatus] || filtroStatus.toLowerCase();
-        
-        statusOk = (nota.status_nf || '').trim().toLowerCase() === statusNfEquivalente;
-      }
-
-      return statusOk && buscaOk && concluidoOk;
-    });
-
-    if (sortConfig.key) {
-      notasFiltradas.sort((a, b) => {
-        const aValue = a[sortConfig.key!]
-        const bValue = b[sortConfig.key!]
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-
-    return notasFiltradas;
-  }, [notasFiltradasPorAvancado, busca, filtroStatus, sortConfig]);
 
   const requestSort = (key: keyof Nota) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -692,20 +830,35 @@ export default function ConsultaNotas() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setPaginaAtual(1); // Resetar para a primeira página ao ordenar
   };
 
-  // Agora a lista exibida é exatamente a página retornada pelo servidor (após filtros locais opcionais)
-  const notasPaginadas = notasFiltradasOrdenadas;
+  const notasPaginadas = notas; // A paginação agora é feita no backend
 
+  // Cores sólidas
   const coresStatus: Record<string, string> = {
     "Erro I.A.": "#ff6f61",
     "Não Recebidas": "var(--gcs-orange)",
     "Importado": "var(--gcs-green)",
     "Manual": "#343a40",
     "Falha ERP": "#8B0000",
-    "Compras": "#FFC107",
+    // ===== ALTERAÇÃO: Cor "Compras" (fallback) =====
+    "Compras": "#FACC15",
+    // ===============================================
     "Fiscal": "#00314A",
     "Enviadas": "#17a2b8",
+  };
+  
+  // *** ADICIONADO: Mapeamento de Cores/Gradientes do Donut ***
+  const coresStatusDonut: Record<string, string> = {
+    "Erro I.A.": "url(#gradVermelho)",
+    "Não Recebidas": "url(#gradLaranja)",
+    "Importado": "url(#gradVerde)",
+    "Manual": "url(#gradCinza)",
+    "Falha ERP": "url(#gradVermelho)",
+    "Compras": "url(#gradAmarelo)", // Corrigido
+    "Fiscal": "url(#gradAzul)",
+    "Enviadas": "url(#gradAzulClaro)",
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
@@ -719,10 +872,11 @@ export default function ConsultaNotas() {
   };
 
   const handleExportXLSX = () => {
-    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
+    const headers = ["Conferido", "Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
 
-    const data = notasFiltradasOrdenadas.map(nota => {
+    const data = notasPaginadas.map(nota => {
       return [
+        nota.conferido === 'S' ? 'Sim' : 'Não',
         nota.status_lancamento || '',
         nota.filial,
         nota.nf,
@@ -730,6 +884,7 @@ export default function ConsultaNotas() {
         nota.tipo_nf || '',
         nota.nome_fornecedor,
         `${nota.dt_recebimento} ${nota.hr_Recebimento}`,
+        formatProtheusDateTime(nota.dt_lcto_protheus),
         nota.status_envio_unidade || '',
         nota.status_compras || '',
         nota.status_fiscal || '',
@@ -743,27 +898,149 @@ export default function ConsultaNotas() {
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
     worksheet['!cols'] = [
-        { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, 
+        { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
         { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-        { wch: 50 }, { wch: 25 }, { wch: 50 },
+        { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },
     ];
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
-    XLSX.writeFile(workbook, "Consulta_Notas_Fiscais.xlsx");
+    XLSX.writeFile(workbook, "Consulta_Notas_Fiscais_Pagina.xlsx");
   };
+
+  // --- FUNÇÕES DE CONFERÊNCIA (CHECKBOX) ---
+
+  // 1. Abre o modal de confirmação
+  const handleCheckboxClick = (nota: Nota) => {
+      if (isSubmittingConferencia) return; // Impede cliques duplos
+      const newStatus = nota.conferido === 'S' ? 'N' : 'S';
+      setConferenciaNota(nota);
+      setNewConferenciaStatus(newStatus);
+      setIsConfirmConferenciaOpen(true);
+  };
+
+  // 2. Fech
+  // 2. Fecha o modal de confirmação
+  const handleCloseConferencia = () => {
+      if (isSubmittingConferencia) return;
+      setIsConfirmConferenciaOpen(false);
+      setConferenciaNota(null);
+      setNewConferenciaStatus(null);
+  };
+
+  // 3. Chamada à API após clicar em "Sim"
+  const handleConfirmConferencia = async () => {
+      console.log("handleConfirmConferencia: Iniciando..."); // Log 1
+
+      // 1. Verifica a sessão
+      if (!session?.user?.email) {
+          console.error("handleConfirmConferencia: Erro - Sessão ou email do usuário não encontrado."); // Log 2
+          setNotification({ visible: true, type: 'error', message: 'Erro: Sessão do usuário não encontrada. Faça login novamente.' });
+          setIsConfirmConferenciaOpen(false);
+          return;
+      }
+      console.log("handleConfirmConferencia: Sessão OK, Email:", session.user.email); // Log 3
+
+      // 2. Verifica os dados da nota
+      if (!conferenciaNota || !newConferenciaStatus) {
+          console.error("handleConfirmConferencia: Erro - Dados da nota ou novo status ausentes."); // Log 4
+          setNotification({ visible: true, type: 'error', message: 'Erro: Informações da nota não encontradas. Tente novamente.' });
+          setIsConfirmConferenciaOpen(false);
+          return;
+      }
+      console.log("handleConfirmConferencia: Dados da nota OK:", { chave: conferenciaNota.chave, novoStatus: newConferenciaStatus }); // Log 5
+
+      // 3. Inicia o envio
+      setIsSubmittingConferencia(true);
+      console.log("handleConfirmConferencia: Enviando para API /api/nfe/nfe-conferencia..."); // Log 6
+
+      try {
+          const bodyPayload = {
+              chave: conferenciaNota.chave,
+              email_solicitante: session.user.email,
+              conferido: newConferenciaStatus
+          };
+          console.log("handleConfirmConferencia: Payload:", JSON.stringify(bodyPayload)); // Log 7
+
+          const response = await fetch('/api/nfe/nfe-conferencia', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(bodyPayload)
+          });
+          console.log("handleConfirmConferencia: Resposta da API recebida, Status HTTP:", response.status); // Log 8
+
+          let result: any = {};
+          try {
+              result = await response.json();
+              console.log("handleConfirmConferencia: Corpo da Resposta (JSON):", result); // Log 9
+          } catch (jsonError) {
+              const textResponse = await response.text().catch(() => "Erro ao ler corpo da resposta");
+              console.error("handleConfirmConferencia: Resposta não é JSON. Resposta como Texto:", textResponse); // Log 10
+              result = { status: 'error', message: `Erro ${response.status}: ${response.statusText}. Resposta do servidor não é JSON.` };
+          }
+
+          if (response.ok && result?.status === 'ok') {
+              console.log("handleConfirmConferencia: Sucesso! Status HTTP OK e status interno 'ok'."); // Log 11
+              setNotification({ visible: true, type: 'success', message: `Nota ${newConferenciaStatus === 'S' ? 'marcada' : 'desmarcada'} com sucesso!` });
+              fetchNotas(); // Recarrega os dados
+          } else {
+              console.error("handleConfirmConferencia: Falha - Resposta não OK ou status interno diferente de 'ok'."); // Log 12
+              const errorMessage = result?.message || `Erro ao se comunicar com o servidor (HTTP ${response.status})`;
+              throw new Error(errorMessage);
+          }
+
+      } catch (error: any) {
+          console.error("handleConfirmConferencia: Erro no bloco catch:", error); // Log 13
+          setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível realizar a operação.' });
+      } finally {
+          console.log("handleConfirmConferencia: Bloco finally executado."); // Log 14
+          setIsSubmittingConferencia(false);
+          setIsConfirmConferenciaOpen(false);
+          setConferenciaNota(null);
+          setNewConferenciaStatus(null);
+      }
+  };
+
+  // 4. Fecha o modal de notificação
+  const handleCloseNotification = () => {
+      setNotification({ visible: false, type: 'success', message: '' });
+      console.log("handleCloseNotification: Notificação fechada."); // Log 15
+  };
+  // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
+
 
   const renderLegendText = (value: string) => {
-    return <span style={{ marginLeft: '4px' }}>{value}</span>;
+    return <span style={{ marginLeft: '4px' }} className="recharts-legend-item-text">{value}</span>;
   };
 
-  // Dispara nova busca sempre que parâmetros do backend mudarem
   useEffect(() => {
     if (authStatus === 'authorized') {
       fetchNotas();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus, paginaAtual, pageSize, busca, filtroStatus, advancedFilters, sortConfig]);
+
+  // *** ADICIONADO: Estilos dinâmicos do Tooltip ***
+  const glassTooltipStyle: React.CSSProperties = {
+    borderRadius: '12px',
+    border: '1px solid',
+    backdropFilter: 'blur(14px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+    boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A',
+    background: theme === 'dark' ? 'rgba(25,39,53,.50)' : 'rgba(255,255,255,.25)',
+    borderColor: theme === 'dark' ? 'rgba(125,173,222,.28)' : 'rgba(255,255,255,.35)',
+  };
+
+  const tooltipLabelStyle: React.CSSProperties = {
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A',
+    fontWeight: 'bold',
+  };
+  
+  const tooltipItemStyle: React.CSSProperties = {
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A',
+    };
+  // *** FIM DOS ESTILOS DINÂMICOS ***
 
   if (authStatus === 'loading') {
     return (
@@ -780,8 +1057,117 @@ export default function ConsultaNotas() {
         </div>
     );
   }
-  
+
+  const renderActiveShape = (props: any) => {
+    const RADIAN = Math.PI / 180;
+    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+    const sin = Math.sin(-RADIAN * midAngle);
+    const cos = Math.cos(-RADIAN * midAngle);
+    const sx = cx + (outerRadius + 2) * cos; // Diminuído o popout
+    const sy = cy + (outerRadius + 2) * sin;
+    const mx = cx + (outerRadius + 15) * cos; // Diminuída a linha
+    const my = cy + (outerRadius + 15) * sin;
+    const ex = mx + (cos >= 0 ? 1 : -1) * 15; // Diminuída a linha
+    const ey = my;
+    const textAnchor = cos >= 0 ? 'start' : 'end';
+    
+    // Define a cor do texto com base no tema
+    const labelFillColor = theme === 'dark' ? '#F1F5F9' : '#333';
+    const percentFillColor = theme === 'dark' ? '#94A3B8' : '#999';
+
+    return (
+      <g>
+        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 4} outerRadius={outerRadius + 8} fill={fill} /> {/* Aumentado o pop-out */}
+        <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
+        <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill={labelFillColor} style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill={percentFillColor} style={{ fontSize: '12px' }}>{`(${value} - ${(percent * 100).toFixed(1)}%)`}</text>
+      </g>
+    );
+  };
+
+  // --- COMPONENTE CHECKBOX FINAL (RESTAURADO COM LÓGICA CORRIGIDA) ---
+  const ConferidoCheckbox = ({ conferido, onClick }: { conferido: 'S' | 'N' | null | undefined, onClick: () => void }) => {
+    // Log removido, pois confirmamos que o valor chega corretamente.
+    // console.log(`ConferidoCheckbox FINAL - Recebido: '${conferido}'`);
+
+    const isChecked = conferido === 'S';
+    // Usa as variáveis CSS originais para cor
+    const color = isChecked ? 'var(--gcs-green)' : 'var(--gcs-gray-dark)';
+
+    return (
+        <button
+            onClick={onClick}
+            title={isChecked ? "Desmarcar conferência" : "Marcar como conferido"}
+            disabled={isSubmittingConferencia} // Usa a variável do escopo pai
+            style={{
+                background: 'none',
+                border: 'none', // Sem borda extra
+                cursor: isSubmittingConferencia ? 'wait' : 'pointer',
+                padding: '4px', // Padding original
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: color, // Cor baseada no estado
+                opacity: isSubmittingConferencia ? 0.5 : 1, // Opacidade se estiver submetendo
+                // Animação de giro pode ser adicionada aqui se desejar,
+                // mas requer passar qual nota está sendo processada.
+                // Ex: animation: isProcessingThisNota ? 'spin 1s linear infinite' : 'none'
+            }}
+            className="conferido-checkbox-btn" // Classe para o tema escuro
+        >
+            {/* Renderização condicional direta dos ícones */}
+            {isChecked ? (
+                <CheckSquare size={20} />
+            ) : (
+                <Square size={20} />
+            )}
+            {/* Texto de debug removido */}
+        </button>
+    );
+  };
+
+
   return (<>
+    {/* --- SVG DE GRADIENTES (DO VISÃO GERAL) --- */}
+    <svg width="0" height="0" style={{ position: 'absolute', zIndex: -1 }}>
+        <defs>
+          <linearGradient id="gradLaranja" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f79b4d" />
+            <stop offset="100%" stopColor="#F58220" />
+          </linearGradient>
+          <linearGradient id="gradVerde" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#9DDE5B" />
+            <stop offset="100%" stopColor="#5FB246" />
+          </linearGradient>
+          {/* --- NOVOS GRADIENTES ADICIONADOS --- */}
+          <linearGradient id="gradVermelho" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ff6f61" />
+            <stop offset="100%" stopColor="#E11D2E" />
+          </linearGradient>
+          {/* ===== ALTERAÇÃO: Cor "Compras" (Amarelo) ===== */}
+          <linearGradient id="gradAmarelo" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FDE68A" />
+            <stop offset="100%" stopColor="#FACC15" />
+          </linearGradient>
+          {/* ============================================== */}
+          <linearGradient id="gradAzul" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1F4E79" />
+            <stop offset="100%" stopColor="#00314A" />
+          </linearGradient>
+          <linearGradient id="gradAzulClaro" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#17a2b8" />
+            <stop offset="100%" stopColor="#1F4E79" />
+          </linearGradient>
+          <linearGradient id="gradCinza" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6c757d" />
+            <stop offset="100%" stopColor="#343a40" />
+          </linearGradient>
+        </defs>
+    </svg>
+
+    {/* --- BLOCO DE ESTILO GLOBAL ATUALIZADO --- */}
     <style>{`
         :root {
             --gcs-blue: #00314A;
@@ -793,46 +1179,32 @@ export default function ConsultaNotas() {
             --gcs-gray-dark: #6c757d;
             --gcs-border-color: #dee2e6;
             --gcs-gray-soft: #adb5bd;
+
+            /* Cores do Funil (usadas pelo novo componente) */
+            --gcs-red-light-bg: #f8d7da;
+            --gcs-red-border: #f1c2c7;
+            --gcs-red-text: #b22c38;
+            --gcs-brand-red: #E11D2E;
+
+            --gcs-orange-light-bg: #fff8e1;
+            --gcs-orange-border: #FDBA74;
+            --gcs-orange-text: #F58220;
+            --gcs-brand-orange: #EA580C;
+
+            --gcs-blue-light-bg: #f1f5fb;
+            --gcs-blue-border: #a3b8d1;
+            --gcs-blue-text: #00314A;
+            --gcs-brand-blue: #1F4E79;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- ESTILOS DE BASE (COMUNS) --- */
         .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
         .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .btn:disabled { cursor: not-allowed; opacity: 0.6; }
-        .btn-green { background-color: var(--gcs-green); color: white; }
-        .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
-        .btn-dark-gray {
-            background-color: #344054;
-            color: white;
-            padding: 8px 16px;
-            font-size: 14px;
-            border: 1px solid #1d2939;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-        .btn-dark-gray:hover:not(:disabled) {
-            background-color: #1d2939;
-        }
-        .btn-outline-gray { background-color: #fff; color: var(--gcs-gray-dark); border-color: var(--gcs-border-color); }
-        .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
-        .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
-        .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
-        .tab-button { background: none; border: none; cursor: pointer; padding: 8px 12px 12px 12px; font-size: 1rem; font-weight: 500; color: var(--gcs-gray-dark); position: relative; transition: all 0.2s ease-in-out; }
-        .tab-button::after { content: ''; position: absolute; bottom: -2px; right: 0; width: 100%; height: 100%; border-style: solid; border-color: transparent; border-image: none; opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in-out; pointer-events: none; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.2)); }
-        .tab-button:hover:not(.active) { transform: translateY(-2px); color: var(--gcs-blue); }
-        .tab-button.active { color: var(--gcs-orange); font-weight: 600; transform: translateY(-2px); }
-        .tab-button.active::after {
-            opacity: 1;
-            transform: scale(1);
-            border-top: 3px solid transparent;
-            border-right: 3px solid var(--gcs-orange-light);
-            border-bottom: 3px solid var(--gcs-orange-light);
-            border-left: 3px solid transparent;
-            border-top-right-radius: 8px;
-        }
+        
         .th-sortable { cursor: pointer; transition: color 0.2s ease-in-out; user-select: none; display: flex; align-items: center; }
         .th-sortable:hover { color: #ffffffd0; }
-        .ant-pagination-item-active { background-color: var(--gcs-blue) !important; border-color: var(--gcs-blue) !important; }
-        .ant-pagination-item-active a { color: white !important; }
 
         .status-badge {
             padding: 4px 10px;
@@ -844,17 +1216,11 @@ export default function ConsultaNotas() {
             text-align: center;
             min-width: 80px;
         }
-
-        .data-row:hover {
-            background-color: var(--gcs-gray-light) !important;
-            cursor: default;
-        }
-
+        
         .clickable-chart .recharts-pie-sector path {
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
         .chart-3d-effect .recharts-pie-sector path {
             stroke: #fff;
             stroke-width: 1px;
@@ -865,19 +1231,482 @@ export default function ConsultaNotas() {
                     drop-shadow(5px 5px 0px rgba(0,0,0,0.06));
         }
 
-        /* ESTILOS PARA OS CARDS */
-        .kpi-card, .chart-card, .main-content-card, .tabs-card, .content-card {
-            background-color: #fff;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        /* --- MODO CLARO --- */
+        body.light {
+            background-color: #E9ECEF !important;
+            transition: background 0.3s ease;
+        }
+        body.light .main-container {
+            background-color: #E9ECEF;
+        }
+        body.light .btn-green { background-color: var(--gcs-green); color: white; }
+        body.light .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
+        body.light .btn-dark-gray {
+            background-color: #344054; color: white; padding: 8px 16px;
+            font-size: 14px; border: 1px solid #1d2939; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        body.light .btn-dark-gray:hover:not(:disabled) { background-color: #1d2939; }
+        body.light .btn-outline-gray { background-color: #fff; color: var(--gcs-gray-dark); border-color: var(--gcs-border-color); }
+        body.light .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
+        body.light .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
+        body.light .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
+
+        body.light .ant-pagination-item-active { background-color: var(--gcs-blue) !important; border-color: var(--gcs-blue) !important; }
+        body.light .ant-pagination-item-active a { color: white !important; }
+
+        body.light .data-row:hover { background-color: var(--gcs-gray-light) !important; cursor: default; }
+        body.light .kpi-card, body.light .chart-card, body.light .main-content-card, body.light .content-card, body.light .responsive-table-wrapper {
+            background-color: #fff; border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); border: 1px solid var(--gcs-border-color);
+        }
+        /* Ajuste para PriorityRibbonTabs */
+        body.light .tabs-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+        }
+        body.light .kpi-card, body.light .chart-card, body.light .main-content-card, body.light .content-card { padding: 1.5rem; }
+        /* body.light .tabs-card { padding: 1rem 1.5rem; } */ /* Removido para PriorityRibbonTabs */
+
+        body.light .responsive-table thead { background-color: var(--gcs-blue); color: #fff; }
+        body.light .responsive-table tbody tr { border-top: 1px solid var(--gcs-border-color); }
+        body.light .responsive-table tbody tr:nth-of-type(odd) { background-color: #ffffff; }
+        body.light .responsive-table tbody tr:nth-of-type(even) { background-color: var(--gcs-gray-light); }
+        body.light .responsive-table td { color: #333; }
+        body.light .responsive-table td::before { color: var(--gcs-blue); }
+
+        /* CORREÇÃO TABELA */
+        body.light .table-note-number { font-weight: bold; color: #343a40; }
+        body.light .table-note-series { color: var(--gcs-gray-dark); }
+
+
+        body.light .recharts-default-tooltip {
+            border-radius: 12px !important;
+            border: 1px solid rgba(255,255,255,.35) !important;
+            background: rgba(255,255,255,.25) !important;
+            backdrop-filter: blur(14px) saturate(140%) !important;
+            -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+            color: #00314A !important;
+        }
+        body.light .recharts-legend-item-text { color: #333 !important; }
+        
+        /* ===== ALTERAÇÃO: SPINNER MODO CLARO ===== */
+        body.light .loading-text { color: var(--gcs-blue); }
+        body.light .auth-spinner {
+            border: 4px solid var(--gcs-gray-medium);
+            border-top: 4px solid var(--gcs-blue);
+        }
+        /* ======================================== */
+        
+        /* ===== ALTERAÇÃO: Cores KPI MODO CLARO ===== */
+        body.light h4.kpi-title {
+            color: #4A5568 !important; /* Cinza escuro, menos "apagado" */
+            font-weight: 600 !important;
+        }
+        body.light p.kpi-value-green { color: #2F855A !important; } /* Verde mais vivo */
+        body.light p.kpi-value-orange { color: #DD6B20 !important; } /* Laranja mais vivo */
+        /* ========================================= */
+
+        /* Botão de Tema - Modo Claro */
+        .theme-toggle-btn {
+          background: none; border: 1px solid transparent; border-radius: 8px; padding: 9px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
+        }
+        body.light .theme-toggle-btn { 
+          color: var(--gcs-gray-dark); 
+          border-color: var(--gcs-border-color); 
+          background: #fff;
+        }
+        body.light .theme-toggle-btn:hover { 
+          background: var(--gcs-gray-light); 
+          border-color: var(--gcs-gray-dark);
+        }
+
+        /* Popover de Filtro - Modo Claro */
+        body.light .filter-popover-content {
+            background-color: white;
             border: 1px solid var(--gcs-border-color);
         }
+        body.light .filter-popover-content h4 { color: var(--gcs-blue); }
+        body.light .filter-popover-content label { color: #333; }
+        body.light .filter-popover-content input,
+        body.light .filter-popover-content select {
+            background-color: #fff;
+            color: #333;
+            border: 1px solid var(--gcs-border-color);
+        }
+        
+        /* ===== ADICIONADO: Correção Hover Botão "Todos" MODO CLARO ===== */
+        body.light .seg-item:hover:not([aria-pressed="true"]) {
+            transform: translateY(-0.5px) scale(1.01);
+            box-shadow: 0 6px 12px rgba(0,0,0,.05) !important;
+            border-color: #B0B0B0 !important;
+        }
+        /* ========================================================== */
+        
+        /* ===== ALTERAÇÃO: Tooltip ANTD MODO CLARO (Glassmorphism) ===== */
+        .ant-tooltip-inner {
+          border-radius: 12px !important;
+          border: 1px solid rgba(255,255,255,.35) !important;
+          background: rgba(255,255,255,.25) !important;
+          backdrop-filter: blur(14px) saturate(140%) !important;
+          -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+          box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+          color: #00314A !important;
+        }
+        .ant-tooltip-arrow::before,
+        .ant-tooltip-arrow::after {
+          background: transparent !important;
+        }
+        /* ========================================================== */
 
-        .tabs-card {
-          padding: 1rem 1.5rem;
+        /* --- MODO ESCURO --- */
+        body.dark {
+          background-image: url('/img_fundo_glass.png') !important;
+          background-size: cover !important;
+          background-position: center center !important;
+          background-attachment: fixed !important;
+          transition: background 0.3s ease;
+        }
+        body.dark .main-container {
+            background-color: transparent !important;
+        }
+        
+        /* Cards de Vidro */
+        body.dark .kpi-card, 
+        body.dark .chart-card, 
+        body.dark .main-content-card, 
+        /* body.dark .tabs-card, */ /* Removido para PriorityRibbonTabs */
+        body.dark .content-card,
+        body.dark .responsive-table-wrapper {
+          background: rgba(25, 39, 53, 0.25) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          border: 1px solid rgba(125, 173, 222, 0.2) !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
+        /* Ajuste para PriorityRibbonTabs */
+        body.dark .tabs-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
         }
 
+        body.dark .kpi-card, body.dark .chart-card, body.dark .main-content-card, body.dark .content-card { padding: 1.5rem; }
+        /* body.dark .tabs-card { padding: 1rem 1.5rem; } */ /* Removido para PriorityRibbonTabs */
+
+        /* Textos */
+        body.dark .page-title,
+        body.dark .page-title svg {
+          color: #F1F5F9 !important;
+        }
+        /* Cores dos Textos de Rodapé do Header */
+        body.dark .time-ago-text { 
+          color: #BFDBFE !important; /* Azul claro para melhor contraste */
+        }
+        body.dark .filter-applied-text { 
+          color: #FECACA !important; /* Vermelho mais claro para melhor contraste */
+        }
+        
+        /* ===== ALTERAÇÃO: Cores KPI MODO ESCURO ===== */
+        body.dark h4.kpi-title { /* Título do gráfico E Título KPI */
+          color: #E2E8F0 !important; /* Branco Suave */
+          font-weight: 600 !important;
+        }
+        body.dark p.kpi-value-green { color: #A7F3D0 !important; } /* Verde mais vivo */
+        body.dark p.kpi-value-orange { color: #FCD34D !important; } /* Laranja/Amarelo mais vivo */
+        /* ========================================= */
+
+        /* ===== ALTERAÇÃO: SPINNER MODO ESCURO ===== */
+        body.dark .loading-text { color: #93C5FD; }
+        body.dark .auth-spinner {
+            border: 4px solid rgba(125, 173, 222, 0.2); /* Trilha escura/transparente */
+            border-top: 4px solid #BFDBFE; /* Ativo claro */
+        }
+        /* ========================================= */
+
+        body.dark .ant-pagination-total-text { color: #CBD5E1 !important; }
+        
+        /* Botões */
+        body.dark .btn-green { background-color: var(--gcs-green); color: white; } /* Mantém verde */
+        body.dark .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
+        
+        body.dark .btn-dark-gray {
+            background-color: rgba(30, 41, 59, 0.7); color: #E2E8F0; padding: 8px 16px;
+            font-size: 14px; border: 1px solid rgba(125, 173, 222, 0.3);
+        }
+        body.dark .btn-dark-gray:hover:not(:disabled) { background-color: rgba(51, 65, 85, 0.8); }
+
+        body.dark .btn-outline-gray,
+        body.dark .btn-outline-blue {
+          background-color: rgba(25, 39, 53, 0.5) !important;
+          color: #E2E8F0 !important;
+          border-color: rgba(125, 173, 222, 0.3) !important;
+        }
+        body.dark .btn-outline-gray:hover:not(:disabled),
+        body.dark .btn-outline-blue:hover:not(:disabled) {
+          background-color: rgba(40, 60, 80, 0.7) !important;
+          border-color: rgba(125, 173, 222, 0.5) !important;
+        }
+
+        /* Botão de Tema - Modo Escuro (CORRIGIDO) */
+        body.dark .theme-toggle-btn { 
+          background-color: rgba(25, 39, 53, 0.5) !important;
+          color: #E2E8F0 !important;
+          border-color: rgba(125, 173, 222, 0.3) !important;
+        }
+        body.dark .theme-toggle-btn:hover { 
+          background-color: rgba(40, 60, 80, 0.7) !important;
+          border-color: rgba(125, 173, 222, 0.5) !important;
+        }
+        
+        /* Input de Busca */
+        body.dark .search-input {
+          background-color: rgba(25, 39, 53, 0.5) !important;
+          color: #E2E8F0 !important;
+          border-color: rgba(125, 173, 222, 0.3) !important;
+        }
+        body.dark .search-input::placeholder { color: #94A3B8; }
+
+        /* Tabela */
+        body.dark .responsive-table thead { background-color: var(--gcs-blue); color: #fff; }
+        body.dark .responsive-table tbody tr {
+            background-color: transparent !important;
+            border-top: 1px solid rgba(125, 173, 222, 0.2) !important;
+        }
+        body.dark .responsive-table tbody tr:nth-of-type(even) {
+            background-color: rgba(25, 39, 53, 0.15) !important;
+        }
+        body.dark .data-row:hover {
+            background-color: rgba(40, 60, 80, 0.3) !important;
+        }
+        body.dark .responsive-table td { color: #CBD5E1; }
+        body.dark .conferido-checkbox-btn { color: #94A3B8; } /* Cor do checkbox não conferido */
+        body.dark .conferido-checkbox-btn[style*="rgb(40, 167, 69)"] { color: var(--gcs-green) !important; } /* Cor do conferido */
+
+        /* CORREÇÃO TABELA */
+        body.dark .table-note-number { font-weight: bold; color: #E2E8F0; }
+        body.dark .table-note-series { color: #94A3B8; }
+
+
+        /* Tabela Mobile */
+        body.dark .responsive-table tr { /* card da linha mobile */
+            border: 1px solid rgba(125, 173, 222, 0.2) !important;
+        }
+        body.dark .responsive-table td {
+            border-bottom: 1px solid rgba(125, 173, 222, 0.1) !important;
+        }
+        body.dark .responsive-table td::before { color: #93C5FD; }
+
+        /* Paginação */
+        body.dark .ant-pagination-total-text { color: #CBD5E1 !important; }
+        body.dark .ant-pagination-item a,
+        body.dark .ant-pagination-item-link {
+          color: #CBD5E1 !important;
+        }
+        body.dark .ant-pagination-item {
+          background-color: transparent !important;
+          border-color: rgba(125, 173, 222, 0.3) !important;
+        }
+        body.dark .ant-pagination-item-active {
+          background-color: #3B82F6 !important;
+          border-color: #3B82F6 !important;
+        }
+        body.dark .ant-pagination-item-active a { color: white !important; }
+        body.dark .ant-pagination-disabled .ant-pagination-item-link { color: #475569 !important; }
+
+        /* Popover de Filtro */
+        body.dark .filter-popover-content {
+            background: rgba(25, 39, 53, 0.98) !important; 
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(125, 173, 222, 0.3) !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+        }
+        body.dark .filter-popover-content h4 { color: #F1F5F9 !important; }
+        body.dark .filter-popover-content label { color: #CBD5E1; }
+        body.dark .filter-popover-content input[type="date"],
+        body.dark .filter-popover-content select {
+            background-color: rgba(25, 39, 53, 0.5) !important;
+            color: #E2E8F0 !important;
+            border-color: rgba(125, 173, 222, 0.3) !important;
+        }
+        body.dark .filter-popover-content input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        /* Gráfico Recharts */
+        body.dark .recharts-default-tooltip {
+            border: 1px solid rgba(125,173,222,.28) !important;
+            background: rgba(25,39,53,.50) !important;
+            color: #E2E8F0 !important;
+            border-radius: 12px !important;
+            backdrop-filter: blur(14px) saturate(140%) !important;
+            -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+        }
+        body.dark .recharts-legend-item-text {
+            color: #E2E8F0 !important;
+        }
+        
+        /* Estilos do PriorityRibbonTabs */
+        body.dark .ribbon-card {
+          background: rgba(25, 39, 53, 0.25) !important;
+          backdrop-filter: saturate(180%) blur(10px) !important;
+          -webkit-backdrop-filter: saturate(180%) blur(10px) !important;
+          border: 1px solid rgba(125, 173, 222, 0.2) !important;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.1) !important;
+        }
+        
+        /* ===== ADICIONADO: Correção Borda do Ribbon ===== */
+        body.dark .ribbon {
+            /* Força a borda a ser igual aos outros cards */
+            border-color: rgba(125, 173, 222, 0.2) !important;
+        }
+        body.dark .ribbon .left {
+            /* Força a linha pontilhada a usar a mesma cor */
+            border-color: rgba(125, 173, 222, 0.2) !important;
+        }
+        /* ============================================== */
+
+        /* Fundos de vidro coloridos para cada segmento */
+        body.dark .seg.p1 { background: linear-gradient(110deg, rgba(225, 29, 46, 0.15), rgba(225, 29, 46, 0.25)) !important; }
+        body.dark .seg.p2 { background: linear-gradient(110deg, rgba(234, 88, 12, 0.15), rgba(234, 88, 12, 0.25)) !important; }
+        body.dark .seg.p3 { background: linear-gradient(110deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.25)) !important; }
+        
+        body.dark .seg:hover {
+          background: rgba(40, 60, 80, 0.3) !important; /* Fundo de hover genérico */
+        }
+
+        /* Textos e Tags dos Segmentos */
+        body.dark .seg-head { color: #F1F5F9 !important; } /* Título (URGENTE) - Cor base */
+        body.dark .tag { /* Tag (01) - Cor base */
+          background: rgba(10, 20, 30, 0.5) !important;
+          border-color: rgba(125, 173, 222, 0.2) !important;
+          color: #E2E8F0 !important;
+        }
+        
+        /* APLICANDO AS CORES DE PRIORIDADE (PONTO 2 da nova task) */
+        body.dark .p1 .tag { 
+          color: #FCA5A5 !important; /* Vermelho claro */
+          border-color: #EF4444 !important; /* Vermelho vivo */
+          background: rgba(239, 68, 68, 0.15) !important; /* Fundo vermelho leve */
+        }
+        body.dark .p1 .title { color: #FCA5A5 !important; } /* Texto URGENTE */
+        
+        body.dark .p2 .tag { 
+          color: #FDBA74 !important; /* Laranja claro */
+          border-color: #F97316 !important; /* Laranja vivo */
+          background: rgba(249, 115, 22, 0.15) !important; /* Fundo laranja leve */
+        }
+        body.dark .p2 .title { color: #FDBA74 !important; } /* Texto PENDÊNCIAS */
+        
+        body.dark .p3 .tag { 
+          color: #BFDBFE !important; /* Azul claro */
+          border-color: #3B82F6 !important; /* Azul vivo */
+          background: rgba(59, 130, 246, 0.15) !important; /* Fundo azul leve */
+        }
+        body.dark .p3 .title { color: #BFDBFE !important; } /* Texto MONITORAR */
+
+        /* Botões internos (SegmentItem) - Padrão (Todos) */
+        body.dark .seg-item {
+          color: #E2E8F0 !important;
+          background: linear-gradient(180deg, rgba(25, 39, 53, 0.25), rgba(25, 39, 53, 0.4)) !important;
+          border-color: rgba(125, 173, 222, 0.2) !important;
+        }
+        
+        /* ===== ALTERADO: Correção Hover Botão "Todos" MODO ESCURO ===== */
+        body.dark .seg-item:hover:not([aria-pressed="true"]) {
+           border-color: rgba(125, 173, 222, 0.5) !important;
+           /* Efeitos do componente interno adicionados para consistência */
+           transform: translateY(-0.5px) scale(1.01);
+           box-shadow: 0 10px 22px rgba(0,0,0,.12);
+           filter: brightness(1.02);
+        }
+        /* ========================================================= */
+
+        body.dark .seg-item[aria-pressed="true"] { /* "Todos" Ativo */
+          border-color: #3B82F6 !important;
+          box-shadow: 0 6px 16px rgba(0,0,0,.06), 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.3)) !important;
+          color: #F1F5F9 !important;
+        }
+
+        /* --- P1 (Vermelho) Botões --- */
+        body.dark .p1 .seg-item {
+          color: #FCA5A5 !important;
+          background: linear-gradient(180deg, rgba(225, 29, 46, 0.2), rgba(225, 29, 46, 0.3)) !important;
+          border-color: rgba(239, 68, 68, 0.3) !important;
+        }
+        body.dark .p1 .seg-item:hover:not([aria-pressed="true"]) { /* Adicionado :not */
+          color: #FEE2E2 !important;
+          background: linear-gradient(180deg, rgba(225, 29, 46, 0.3), rgba(225, 29, 46, 0.4)) !important;
+          border-color: rgba(239, 68, 68, 0.5) !important;
+        }
+        body.dark .p1 .seg-item[aria-pressed="true"] { /* P1 Ativo */
+          color: #F1F5F9 !important;
+          background: linear-gradient(180deg, rgba(225, 29, 46, 0.3), rgba(225, 29, 46, 0.4)) !important;
+          border-color: var(--gcs-brand-red, #E11D2E) !important;
+          box-shadow: 0 6px 16px rgba(0,0,0,.06), 0 0 0 4px rgba(225, 29, 46, 0.15) !important;
+        }
+
+        /* --- P2 (Laranja) Botões --- */
+        body.dark .p2 .seg-item {
+          color: #FDBA74 !important;
+          background: linear-gradient(180deg, rgba(234, 88, 12, 0.2), rgba(234, 88, 12, 0.3)) !important;
+          border-color: rgba(249, 115, 22, 0.3) !important;
+        }
+        body.dark .p2 .seg-item:hover:not([aria-pressed="true"]) { /* Adicionado :not */
+          color: #FFEDD5 !important;
+          background: linear-gradient(180deg, rgba(234, 88, 12, 0.3), rgba(234, 88, 12, 0.4)) !important;
+          border-color: rgba(249, 115, 22, 0.5) !important;
+        }
+        body.dark .p2 .seg-item[aria-pressed="true"] { /* P2 Ativo */
+          color: #F1F5F9 !important;
+          background: linear-gradient(180deg, rgba(234, 88, 12, 0.3), rgba(234, 88, 12, 0.4)) !important;
+          border-color: var(--gcs-brand-orange, #EA580C) !important;
+          box-shadow: 0 6px 16px rgba(0,0,0,.06), 0 0 0 4px rgba(234, 88, 12, 0.15) !important;
+        }
+        
+        /* --- P3 (Azul) Botões --- */
+        body.dark .p3 .seg-item {
+          color: #BFDBFE !important;
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.3)) !important;
+          /* CORREÇÃO BORDA AZUL: Aumentada opacidade de 0.3 para 0.7 */
+          border-color: rgba(59, 130, 246, 0.7) !important;
+        }
+        body.dark .p3 .seg-item:hover:not([aria-pressed="true"]) { /* Adicionado :not */
+          color: #EBF8FF !important;
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.4)) !important;
+          /* CORREÇÃO BORDA AZUL: Aumentada opacidade de 0.5 para 0.9 */
+          border-color: rgba(59, 130, 246, 0.9) !important;
+        }
+        body.dark .p3 .seg-item[aria-pressed="true"] { /* P3 Ativo */
+          color: #F1F5F9 !important;
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.4)) !important;
+          border-color: var(--gcs-brand-blue, #3B82F6) !important;
+          box-shadow: 0 6px 16px rgba(0,0,0,.06), 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+        }
+        
+        /* ===== ALTERAÇÃO: Tooltip ANTD MODO ESCURO (Glassmorphism) ===== */
+        body.dark .ant-tooltip-inner {
+           border-radius: 12px !important;
+           border: 1px solid rgba(125,173,222,.28) !important;
+           background: rgba(25,39,53,.50) !important;
+           backdrop-filter: blur(14px) saturate(140%) !important;
+           -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+           box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+           color: #E2E8F0 !important;
+        }
+         body.dark .ant-tooltip-arrow::before,
+         body.dark .ant-tooltip-arrow::after {
+          background: transparent !important;
+        }
+        /* ========================================================== */
+
+
+        /* --- RESPONSIVIDADE (MEDIA QUERIES) --- */
         @media (max-width: 1200px) {
             .header-wrapper {
                 flex-direction: column;
@@ -905,26 +1734,19 @@ export default function ConsultaNotas() {
             .search-input {
                 width: 100%;
             }
-            .filter-tabs-container {
-                gap: 0.5rem;
-                justify-content: flex-start;
-                overflow-x: auto;
-                -ms-overflow-style: none; /* IE and Edge */
-                scrollbar-width: none; /* Firefox */
-            }
-            .filter-tabs-container::-webkit-scrollbar {
-                display: none; /* Chrome, Safari, Opera */
-            }
-            .tab-button {
-                white-space: nowrap;
-                padding: 8px 10px 12px 10px;
-            }
+
              .header-wrapper {
                 gap: 1rem;
              }
-             .kpi-card, .chart-card, .main-content-card, .tabs-card {
+             body.light .kpi-card, body.light .chart-card, body.light .main-content-card,
+             body.dark .kpi-card, body.dark .chart-card, body.dark .main-content-card {
                 padding: 1rem;
              }
+             /* Ajuste para PriorityRibbonTabs */
+             body.light .tabs-card, body.dark .tabs-card {
+                padding: 0;
+             }
+
 
             .responsive-table thead {
                 display: none;
@@ -937,26 +1759,28 @@ export default function ConsultaNotas() {
             }
             .responsive-table tr {
                 margin-bottom: 1rem;
-                border: 1px solid var(--gcs-border-color);
                 border-radius: 8px;
                 padding: 0.5rem 1rem;
             }
+            body.light .responsive-table tr { border: 1px solid var(--gcs-border-color); }
             .responsive-table td {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 padding: 0.8rem 0;
-                border-bottom: 1px solid var(--gcs-gray-medium);
             }
+            body.light .responsive-table td { border-bottom: 1px solid var(--gcs-gray-medium); }
             .responsive-table tr td:last-child {
                 border-bottom: none;
             }
             .responsive-table td::before {
                 content: attr(data-label);
                 font-weight: bold;
-                color: var(--gcs-blue);
                 margin-right: 1rem;
             }
+            
+            body.light .responsive-table td::before { color: var(--gcs-blue); }
+            body.dark .responsive-table td::before { color: #93C5FD; }
 
             .td-status, .td-actions {
                 justify-content: flex-start;
@@ -965,67 +1789,87 @@ export default function ConsultaNotas() {
                 width: 100%;
             }
         }
+        
+        /* === REMOVIDA CORREÇÃO CRÍTICA DO OVERFLOW (Lógica ABSOLUTE) === */
+        /* A nova lógica de ancoragem (getScrollParent) não precisa disso */
+        
     `}</style>
 
-    <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
+    <div className="main-container" style={{ padding: "2rem", minHeight: "100vh" }}>
 
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
-        <div 
-            className="chart-card clickable-chart chart-3d-effect" 
-            style={{ 
+        <div
+            className="chart-card clickable-chart"
+            style={{
                 flexShrink: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.5rem'
+                gap: '0.5rem',
+                minWidth: '280px',
+                paddingTop: '1rem',
+                paddingBottom: '1rem',
             }}
         >
-            <h4 style={{ margin: 0, color: 'var(--gcs-gray-dark)', fontWeight: 500, fontSize: '1rem' }}>
+            <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem' }}>
                 Gráfico por Status
             </h4>
-            <div style={{ width: 280, height: 180 }}>
+            {/* --- GRÁFICO RECHARTS ATUALIZADO (PONTO 1) --- */}
+            <div style={{ width: 280, height: 220 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart key={chartKey}>
                         <Pie
-                            activeIndex={activeIndex}
-                            activeShape={renderActiveShape}
                             data={dadosGraficoStatus}
                             dataKey="value"
                             nameKey="name"
                             cx="50%"
                             cy="45%"
-                            innerRadius={40}
-                            outerRadius={60}
+                            innerRadius={50} // Estilo Donut
+                            outerRadius={80} // Estilo Donut
+                            cornerRadius={8} // Estilo Donut
+                            stroke={theme === 'dark' ? "rgba(25, 39, 53, 0.5)" : "rgba(255,255,255,.35)"} // Estilo Donut
+                            strokeWidth={1} // Estilo Donut
                             paddingAngle={3}
+                            // Mantendo a interatividade que você já tinha
+                            activeIndex={activeIndex}
+                            activeShape={renderActiveShape}
                             onMouseEnter={onPieEnter}
-                            onMouseLeave={onPieLeave}
-                            onClick={handleChartClick}
+                            onPieLeave={onPieLeave}
+                            onClick={(data) => handleChartClick(data.payload.payload)} // Corrigido para pegar o payload
                         >
-                            {dadosGraficoStatus.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={coresStatus[entry.name] || '#ccc'} />
-                            ))}
+                            {dadosGraficoStatus.map((entry, index) => {
+                                // Mapeia cores/gradientes
+                                const pieFill = coresStatusDonut[entry.name] || coresStatus[entry.name] || '#ccc';
+                                return <Cell key={`cell-${index}`} fill={pieFill} />;
+                            })}
                         </Pie>
-                        <Legend 
-                            layout="horizontal" 
-                            align="center" 
-                            verticalAlign="bottom" 
-                            iconSize={10} 
-                            wrapperStyle={{ fontSize: '12px' }}
+                        <Legend
+                            layout="horizontal"
+                            align="center"
+                            verticalAlign="bottom"
+                            iconSize={10}
+                            wrapperStyle={{ fontSize: '12px', marginTop: '10px' }}
                             formatter={renderLegendText}
+                        />
+                        {/* ADICIONADO: Tooltip com estilos dinâmicos */}
+                        <RechartsTooltip 
+                            contentStyle={glassTooltipStyle} 
+                            labelStyle={tooltipLabelStyle} 
+                            itemStyle={tooltipItemStyle} 
                         />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
         </div>
-        
+
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <FileText size={32} color="var(--gcs-blue)" />
+                <FileText size={32} />
                 <span>Central de Notas</span>
             </h2>
-            
+
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <input
@@ -1043,22 +1887,33 @@ export default function ConsultaNotas() {
                             <RefreshCcw size={20} />
                         </button>
                         <FilterPopover
-                            notas={notas}
+                            allFiliais={allFiliais}
+                            allTipos={allTipos}
+                            allCompradores={allCompradores}
+                            allStatusLancamento={allStatusLancamento}
                             onApplyFilters={handleApplyAdvancedFilters}
                             initialFilters={advancedFilters}
-                        />
+                         />
                         <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
                             <FileDown size={20} />
+                        </button>
+                        {/* --- BOTÃO DE TEMA ADICIONADO --- */}
+                        <button
+                          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                          className="theme-toggle-btn"
+                          title={theme === 'light' ? 'Mudar para tema escuro' : 'Mudar para tema claro'}
+                        >
+                          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                         </button>
                     </div>
                     <div style={{ height: 'auto', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
                         {timeAgo && !loading && (
-                          <span style={{ color: 'var(--gcs-gray-dark)', fontSize: '12px', fontStyle: 'italic' }}>
+                          <span className="time-ago-text" style={{ color: 'var(--gcs-gray-dark)', fontSize: '12px', fontStyle: 'italic' }}>
                               Atualizado {timeAgo}
                           </span>
                         )}
                         {areFiltersApplied && !loading && (
-                          <span style={{ color: '#dc3545', fontSize: '12px', fontWeight: 'bold' }}>
+                          <span className="filter-applied-text" style={{ color: '#dc3545', fontSize: '12px', fontWeight: 'bold' }}>
                               Existem filtros aplicados
                           </span>
                         )}
@@ -1069,48 +1924,53 @@ export default function ConsultaNotas() {
 
         <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-around' }}>
             <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: 'var(--gcs-gray-dark)', margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
+                <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
                     Notas Hoje
                 </h4>
-                <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-green)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasProcessadasHoje}
+                <p className="kpi-value-green" style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-green)', fontWeight: 'bold', lineHeight: 1.2 }}>
+                    {totalNotasHoje}
                 </p>
             </div>
-            
+
             <hr style={{ width: '80%', border: 'none', borderTop: '1px solid var(--gcs-border-color)', margin: '0.5rem 0' }} />
 
             <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: 'var(--gcs-gray-dark)', margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
+                <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem', marginBottom: '0.25rem' }}>
                     Pendentes
                 </h4>
-                <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-orange)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasPendentes}
+                <p className="kpi-value-orange" style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-orange)', fontWeight: 'bold', lineHeight: 1.2 }}>
+                    {totalPendentes}
                 </p>
             </div>
         </div>
       </div>
 
-      <div className="tabs-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="filter-tabs-container">
-          {statusDisponiveis.map((status) => {
-            const isSelected = filtroStatus === status;
-            return (
-              <button key={status} onClick={() => handleFiltroStatusChange(status)} className={`tab-button ${isSelected ? 'active' : ''}`}>
-                {status} ({statusCounts[status] || 0})
-              </button>
-            )
-          })}
-        </div>
+      <div className="tabs-card" style={{
+          marginBottom: '1.5rem',
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          boxShadow: 'none'
+      }}>
+        <PriorityRibbonTabs
+          filtroStatus={filtroStatus}
+          statusCounts={statusCounts as any}
+          onChange={(key) => {
+            if (key === "outras") return;
+            handleFiltroStatusChange(key);
+          }}
+        />
       </div>
-      
+
+      {/* ===== ALTERAÇÃO: SPINNER COM CLASSE (para tema) ===== */}
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
-          <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }}>
+          <div className="auth-spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <div style={{ marginTop: '1rem', fontWeight: 'bold' }} className="loading-text">
             Carregando notas...
           </div>
         </div>
-      ) : notasFiltradasOrdenadas.length === 0 ? (
+      ) : notasPaginadas.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--gcs-gray-dark)", marginTop: "4rem", fontSize: '1.1rem' }}>
           Nenhuma nota encontrada para os filtros aplicados.
         </div>
@@ -1120,12 +1980,14 @@ export default function ConsultaNotas() {
             <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: '14px' }}>
               <thead style={{ backgroundColor: "var(--gcs-blue)", color: "#fff", textAlign: "left" }}>
                 <tr>
-                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
+                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><CheckSquare size={16} style={{marginRight: '8px'}} /> Conferido</div></th>
+                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('filial')} className="th-sortable"><Building2 size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
-                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_recebimento')} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Recebimento <SortIcon columnKey="dt_recebimento" /></div></th>
+                  {/* --- COLUNAS DE DATA SUBSTITUÍDAS --- */}
+                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><Calendar size={16} style={{marginRight: '8px'}}/> Datas</div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><TrendingUp size={16} style={{marginRight: '8px'}} /> Status Setor</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('observacao')} className="th-sortable"><MessageSquare size={16} style={{marginRight: '8px'}}/> Observação <SortIcon columnKey="observacao" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('comprador')} className="th-sortable"><User size={16} style={{marginRight: '8px'}} /> Responsável <SortIcon columnKey="comprador" /></div></th>
@@ -1134,7 +1996,7 @@ export default function ConsultaNotas() {
               </thead>
               <tbody>
                 {notasPaginadas.map((nota, index) => {
-                  
+
                   const statusLancamento = nota.status_lancamento;
                   const statusNotaTexto = statusLancamento || 'N/A';
                   let statusNotaCor = 'var(--gcs-gray-dark)';
@@ -1145,15 +2007,25 @@ export default function ConsultaNotas() {
                       statusNotaCor = 'var(--gcs-orange)';
                   }
 
+                  // --- CONTEÚDO DO TOOLTIP DE DATA ---
+                  const dateTooltipContent = (
+                    <div style={{fontSize: '12px', textAlign: 'left'}}>
+                        <div style={{marginBottom: '4px'}}><strong>Recebimento:</strong> {nota.dt_recebimento} {nota.hr_Recebimento}</div>
+                        <div><strong>Lançamento:</strong> {formatProtheusDateTime(nota.dt_lcto_protheus)}</div>
+                    </div>
+                  );
+
                   return (
                     <tr
-                      key={index}
+                      key={nota.chave} // Usar a chave como key é mais seguro
                       className="data-row"
-                      style={{
-                        borderTop: "1px solid var(--gcs-border-color)",
-                        backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
-                      }}
                     >
+                      <td data-label="Conferido" className="td-conferido" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
+                          <ConferidoCheckbox
+                              conferido={nota.conferido}
+                              onClick={() => handleCheckboxClick(nota)}
+                          />
+                      </td>
                       <td data-label="Status da Nota" className="td-status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <span
                           className="status-badge"
@@ -1164,8 +2036,9 @@ export default function ConsultaNotas() {
                       </td>
                       <td data-label="Filial" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.filial}</td>
                       <td data-label="Nota / Série" style={{ padding: '14px 12px', verticalAlign: 'middle', whiteSpace: "nowrap" }}>
-                          <span style={{fontWeight: 'bold', color: '#343a40'}}>{nota.nf}</span>
-                          <span style={{color: 'var(--gcs-gray-dark)'}}> / {nota.serie}</span>
+                          {/* --- ESTILO CORRIGIDO (PONTO 2) --- */}
+                          <span className="table-note-number">{nota.nf}</span>
+                          <span className="table-note-series"> / {nota.serie}</span>
                       </td>
                       <td data-label="Tipo" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         {nota.tipo_nf ? (
@@ -1182,7 +2055,13 @@ export default function ConsultaNotas() {
                         )}
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
-                      <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
+                      
+                      {/* --- COLUNA DE DATA UNIFICADA --- */}
+                      <td data-label="Datas" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
+                        <Tooltip title={dateTooltipContent} placement="top">
+                            <span style={{cursor: 'help'}}><Calendar size={18} /></span>
+                        </Tooltip>
+                      </td>
                       
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
@@ -1191,7 +2070,6 @@ export default function ConsultaNotas() {
                               statusFiscal={nota.status_fiscal}
                           />
                       </td>
-
                       <td data-label="Observação" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {nota.observacao ? nota.observacao : <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>}
                       </td>
@@ -1221,6 +2099,7 @@ export default function ConsultaNotas() {
               pageSize={pageSize}
               onChange={(page) => setPaginaAtual(page)}
               showSizeChanger={false}
+              showTotal={(total, range) => `${range[0]}-${range[1]} de ${total} notas`}
             />
           </div>
         </>
@@ -1236,6 +2115,29 @@ export default function ConsultaNotas() {
       onActionSuccess={fetchNotas}
       statusCompras={notaSelecionada?.status_compras}
       observacao={notaSelecionada?.observacao}
+    />
+
+    <NotificationModal
+        visible={notification.visible}
+        type={notification.type}
+        message={notification.message}
+        onClose={handleCloseNotification}
+    />
+
+    <ConfirmationModal
+        isOpen={isConfirmConferenciaOpen}
+        onClose={handleCloseConferencia}
+        onConfirm={handleConfirmConferencia}
+        title="Confirmar Conferência"
+        message={
+            newConferenciaStatus === 'S'
+                ? "Com essa ação você está confirmando que realizou a conferência dessa nota no Protheus. Deseja continuar?"
+                : "Você tem certeza que deseja desmarcar a conferência desta nota?"
+        }
+        confirmText={isSubmittingConferencia ? "Processando..." : (newConferenciaStatus === 'S' ? "Sim, Continuar" : "Sim, Desmarcar")}
+        confirmColor={newConferenciaStatus === 'S' ? "#28a745" : "#dc3545"}
+        showCancelButton={!isSubmittingConferencia}
+        icon={newConferenciaStatus === 'S' ? <CheckSquare size={40} color="#28a745" /> : <AlertTriangle size={40} color="#f7941d" />}
     />
   </>);
 

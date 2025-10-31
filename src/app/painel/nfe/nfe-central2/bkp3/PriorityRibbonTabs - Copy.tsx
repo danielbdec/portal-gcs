@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react"; 
+import React, { useEffect, useMemo } from "react";
 
 /** Lista canônica */
 export const RIBBON_STATUS_LIST = [
@@ -21,6 +21,8 @@ const VARS = {
   orange: "var(--gcs-brand-orange, #EA580C)",
   red:    "var(--gcs-brand-red, #E11D2E)",
   border: "var(--gcs-border-color, rgba(203,213,225,.6))",
+
+  // superfície azul translúcida do ribbon
   surfaceLight: "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06)), rgba(36,84,130,0.18)",
   surfaceDark:  "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04)), rgba(24,55,88,0.34)",
 };
@@ -32,23 +34,22 @@ const SZ = {
   md: { padY: 12, padX: 16, minW: 176, label: 14, gap: 12, ringW: 6, badgeFs: 13, badgePx: "4px 8px" },
 } as const;
 
-/* Cores dos Chips: .light usa o _antigo.tsx, .dark usa o atual.tsx */
+/* Chips vidro (claro/escuro) */
 const CHIP = {
   neutral: {
-    light: { from: "#FFFFFF", to: "#F6F8FB", text: "#0F172A", ring: "#CBD5E1" }, // <-- Antigo
+    light: { from: "#FFFFFF", to: "#F6F8FB", text: "#0F172A", ring: "#C8D2E1" },
     dark:  { from: "rgba(255,255,255,.12)", to: "rgba(255,255,255,.06)", text: "#E6EDF6", ring: "rgba(255,255,255,.28)" },
   },
   p1: {
-    light: { from: "#FBE9EE", to: "#F6D5DE", text: "#5F123B", ring: "#F1A7B8" }, // <-- Antigo
+    light: { from: "#FBE9EE", to: "#F6D5DE", text: "#5F123B", ring: "#F0A4B6" },
     dark:  { from: "rgba(225,29,46,.22)", to: "rgba(225,29,46,.12)", text: "#FDE8ED", ring: "rgba(225,29,46,.36)" },
   },
   p2: {
-    light: { from: "#FFF0E8", to: "#FFE4D4", text: "#7C2D12", ring: "#F4B38D" }, // <-- Antigo
-    // ===== ALTERAÇÃO: P2 (Pendências) para Amarelo no Modo Escuro =====
-    dark:  { from: "rgba(250, 204, 21, 0.22)", to: "rgba(250, 204, 21, 0.12)", text: "#FDE68A", ring: "rgba(250, 204, 21, 0.36)" },
+    light: { from: "#FFF1E9", to: "#FFE5D4", text: "#7C2D12", ring: "#F4B38D" },
+    dark:  { from: "rgba(234,88,12,.22)", to: "rgba(234,88,12,.12)", text: "#FFEAD9", ring: "rgba(234,88,12,.36)" },
   },
   p3: {
-    light: { from: "#EDF3F9", to: "#E5EEF6", text: "#18344F", ring: "#B4C6D8" }, // <-- Antigo
+    light: { from: "#EDF3F9", to: "#E5EEF6", text: "#18344F", ring: "#B4C6D8" },
     dark:  { from: "rgba(31,78,121,.22)", to: "rgba(31,78,121,.12)", text: "#E6EEF7", ring: "rgba(31,78,121,.40)" },
   },
 } as const;
@@ -65,18 +66,9 @@ export default function PriorityRibbonTabs({
   filtroStatus, statusCounts, onChange, size="xs",
 }: Props) {
   const s = SZ[size];
-  
-  const [isDark, setIsDark] = useState(false); 
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      setIsDark(mediaQuery.matches);
-      const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
-      mediaQuery.addEventListener("change", handler);
-      return () => mediaQuery.removeEventListener("change", handler);
-    }
-  }, []);
+  const isDark = typeof window !== "undefined" && window.matchMedia?.matches
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : false;
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -94,7 +86,6 @@ export default function PriorityRibbonTabs({
   const SegmentItem = ({
     label, count, active, onClick, tone,
   }: { label: string; count?: number; active?: boolean; onClick: () => void; tone: "p1"|"p2"|"p3"|"neutral"; }) => {
-    
     const pal = CHIP[tone][isDark ? "dark" : "light"];
     const badgeBg = BADGE[tone];
     const showBadge = typeof count === "number" && count > 0;
@@ -105,7 +96,7 @@ export default function PriorityRibbonTabs({
 
     return (
       <button
-        className={`seg-item ${active ? "active" : ""} ${isDark ? "mode-dark" : "mode-light"}`}
+        className={`seg-item ${active ? "active" : ""}`}
         onClick={onClick}
         aria-pressed={!!active}
         style={{
@@ -114,34 +105,20 @@ export default function PriorityRibbonTabs({
           borderRadius: 9999,
           background: `linear-gradient(180deg, ${pal.from}, ${pal.to})`,
           color: pal.text,
+          border: "1px solid rgba(255,255,255,.28)",
+          boxShadow: active
+            ? `0 0 0 ${s.ringW}px ${pal.ring}, 0 8px 18px rgba(0,0,0,.10)`
+            : "0 6px 14px rgba(0,0,0,.08)",
+          backdropFilter: "blur(8px) saturate(120%)",
+          WebkitBackdropFilter: "blur(8px) saturate(120%)",
           fontSize: s.label,
           position: "relative",
           overflow: "visible",
           zIndex: 2,
-          
-          ...(isDark
-            ? { // ESTILOS DARK (do arquivo atual)
-                border: "1px solid rgba(255,255,255,.28)",
-                boxShadow: active
-                  ? `0 0 0 ${s.ringW}px ${pal.ring}, 0 8px 18px rgba(0,0,0,.10)`
-                  : "0 6px 14px rgba(0,0,0,.08)",
-                backdropFilter: "blur(8px) saturate(120%)",
-                WebkitBackdropFilter: "blur(8px) saturate(120%)",
-              }
-            : { // ESTILOS LIGHT (do arquivo antigo)
-                borderStyle: 'solid',
-                borderColor: active ? pal.ring : "var(--gcs-border-color, #D1D5DB)",
-                borderWidth: active ? '2px' : '1px',
-                boxShadow: active
-                  ? `0 6px 16px rgba(0,0,0,.06), 0 0 0 ${s.ringW}px ${hexToRgba(pal.ring, .15)}`
-                  : "0 1px 0 rgba(0,0,0,.02)",
-              })
         }}
       >
-        {isDark && <span className="chipFX" />}
-        
-        <span className="txt">{label}</span>
-        
+        <span className="chipFX" />
+        <span className="txt" style={{ position: "relative", zIndex: 2 }}>{label}</span>
         {showBadge && (
           <span className="badge" aria-label={`${countStr} itens em ${label}`}
                 style={{ background: badgeBg, fontSize: s.badgeFs, padding: s.badgePx }}>
@@ -150,108 +127,41 @@ export default function PriorityRibbonTabs({
         )}
 
         <style jsx>{`
-          /* --- Estilos COMUNS (Base) --- */
-          .seg-item {
-            display: inline-flex;
-            align-items: center;
-            font-weight: 700;
-            letter-spacing: .01em;
-            cursor: pointer;
-            isolation: isolate;
-            white-space: nowrap;
-          }
-          .badge {
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            z-index: 3; 
-            color: #fff;
-            border: 2px solid #fff;
-            border-radius: 9999px;
-            line-height: 1;
-            font-weight: 900;
-            letter-spacing: -0.01em;
-            box-shadow: 0 3px 6px rgba(0,0,0,.25);
-            pointer-events: none;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .txt {
-            position: relative;
-            z-index: 1; 
-            line-height: 1.1;
-          }
-          @media (max-width: 768px) {
-            .badge { top: -6px; right: -6px; }
-          }
-          
-          /* --- Estilos LIGHT (do _antigo.tsx) --- */
-          .seg-item.mode-light {
-            justify-content: center;
-            gap: ${s.gap}px;
-            transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .18s ease;
-          }
-          .seg-item.mode-light::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            border-radius: inherit;
-            pointer-events: none;
-            z-index: 0; 
-            background:
-              radial-gradient(90px 45px at 85% 0%, rgba(255,255,255,.30), transparent 60%),
-              radial-gradient(90px 45px at 0% 100%, rgba(255,255,255,.18), transparent 60%);
-            mix-blend-mode: normal;
-            opacity: 0.7;
-          }
-          .seg-item.mode-light:hover:not(.active) {
-            transform: translateY(-0.5px) scale(1.01);
-            box-shadow: 0 6px 12px rgba(0,0,0,.05);
-            border-color: #B0B0B0 !important; 
-          }
-          .seg-item.mode-light.active {
-            transform: translateY(-1px);
-          }
-          .seg-item.mode-light.active:hover {
-            transform: translateY(-1px);
-          }
-
-          /* --- Estilos DARK (do atual.tsx) --- */
-          .seg-item.mode-dark {
-            gap: 8px; 
+          .seg-item{
+            display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+            font-weight:700; letter-spacing:.01em; cursor:pointer;
             transition: transform .14s ease, box-shadow .14s ease, filter .14s ease, border-color .14s ease;
+            isolation:isolate;
           }
-          .seg-item.mode-dark .txt {
-             z-index: 2; /* Texto acima do chipFX */
-          }
-          .chipFX {
-            pointer-events: none;
-            position: absolute;
-            inset: 0;
-            border-radius: inherit;
-            z-index: 1; 
-            background:
-              linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 45%),
-              radial-gradient(60% 60% at 50% 0%, rgba(255,255,255,.35), transparent 60%),
-              radial-gradient(60% 80% at 50% 120%, rgba(0,0,0,.12), transparent 60%);
-            mix-blend-mode: screen;
-            opacity: .9;
-          }
-          .seg-item.mode-dark:hover:not(.active) {
+          .seg-item:hover:not(.active){
             transform: translateY(-0.5px) scale(1.01);
             box-shadow: 0 10px 22px rgba(0,0,0,.12);
             filter: brightness(1.02);
           }
-          .seg-item.mode-dark.active {
-            transform: translateY(-1px);
+          .seg-item.active{ transform: translateY(-1px); }
+
+          .chipFX{
+            pointer-events:none; position:absolute; inset:0; border-radius:inherit; z-index:1;
+            background:
+              linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 45%),
+              radial-gradient(60% 60% at 50% 0%, rgba(255,255,255,.35), transparent 60%),
+              radial-gradient(60% 80% at 50% 120%, rgba(0,0,0,.12), transparent 60%);
+            mix-blend-mode: screen; opacity:.9;
           }
+
+          .badge{
+            position:absolute; top:-8px; right:-8px; z-index:3;
+            color:#fff; border:2px solid #fff; border-radius:9999px; line-height:1;
+            font-weight:900; letter-spacing:-0.01em;
+            box-shadow: 0 3px 6px rgba(0,0,0,.25);
+            pointer-events:none; display:inline-flex; align-items:center; justify-content:center;
+          }
+          @media (max-width:768px){ .badge{ top:-6px; right:-6px; } }
         `}</style>
       </button>
     );
   };
 
-  // O RESTANTE DO COMPONENTE (LAYOUT)
   return (
     <div className="ribbon" data-theme={isDark ? "dark" : "light"}>
       <div className="left">
@@ -265,7 +175,7 @@ export default function PriorityRibbonTabs({
       </div>
 
       <div className="flagsWrap">
-        {/* ===== SVG ===== */}
+        {/* ===== SVG com encaixe perfeito |>>>|, agora cobrindo 100% da altura ===== */}
         <svg className="flagsBg" viewBox="0 0 3000 120" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="g-p1" x1="0" y1="0" x2="0" y2="1">
@@ -330,7 +240,6 @@ export default function PriorityRibbonTabs({
         </section>
       </div>
 
-      {/* ===== BLOCO DE ESTILO PRINCIPAL ===== */}
       <style jsx>{`
         /* cores das faixas por tema (iguais ao original) */
         .ribbon[data-theme="light"]{
@@ -338,19 +247,14 @@ export default function PriorityRibbonTabs({
           --p2-from: rgba(234,88,12,0.28); --p2-to: rgba(234,88,12,0.14);
           --p3-from: rgba(31,78,121,0.26); --p3-to: rgba(31,78,121,0.12);
         }
-        
-        /* ===== ALTERAÇÃO: Cores do Fundo dos Segmentos (MODO ESCURO) ===== */
         .ribbon[data-theme="dark"]{
-          /* P1 - Vermelho Mais Forte */
-          --p1-from: rgba(225,29,46,0.45); --p1-to: rgba(225,29,46,0.30);
-          /* P2 - Amarelo (era laranja/marrom) */
-          --p2-from: rgba(250, 204, 21, 0.30); --p2-to: rgba(234, 179, 8, 0.20);
-          /* P3 - Azul (sem mudança) */
+          --p1-from: rgba(225,29,46,0.42); --p1-to: rgba(225,29,46,0.24);
+          --p2-from: rgba(234,88,12,0.38); --p2-to: rgba(234,88,12,0.20);
           --p3-from: rgba(31,78,121,0.36); --p3-to: rgba(31,78,121,0.18);
         }
-        /* ============================================================= */
 
         .ribbon{
+          /* REMOVIDO o --height fixo — agora usa crescimento natural */
           --notchRatio: 0.12; /* 120/1000 */
           --safe: 8px;
           background: ${isDark ? VARS.surfaceDark : VARS.surfaceLight};
@@ -370,29 +274,35 @@ export default function PriorityRibbonTabs({
           display:flex; align-items:center; justify-content:center;
           padding-right:16px; margin-right:12px; border-right:1px dashed ${VARS.border}; z-index:3;
         }
+
+        /* Trilho now grows with content; SVG cobre 100% da altura */
         .flagsWrap{
           position: relative; border-radius: 18px; background: transparent;
           overflow: visible;
           display: grid; grid-template-columns: 1fr 1fr 1fr;
           column-gap: 0; align-items: stretch;
-          min-height: 120px;
+          min-height: 120px; /* altura mínima (antes era fixa) */
           padding: 12px 16px;
         }
         .flagsBg{
-          position:absolute; inset:0; width:100%; height:100%;
+          position:absolute; inset:0; width:100%; height:100%; /* <— cobre 100% */
           z-index:0;
         }
+
+        /* Layout interno: cabeçalho + ações em duas linhas fixas */
         .seg{
           position:relative; z-index:1; display:grid;
-          grid-template-rows: auto 1fr;
+          grid-template-rows: auto 1fr; /* header fixo, ações ocupam o resto */
           align-content:start;
           background: transparent;
         }
         .seg-p1{ padding-right: calc(var(--notchRatio) * 100% + var(--safe)); padding-left: 8px; }
         .seg-p2{ padding-left:  calc(var(--notchRatio) * 100% + var(--safe)); padding-right: calc(var(--notchRatio) * 100% + var(--safe)); }
         .seg-p3{ padding-left:  calc(var(--notchRatio) * 100% + var(--safe)); padding-right: 8px; }
+
         .seg-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; font-weight:800; letter-spacing:.01em; }
         .title{ font-size:11px; text-transform:uppercase; font-weight:800; color:#FFFFFF; }
+
         .tag{
           display:inline-flex; align-items:center; justify-content:center;
           min-width:26px; height:26px; padding:0 6px; border-radius:8px;
@@ -402,44 +312,15 @@ export default function PriorityRibbonTabs({
           box-shadow: 0 1px 1px rgba(0,0,0,.04);
           color:#0f172a;
         }
+
         .seg-actions{
           display:flex; flex-wrap:wrap; gap:${s.gap}px;
-          align-content:flex-start;
+          align-content:flex-start; /* garante que não empurre a borda */
           position:relative; z-index:2;
         }
 
-        /* ===== ALTERAÇÃO: A REGRA .flagsWrap:has(...) FOI REMOVIDA DAQUI ===== */
-        
-        /* ===== ALTERAÇÃO: Cores das Tags e Títulos (MODO ESCURO) ===== */
-        .ribbon[data-theme="dark"] .title {
-            color: #E2E8F0;
-        }
-        .ribbon[data-theme="dark"] .tag {
-          background: rgba(10, 20, 30, 0.5) !important;
-          border-color: rgba(125, 173, 222, 0.2) !important;
-          color: #E2E8F0 !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p1 .tag { 
-          color: #FCA5A5 !important;
-          border-color: #EF4444 !important;
-          background: rgba(239, 68, 68, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p1 .title { color: #FCA5A5 !important; }
-        
-        .ribbon[data-theme="dark"] .seg-p2 .tag { 
-          color: #FDE08A !important;
-          border-color: #FACC15 !important;
-          background: rgba(250, 204, 21, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p2 .title { color: #FDE08A !important; }
-
-        .ribbon[data-theme="dark"] .seg-p3 .tag { 
-          color: #BFDBFE !important;
-          border-color: #3B82F6 !important;
-          background: rgba(59, 130, 246, 0.15) !important;
-        }
-        .ribbon[data-theme="dark"] .seg-p3 .title { color: #BFDBFE !important; }
-        /* =============================================================== */
+        /* Respiro visual ao hover dos chips */
+        .flagsWrap:has(.seg-item:hover) { filter: brightness(1.015); }
 
         @media (max-width:1200px){
           .ribbon{ grid-template-columns: 1fr; }
@@ -458,14 +339,4 @@ export default function PriorityRibbonTabs({
       `}</style>
     </div>
   );
-}
-
-/* util (necessária para o box-shadow do modo light) */
-function hexToRgba(hex: string, a = 1) {
-  const c = hex.replace("#", "");
-  const fullHex = c.length === 3 ? c.split("").map(x => x + x).join("") : c;
-  if (fullHex.length !== 6) return `rgba(0,0,0,${a})`;
-  const n = parseInt(fullHex, 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return `rgba(${r},${g},${b},${a})`;
 }

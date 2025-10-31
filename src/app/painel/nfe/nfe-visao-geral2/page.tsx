@@ -139,9 +139,7 @@ export default function StatusOverview() {
   // Efeito para carregar o tema do localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('dashboardTheme') as ThemeType;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    }
+    if (savedTheme) setTheme(savedTheme);
   }, []);
 
   // Efeito para APLICAR E SALVAR o tema no localStorage e <body>
@@ -176,15 +174,12 @@ export default function StatusOverview() {
     if (status === 'authenticated') {
       const user: any = (session as any).user;
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.visaoGeral');
-
       if (hasAccess) {
         setAuthStatus('authorized');
-
         if (!fetchFlagRef.current) {
           fetchAllData();
           fetchFlagRef.current = true;
         }
-
       } else {
         setAuthStatus('unauthorized');
       }
@@ -322,8 +317,12 @@ export default function StatusOverview() {
       .map(mes => ({ mes, manual: mesesContagem[mes].manual, automatico: mesesContagem[mes].automatico }))
       .filter(d => d.manual > 0 || d.automatico > 0);
 
+    // ===== Tempo médio com 2 casas decimais =====
     const dadosTempoMedio = mesesNomes
-      .map(mes => ({ mes, dias: mesesContagem[mes].count > 0 ? mesesContagem[mes].totalDias / mesesContagem[mes].count : 0 }))
+      .map(mes => {
+        const media = mesesContagem[mes].count > 0 ? (mesesContagem[mes].totalDias / mesesContagem[mes].count) : 0;
+        return { mes, dias: +(media.toFixed(2)) }; // já arredondado para 2
+      })
       .filter(d => d.dias > 0);
 
     // --- LÓGICA GRÁFICOS 90 DIAS ---
@@ -354,16 +353,11 @@ export default function StatusOverview() {
     const firstActiveDayIndex = sortedLineChartData.findIndex(d => d.manual > 0 || d.automatico > 0);
     const dadosUltimos90Dias = firstActiveDayIndex > -1 ? sortedLineChartData.slice(firstActiveDayIndex) : [];
 
-    // --- LÓGICA DO GRÁFICO (Lançados vs Enviados) ---
+    // --- Lançados vs Enviados ---
     const lancadosVsEnviadosMap = new Map<string, { lancados: number, enviados: number }>();
-
     for (const [dateKey, counts] of lineChartData.entries()) {
-      lancadosVsEnviadosMap.set(dateKey, {
-        lancados: counts.manual + counts.automatico,
-        enviados: 0
-      });
+      lancadosVsEnviadosMap.set(dateKey, { lancados: counts.manual + counts.automatico, enviados: 0 });
     }
-
     for (const envio of rankingEnvio) {
       const parsedDate = parseDate(envio.data_insercao);
       if (parsedDate && parsedDate.dateObj >= ninetyDaysAgo && parsedDate.dateObj <= today) {
@@ -373,42 +367,28 @@ export default function StatusOverview() {
         lancadosVsEnviadosMap.set(dateKey, entry);
       }
     }
-
     const sortedLancadosVsEnviados = Array.from(lancadosVsEnviadosMap.entries())
-      .map(([date, counts]) => ({
-        date: `${date.split('-')[2]}/${date.split('-')[1]}`,
-        fullDate: date,
-        ...counts
-      }))
+      .map(([date, counts]) => ({ date: `${date.split('-')[2]}/${date.split('-')[1]}`, fullDate: date, ...counts }))
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-
     const firstActiveDayIndexLvE = sortedLancadosVsEnviados.findIndex(d => d.lancados > 0 || d.enviados > 0);
     const dadosLancadosVsEnviados = firstActiveDayIndexLvE > -1 ? sortedLancadosVsEnviados.slice(firstActiveDayIndexLvE) : [];
 
-    // --- LÓGICA DO GRÁFICO RANKING BAR (COM FILTRO) ---
+    // --- Ranking WPP ---
     const todayRanking = new Date();
     todayRanking.setHours(23, 59, 59, 999);
-
     const lastWeek = new Date();
     lastWeek.setDate(todayRanking.getDate() - 7);
     lastWeek.setHours(0, 0, 0, 0);
-
     const lastMonth = new Date();
     lastMonth.setDate(todayRanking.getDate() - 30);
     lastMonth.setHours(0, 0, 0, 0);
 
     const filteredRankingEnvio = rankingEnvio.filter(envio => {
       if (rankingFilter === 'geral') return true;
-
       const parsedDate = parseDate(envio.data_insercao);
       if (!parsedDate) return false;
-
-      if (rankingFilter === 'semana') {
-        return parsedDate.dateObj >= lastWeek && parsedDate.dateObj <= todayRanking;
-      }
-      if (rankingFilter === 'mes') {
-        return parsedDate.dateObj >= lastMonth && parsedDate.dateObj <= todayRanking;
-      }
+      if (rankingFilter === 'semana') return parsedDate.dateObj >= lastWeek && parsedDate.dateObj <= todayRanking;
+      if (rankingFilter === 'mes') return parsedDate.dateObj >= lastMonth && parsedDate.dateObj <= todayRanking;
       return false;
     });
 
@@ -459,56 +439,50 @@ export default function StatusOverview() {
   if (authStatus === 'unauthorized') return <div style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}><AcessoNegado /></div>;
 
   // --- ESTILOS DINÂMICOS BASEADOS NO TEMA ---
+  const kpiOrangeColor = theme === 'light' ? '#F58220' : '#FFA24A';
+  const kpiWhiteStrong = theme === 'dark'  ? '#F9FBFF' : '#00314A';
 
-  const kpiGreenColor  = theme === 'light' ? '#5FB246' : '#7CFF70';
-  const kpiOrangeColor = theme === 'light' ? '#F58220' : '#FFA24A'; // laranja mais vivo no dark
-  const kpiWhiteStrong = theme === 'dark'  ? '#F9FBFF' : '#00314A'; // para Fiscal no dark
-
-  // Estilos dos botões de filtro
   const baseFilterStyle: React.CSSProperties = {
-    padding: '4px 8px',
-    margin: '0 2px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: '500',
-    minWidth: '80px',
-    minHeight: '28px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease'
+    padding: '4px 8px', margin: '0 2px', borderRadius: '4px', cursor: 'pointer',
+    fontSize: '12px', fontWeight: '500', minWidth: '80px', minHeight: '28px',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease'
   };
-
   const filterStyle: React.CSSProperties = theme === 'light' ? {
-    ...baseFilterStyle,
-    background: 'none',
-    border: '1px solid #ccc',
-    color: '#555',
+    ...baseFilterStyle, background: 'none', border: '1px solid #ccc', color: '#555',
   } : {
-    ...baseFilterStyle,
-    background: 'rgba(25, 39, 53, 0.25)',
-    border: '1px solid rgba(125, 173, 222, 0.2)',
-    color: '#E2E8F0',
-    backdropFilter: 'blur(4px)'
+    ...baseFilterStyle, background: 'rgba(25, 39, 53, 0.25)', border: '1px solid rgba(125, 173, 222, 0.2)',
+    color: '#E2E8F0', backdropFilter: 'blur(4px)'
   };
-
   const activeFilterStyle: React.CSSProperties = theme === 'light' ? {
-    ...baseFilterStyle,
-    background: 'var(--gcs-blue)',
-    color: 'white',
-    border: '1px solid var(--gcs-blue)'
+    ...baseFilterStyle, background: 'var(--gcs-blue)', color: 'white', border: '1px solid var(--gcs-blue)'
   } : {
-    ...baseFilterStyle,
-    background: '#3B82F6',
-    color: 'white',
-    border: '1px solid #3B82F6'
+    ...baseFilterStyle, background: '#3B82F6', color: 'white', border: '1px solid #3B82F6'
   };
 
-  // Tooltip glass via CSS de classe padrão; objetos mantidos por compatibilidade
-  const glassTooltipStyle: React.CSSProperties = {};
-  const tooltipLabelStyle: React.CSSProperties = {};
-  const tooltipItemStyle: React.CSSProperties = {};
+  // *** CORREÇÃO: Definindo estilos de tooltip dinâmicos ***
+  const glassTooltipStyle: React.CSSProperties = {
+    borderRadius: '12px',
+    border: '1px solid',
+    backdropFilter: 'blur(14px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+    boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+    // Aplicando a cor dinamicamente
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A', 
+    // Aplicando o fundo dinamicamente
+    background: theme === 'dark' ? 'rgba(25,39,53,.50)' : 'rgba(255,255,255,.25)',
+    // Aplicando a borda dinamicamente
+    borderColor: theme === 'dark' ? 'rgba(125,173,222,.28)' : 'rgba(255,255,255,.35)',
+  };
+
+  // Estes também precisam ser dinâmicos para garantir
+  const tooltipLabelStyle: React.CSSProperties = {
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A',
+    fontWeight: 'bold',
+  };
+  
+  const tooltipItemStyle: React.CSSProperties = {
+    color: theme === 'dark' ? '#E2E8F0' : '#00314A',
+  };
 
   return (
     <div className="dashboard-container" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
@@ -516,34 +490,21 @@ export default function StatusOverview() {
       {/* --- DEFINIÇÕES DE GRADIENTE SVG --- */}
       <svg width="0" height="0" style={{ position: 'absolute', zIndex: -1 }}>
         <defs>
-          {/* Gradiente Azul (Automático / Pendências) - TEMA CLARO */}
           <linearGradient id="gradAzul" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#004a6f" />
             <stop offset="100%" stopColor="#00314A" />
           </linearGradient>
-
-          {/* Gradiente Prata Metálico - TEMA ESCURO */}
           <linearGradient id="gradPrata" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F0F0F0" />
             <stop offset="100%" stopColor="#B0B0B0" />
           </linearGradient>
-
-          {/* Gradiente Laranja (Manual / Pendente) */}
           <linearGradient id="gradLaranja" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#f79b4d" />
             <stop offset="100%" stopColor="#F58220" />
           </linearGradient>
-
-          {/* Gradiente Verde (Lançadas / Enviadas) */}
           <linearGradient id="gradVerde" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7ac962" />
+            <stop offset="0%" stopColor="#9DDE5B" />
             <stop offset="100%" stopColor="#5FB246" />
-          </linearGradient>
-
-          {/* Tampa branca translúcida (opcional) */}
-          <linearGradient id="glassTop" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#FFFFFF" stopOpacity=".35" />
-            <stop offset="25%" stopColor="transparent" stopOpacity="0" />
           </linearGradient>
         </defs>
       </svg>
@@ -587,7 +548,7 @@ export default function StatusOverview() {
             {/* KPIs */}
             <div className="kpi-grid">
               <Card className="kpi-card"><h3>Notas Processadas</h3><h2>{computedStats.totalNotas}</h2></Card>
-              <Card className="kpi-card"><h3>Enviadas WhatsApp</h3><h2 style={{ color: kpiGreenColor }}>{computedStats.stats.enviadasWhatsApp}</h2></Card>
+              <Card className="kpi-card"><h3>Enviadas WhatsApp</h3><h2 className="kpi-text-gradient-green">{computedStats.stats.enviadasWhatsApp}</h2></Card>
               <Card className="kpi-card"><h3>Pendentes Compras</h3><h2 style={{ color: kpiOrangeColor }}>{computedStats.stats.pendentesCompras}</h2></Card>
               <Card className="kpi-card"><h3>Pendentes Fiscal</h3><h2 style={{ color: kpiWhiteStrong }}>{computedStats.stats.pendentesFiscal}</h2></Card>
             </div>
@@ -615,7 +576,15 @@ export default function StatusOverview() {
                         return <Cell key={`cell-${index}`} fill={pieFill} />;
                       })}
                     </Pie>
-                    <Tooltip contentStyle={glassTooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+                    
+                    {/* *** CORREÇÃO APLICADA AQUI: Passando os estilos dinâmicos *** */}
+                    <Tooltip 
+                      contentStyle={glassTooltipStyle} 
+                      labelStyle={tooltipLabelStyle} 
+                      itemStyle={tooltipItemStyle} 
+                    />
+                    
+                    {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                     <Legend verticalAlign="bottom" height={36} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -629,22 +598,31 @@ export default function StatusOverview() {
                       <XAxis dataKey="mes" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                       <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                       <Tooltip />
+                      {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                       <Legend verticalAlign="bottom" height={36} />
+
+                      {/* Segmento de baixo (Manual) — sem raio e sem stroke para não aparecer “costura” */}
                       <Bar
                         dataKey="manual"
                         name="Manual"
                         fill="url(#gradLaranja)"
-                        radius={[10, 10, 8, 8]}
+                        radius={[0, 0, 0, 0]}
                         barSize={28}
                         stackId="a"
+                        stroke="none"
+                        isAnimationActive
                       />
+
+                      {/* Segmento de cima (Automático) — com raios só no topo; sem stroke para borda interiça */}
                       <Bar
                         dataKey="automatico"
                         name="Automático"
                         fill={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
-                        radius={[10, 10, 8, 8]}
+                        radius={[10, 10, 0, 0]}
                         barSize={28}
                         stackId="a"
+                        stroke="none"
+                        isAnimationActive
                       >
                         <LabelList
                           position="top"
@@ -684,6 +662,7 @@ export default function StatusOverview() {
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
+                  {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                   <Legend verticalAlign="bottom" height={36} />
                   <Line
                     type="monotone"
@@ -715,6 +694,7 @@ export default function StatusOverview() {
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
+                  {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                   <Legend verticalAlign="bottom" height={36} />
                   <Line
                     type="monotone"
@@ -738,17 +718,20 @@ export default function StatusOverview() {
               </ResponsiveContainer>
             </Card>
 
-            {/* --- INÍCIO DA MUDANÇA DE LAYOUT --- */}
+            {/* --- OUTROS GRÁFICOS --- */}
             <div className="chart-grid-two-column">
-
-              {/* Gráfico Tempo Médio */}
+              {/* Tempo Médio com 2 casas decimais */}
               <Card title={`Tempo Médio de Lançamento (Ano: ${selectedYear})`} className="kpi-card">
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={chartData.dadosTempoMedio} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                     <XAxis dataKey="mes" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
-                    <YAxis label={{ value: 'Dias', angle: -90, position: 'insideLeft' }} tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
-                    <Tooltip />
+                    <YAxis
+                      label={{ value: 'Dias', angle: -90, position: 'insideLeft' }}
+                      tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }}
+                      tickFormatter={(v) => Number(v).toFixed(2)}
+                    />
+                    <Tooltip formatter={(v: number) => Number(v).toFixed(2)} />
                     <Bar
                       dataKey="dias"
                       name="Média de Dias"
@@ -756,13 +739,18 @@ export default function StatusOverview() {
                       radius={[10, 10, 8, 8]}
                       barSize={28}
                     >
-                      <LabelList dataKey="dias" position="top" formatter={(value: number) => value > 0 ? value.toFixed(1) : ''} className="recharts-bar-days-label" />
+                      <LabelList
+                        dataKey="dias"
+                        position="top"
+                        formatter={(value: number) => value > 0 ? Number(value).toFixed(2) : ''}
+                        className="recharts-bar-days-label"
+                      />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
 
-              {/* GRÁFICO RANKING DE ENVIO */}
+              {/* Ranking WPP */}
               <Card
                 title="Ranking de Envio (Qtd de Notas)"
                 className="kpi-card"
@@ -770,30 +758,21 @@ export default function StatusOverview() {
                   <div>
                     <button
                       style={rankingFilter === 'geral' ? activeFilterStyle : filterStyle}
-                      onClick={() => {
-                        setLoadingFilter('geral');
-                        setRankingFilter('geral');
-                      }}
+                      onClick={() => { setLoadingFilter('geral'); setRankingFilter('geral'); }}
                       disabled={loadingFilter !== null}
                     >
                       {loadingFilter === 'geral' ? <Loader2 size={14} className="spinner-icon" /> : 'Geral'}
                     </button>
                     <button
                       style={rankingFilter === 'mes' ? activeFilterStyle : filterStyle}
-                      onClick={() => {
-                        setLoadingFilter('mes');
-                        setRankingFilter('mes');
-                      }}
+                      onClick={() => { setLoadingFilter('mes'); setRankingFilter('mes'); }}
                       disabled={loadingFilter !== null}
                     >
                       {loadingFilter === 'mes' ? <Loader2 size={14} className="spinner-icon" /> : 'Último Mês'}
                     </button>
                     <button
                       style={rankingFilter === 'semana' ? activeFilterStyle : filterStyle}
-                      onClick={() => {
-                        setLoadingFilter('semana');
-                        setRankingFilter('semana');
-                      }}
+                      onClick={() => { setLoadingFilter('semana'); setRankingFilter('semana'); }}
                       disabled={loadingFilter !== null}
                     >
                       {loadingFilter === 'semana' ? <Loader2 size={14} className="spinner-icon" /> : 'Última Semana'}
@@ -817,49 +796,6 @@ export default function StatusOverview() {
                   </ResponsiveContainer>
                 )}
               </Card>
-
-            </div>
-            {/* --- FIM DA MUDANÇA DE LAYOUT --- */}
-
-            {/* Gráficos de Análise */}
-            <div className="chart-grid-two-column">
-              <Card title="Top 5 Fornecedores com Problemas (Filtro)" className="kpi-card">
-                {chartData.topFornecedoresProblema.length === 0 ? (<div className="chart-placeholder">Nenhum fornecedor com problema no período.</div>) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart layout="vertical" data={chartData.topFornecedoresProblema} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
-                      <XAxis type="number" allowDecimals={false} tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
-                      <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600 }} />
-                      <Tooltip />
-                      <Bar dataKey="count" name="Notas com Problema" fill="url(#gradLaranja)" radius={[10, 10, 10, 10]} barSize={22}>
-                        <LabelList dataKey="count" position="right" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </Card>
-
-              <Card title="Notas Pendentes por Usuário (Filtro)" className="kpi-card">
-                {chartData.pendentesPorComprador.length === 0 ? (<div className="chart-placeholder">Nenhuma pendência no período.</div>) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart layout="vertical" data={chartData.pendentesPorComprador} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
-                      <XAxis type="number" allowDecimals={false} tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
-                      <YAxis type="category" dataKey="name" width={120} interval={0} scale="band" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600 }} />
-                      <Tooltip />
-                      <Bar
-                        dataKey="pendencias"
-                        name="Pendências"
-                        fill={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
-                        radius={[10, 10, 10, 10]}
-                        barSize={22}
-                      >
-                        <LabelList dataKey="pendencias" position="right" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </Card>
             </div>
 
             {/* Tabela */}
@@ -878,8 +814,21 @@ export default function StatusOverview() {
           --gcs-orange: #F58220;
           --gcs-gray-dark: #6c757d;
         }
+        
+        .kpi-text-gradient-green {
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+          background-clip: text !important;
+          text-fill-color: transparent !important;
+        }
+        body.light .kpi-text-gradient-green {
+          background: linear-gradient(180deg, #9DDE5B 0%, #5FB246 100%);
+        }
+        body.dark .kpi-text-gradient-green {
+          background: linear-gradient(180deg, #BFFFBC 0%, #7CFF70 100%);
+        }
 
-        /* ===== Tooltip Recharts com glass de verdade ===== */
+        /* Tooltip Recharts com glass */
         .recharts-default-tooltip {
           border-radius: 12px !important;
           border: 1px solid rgba(255,255,255,.35) !important;
@@ -895,11 +844,10 @@ export default function StatusOverview() {
           color: #E2E8F0 !important;
         }
 
-        /* --- ANIMAÇÃO DO SPINNER --- */
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spinner-icon { animation: spin 1s linear infinite; }
 
-        /* --- TEMA CLARO (LIGHT) --- */
+        /* Light */
         body.light {
           background-color: #D7DDE0 !important;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -913,7 +861,6 @@ export default function StatusOverview() {
         .dashboard-container { padding: 1rem; position: relative; z-index: 1; }
         .content-wrapper { position: relative; z-index: 2; }
 
-        /* --- GLASS CLARO --- */
         body.light .kpi-card.ant-card {
           background: rgba(255, 255, 255, 0.25) !important;
           backdrop-filter: blur(16px) !important;
@@ -933,7 +880,7 @@ export default function StatusOverview() {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
           transition: all 0.3s ease;
           margin-bottom: 1rem;
-          padding: 1rem;
+          padding: 1.5rem;
         }
         body.light .kpi-card .ant-card-body,
         body.light .kpi-card .ant-card-head { background: transparent !important; }
@@ -944,7 +891,6 @@ export default function StatusOverview() {
           background: rgba(255, 255, 255, 0.5) !important;
         }
 
-        /* Textos light */
         body.light .ant-card-head { color: #333 !important; border-bottom-color: rgba(0, 0, 0, 0.1) !important; }
         body.light .kpi-card h3 { margin: 0 0 0.5rem 0; color: #555; text-align: center; font-size: 0.9rem; font-weight: 500; }
         body.light .kpi-card h2 { margin: 0; font-size: 2rem; color: #00314A; text-align: center; }
@@ -953,12 +899,10 @@ export default function StatusOverview() {
         body.light .filters-container label { color: #333; }
         body.light .loading-text { color: var(--gcs-blue); }
 
-        /* Selects light */
         body.light .filters-container select {
-          padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; flex-grow: 1; background-color: #fff; color: #333;
+          padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; color: #333;
         }
 
-        /* Tabela light */
         body.light .kpi-card .ant-table { background: transparent !important; }
         body.light .kpi-card .ant-table-thead > tr > th {
           background: transparent !important; color: #333 !important;
@@ -970,14 +914,19 @@ export default function StatusOverview() {
         body.light .kpi-card .ant-table-tbody > tr.ant-table-row:hover > td { background: rgba(255, 255, 255, 0.3) !important; }
         body.light .kpi-card .ant-table-empty .ant-empty-description { color: #555; }
 
-        /* Recharts texts light */
         body.light .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; fill: #335360 !important; font-weight: 600; }
-        body.light .recharts-legend-item-text { font-size: 12px; color: #333 !important; }
+        
+        {/* ALTERAÇÃO 1: Regra CSS forte para a legenda no modo CLARO */}
+        body.light .recharts-legend-item-text { 
+          color: #335360 !important; 
+          font-size: 12px !important;
+        }
+        
         body.light .recharts-label { fill: #555 !important; }
         body.light .recharts-bar-total-label { fill: #333; }
         body.light .recharts-bar-days-label { fill: #333 !important; }
 
-        /* --- TEMA ESCURO (DARK) --- */
+        /* Dark */
         body.dark {
           background-image: url('/img_fundo_glass.png') !important;
           background-size: cover !important;
@@ -989,7 +938,6 @@ export default function StatusOverview() {
           transition: background 0.3s ease;
         }
 
-        /* GLASS escuro */
         body.dark .kpi-card.ant-card {
           background: rgba(25, 39, 53, 0.25) !important;
           backdrop-filter: blur(16px) !important;
@@ -1009,7 +957,7 @@ export default function StatusOverview() {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           transition: all 0.3s ease;
           margin-bottom: 1rem;
-          padding: 1rem;
+          padding: 1.5rem;
         }
         body.dark .kpi-card .ant-card-body,
         body.dark .kpi-card .ant-card-head { background: transparent !important; }
@@ -1020,7 +968,6 @@ export default function StatusOverview() {
           background: rgba(25, 39, 53, 0.5) !important;
         }
 
-        /* Textos dark (TÍTULOS BRANCOS FORTES) */
         body.dark .ant-card-head { color: #F9FBFF !important; border-bottom-color: rgba(125, 173, 222, 0.2) !important; }
         body.dark .ant-card-head-title { color: #F9FBFF !important; }
         body.dark .kpi-card h3 { margin: 0 0 0.5rem 0; color: #E2E8F0; text-align: center; font-size: 0.9rem; font-weight: 500; letter-spacing: .2px; }
@@ -1030,12 +977,14 @@ export default function StatusOverview() {
         body.dark .filters-container label { color: #E2E8F0; }
         body.dark .loading-text { color: #93C5FD; }
 
-        /* Selects dark */
+        {/* ALTERAÇÃO 2: Estilo do filtro 'select' para azul escuro */}
         body.dark .filters-container select {
-          padding: 6px 10px; border-radius: 6px; border: 1px solid #475569; flex-grow: 1; background-color: #1E293B; color: #E2E8F0;
+          padding: 6px 10px; border-radius: 6px; 
+          border: 1px solid #004a6f; 
+          background-color: #00314A; 
+          color: #E2E8F0;
         }
 
-        /* Tabela dark */
         body.dark .kpi-card .ant-table { background: transparent !important; }
         body.dark .kpi-card .ant-table-thead > tr > th {
           background: transparent !important; color: #E2E8F0 !important;
@@ -1047,14 +996,18 @@ export default function StatusOverview() {
         body.dark .kpi-card .ant-table-tbody > tr.ant-table-row:hover > td { background: rgba(40, 60, 80, 0.3) !important; }
         body.dark .kpi-card .ant-table-empty .ant-empty-description { color: #94A3B8; }
 
-        /* Recharts texts dark */
         body.dark .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; fill: #E2E8F0 !important; font-weight: 600; }
-        body.dark .recharts-legend-item-text { font-size: 12px; color: #E2E8F0 !important; }
+        
+        {/* ALTERAÇÃO 1: Regra CSS forte para a legenda no modo ESCURO */}
+        body.dark .recharts-legend-item-text { 
+          color: #E2E8F0 !important; 
+          font-size: 12px !important;
+        }
+        
         body.dark .recharts-label { fill: #94A3B8 !important; }
         body.dark .recharts-bar-total-label { fill: #F1F5F9; }
         body.dark .recharts-bar-days-label { fill: #F1F5F9 !important; }
 
-        /* --- LAYOUT --- */
         .kpi-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem; }
         .chart-grid-two-column { display: grid; gap: 1rem; grid-template-columns: 1fr; margin-bottom: 1rem; }
         .chart-full-width { margin-bottom: 1rem; }
@@ -1073,9 +1026,12 @@ export default function StatusOverview() {
           display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; align-self: flex-end;
         }
         body.light .theme-toggle-btn { color: var(--gcs-blue); border-color: #ccc; }
-        body.dark .theme-toggle-btn { color: #93C5FD; border-color: #93C5FD; }
+        
+        body.dark .theme-toggle-btn { color: #93C5FD; border-color: #93C5FD; background-color: rgba(147, 197, 253, 0.1); }
+        
         body.light .theme-toggle-btn:hover { background: rgba(0, 0, 0, 0.05); }
-        body.dark .theme-toggle-btn:hover { background: rgba(255, 255, 255, 0.1); }
+        
+        body.dark .theme-toggle-btn:hover { background: rgba(147, 197, 253, 0.2); }
 
         .chart-placeholder { height: 300px; display: flex; align-items: center; justify-content: center; text-align: center; }
         body.light .chart-placeholder { color: #888; }
@@ -1086,7 +1042,6 @@ export default function StatusOverview() {
         .btn-green { background-color: var(--gcs-green); color: white; }
         .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
 
-        /* --- MQ desktop --- */
         @media (min-width: 768px) {
           .dashboard-container { padding: 2rem; }
           .kpi-card { margin-bottom: 0; }
