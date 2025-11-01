@@ -40,21 +40,31 @@ interface SortConfig<T> {
 // --- SUB-COMPONENTES E FUNÇÕES AUXILIARES ---
 
 const StatusIndicator = ({ status }: { status: string }) => {
-    const statusConfig: { [key: string]: { color: string; text: string } } = {
-        'PAGO': { color: '#dc3545', text: 'Pago' },
-        'NAO ENCONTRADO PROTHEUS': { color: '#ffc107', text: 'Não Encontrado' },
-        'EM ABERTO': { color: '#28a745', text: 'Em Aberto' }
-    };
+    let statusClass = '';
+    let statusText = status;
 
-    const config = statusConfig[status.toUpperCase()] || { color: '#6c757d', text: status };
+    switch (status.toUpperCase()) {
+        case 'PAGO':
+            statusClass = 'status-pago';
+            statusText = 'Pago';
+            break;
+        case 'NAO ENCONTRADO PROTHEUS':
+            statusClass = 'status-nao-encontrado';
+            statusText = 'Não Encontrado';
+            break;
+        case 'EM ABERTO':
+            statusClass = 'status-em-aberto';
+            statusText = 'Em Aberto';
+            break;
+        default:
+            statusClass = 'status-outro';
+            break;
+    }
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px' }}>
-            <span style={{
-                height: '12px', width: '12px', backgroundColor: config.color, borderRadius: '50%',
-                display: 'inline-block', flexShrink: 0
-            }}></span>
-            <span>{config.text}</span>
+        <div className="status-indicator">
+            <span className={`status-dot ${statusClass}`}></span>
+            <span className="status-text">{statusText}</span>
         </div>
     );
 };
@@ -137,7 +147,7 @@ const FinanceiroModal = ({ isOpen, onClose, chave, consultaType }: FinanceiroMod
 
     const SortIcon = <T,>({ columnKey, sortConfig }: { columnKey: keyof T, sortConfig: SortConfig<T> }) => {
         if (sortConfig.key !== columnKey) {
-            return <ChevronsUpDown size={14} style={{ color: '#aab1b9' }} />;
+            return <ChevronsUpDown size={14} className="sort-icon-default" />;
         }
         return sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />;
     };
@@ -310,82 +320,360 @@ const FinanceiroModal = ({ isOpen, onClose, chave, consultaType }: FinanceiroMod
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2147483650 }}></div>
+            {/* O BLOCO DE ESTILO É INJETADO AQUI */}
+            <style>{`
+                /* --- === Base (copiado de ModalDetalhes) === --- */
+                :root {
+                    --gcs-blue: #00314A;
+                    --gcs-blue-light: #1b4c89;
+                    --gcs-blue-lighter: #a3b8d1;
+                    --gcs-blue-sky: #7DD3FC;
+                    --gcs-green: #5FB246;
+                    --gcs-green-dark: #28a745;
+                    --gcs-green-light: #effaf5;
+                    --gcs-green-border: #b7e4c7;
+                    --gcs-orange: #F58220;
+                    --gcs-orange-dark: #f7941d;
+                    --gcs-orange-light: #fffbe6;
+                    --gcs-orange-border: #ffe58f;
+                    --gcs-brand-red: #E11D2E;
+                    --gcs-red-light: #fff0f0;
+                    --gcs-red-border: #f5c2c7;
+                    --gcs-red-text: #721c24;
+                    --gcs-gray-light: #f1f5fb;
+                    --gcs-gray-border: #d0d7e2;
+                    --gcs-gray-text: #6c757d;
+                    --gcs-dark-text: #333;
+                    --gcs-dark-bg-transparent: rgba(25, 39, 53, 0.5);
+                    --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
+                    --gcs-dark-border: rgba(125, 173, 222, 0.2);
+                    --gcs-dark-border-hover: rgba(125, 173, 222, 0.4);
+                    --gcs-dark-text-primary: #F1F5F9;
+                    --gcs-dark-text-secondary: #CBD5E1;
+                    --gcs-dark-text-tertiary: #94A3B8;
+                }
+                .animate-spin {
+                    animation: spin 1s linear infinite;
+                }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                /* --- Base Modal --- */
+                .financeiro-modal-backdrop {
+                    position: fixed; top: 0; left: 0;
+                    width: 100vw; height: 100vh;
+                    background-color: rgba(0,0,0,0.6);
+                    z-index: 2147483650;
+                }
+                .financeiro-modal-glass {
+                    position: fixed;
+                    border-radius: 12px;
+                    width: 90%;
+                    max-width: 1000px;
+                    min-height: 400px;
+                    max-height: 80vh;
+                    display: flex;
+                    flex-direction: column;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                    z-index: 2147483651;
+                    transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
+                }
+                body.light .financeiro-modal-glass {
+                    background: #fff;
+                    border: 1px solid #dee2e6;
+                }
+                body.dark .financeiro-modal-glass {
+                    background: var(--gcs-dark-bg-heavy);
+                    backdrop-filter: blur(16px);
+                    -webkit-backdrop-filter: blur(16px);
+                    border: 1px solid var(--gcs-dark-border);
+                }
+
+                /* --- Modal Header --- */
+                .financeiro-modal-header {
+                    padding: 1.5rem;
+                    border-bottom: 1px solid;
+                    flex-shrink: 0;
+                    cursor: move;
+                    border-top-left-radius: 12px;
+                    border-top-right-radius: 12px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    transition: background-color 0.3s ease, border-color 0.3s ease;
+                }
+                body.light .financeiro-modal-header {
+                    background-color: var(--gcs-gray-light);
+                    border-bottom-color: #dee2e6;
+                }
+                body.dark .financeiro-modal-header {
+                    background-color: rgba(25, 39, 53, 0.5);
+                    border-bottom-color: var(--gcs-dark-border);
+                }
+                .financeiro-modal-title {
+                    font-size: 1.2rem;
+                    font-weight: bold;
+                }
+                body.light .financeiro-modal-title { color: var(--gcs-dark-text); }
+                body.dark .financeiro-modal-title { color: var(--gcs-dark-text-primary); }
+                
+                .financeiro-modal-close-btn {
+                    background: none; border: none; font-size: 1.5rem;
+                    cursor: pointer; padding: 0; line-height: 1;
+                }
+                body.light .financeiro-modal-close-btn { color: var(--gcs-dark-text); }
+                body.dark .financeiro-modal-close-btn { color: var(--gcs-dark-text-secondary); }
+                body.dark .financeiro-modal-close-btn:hover { color: var(--gcs-dark-text-primary); }
+                
+                /* --- Modal Content --- */
+                .financeiro-modal-content {
+                    flex-grow: 1;
+                    padding: 1.5rem;
+                    overflow-y: auto;
+                }
+                
+                /* --- Spinner --- */
+                .modal-spinner-container {
+                    display: flex; flex-direction: column; align-items: center;
+                    justify-content: center; height: 100%; min-height: 200px;
+                }
+                .modal-spinner {
+                    width: 32px; height: 32px;
+                    animation: spin 1s linear infinite;
+                }
+                .modal-spinner-text {
+                    margin-top: 1rem; font-weight: bold;
+                }
+                body.light .modal-spinner { color: var(--gcs-blue-light); }
+                body.light .modal-spinner-text { color: var(--gcs-blue-light); }
+                body.dark .modal-spinner { color: var(--gcs-blue-sky); }
+                body.dark .modal-spinner-text { color: var(--gcs-blue-sky); }
+
+                /* --- Error/Empty States --- */
+                .modal-error-box {
+                    padding: 1rem; border-radius: 5px; text-align: center;
+                }
+                body.light .modal-error-box {
+                    color: #dc3545; background: #f8d7da;
+                }
+                body.dark .modal-error-box {
+                    color: #F87171; background: rgba(225, 29, 46, 0.15);
+                }
+                
+                .modal-empty-state {
+                    text-align: center; padding-top: 2rem;
+                }
+                body.light .modal-empty-state { color: #6c757d; }
+                body.dark .modal-empty-state { color: var(--gcs-dark-text-tertiary); }
+                
+                /* --- Tabela --- */
+                .modal-table-container { overflow-x: auto; }
+                .modal-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 14px;
+                }
+                .modal-table th, .modal-table td {
+                    padding: 10px;
+                    border: 1px solid;
+                    transition: all 0.3s ease;
+                }
+                .modal-table th { font-size: 13px; padding: 12px 10px; }
+                
+                /* Tabela Light */
+                body.light .modal-table { border-color: #dee2e6; }
+                body.light .modal-table th {
+                    background-color: var(--gcs-gray-light);
+                    color: var(--gcs-blue-light);
+                    border-color: #dee2e6;
+                }
+                body.light .modal-table td {
+                    border-color: #dee2e6;
+                    color: var(--gcs-dark-text);
+                }
+                body.light .modal-table tbody tr { background-color: #fff; }
+                body.light .modal-table tbody tr:hover { background-color: #f9f9f9; }
+
+                /* Tabela Dark */
+                body.dark .modal-table { border-color: var(--gcs-dark-border-hover); }
+                body.dark .modal-table th {
+                    background-color: rgba(25, 39, 53, 0.5);
+                    color: var(--gcs-blue-sky);
+                    border-color: var(--gcs-dark-border-hover);
+                }
+                body.dark .modal-table td {
+                    border-color: var(--gcs-dark-border);
+                    color: var(--gcs-dark-text-secondary);
+                }
+                body.dark .modal-table tbody tr { background-color: rgba(25, 39, 53, 0.1); }
+                body.dark .modal-table tbody tr:hover { background-color: rgba(25, 39, 53, 0.4); }
+
+                /* --- Componentes da Tabela --- */
+                .th-sortable {
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                .th-sortable.justify-start { justify-content: flex-start; }
+                .th-sortable.justify-center { justify-content: center; }
+                .th-sortable.justify-end { justify-content: flex-end; }
+                
+                body.dark .sort-icon-default { color: #aab1b9; }
+
+                .currency-cell {
+                    font-family: monospace;
+                    font-weight: bold;
+                }
+                body.light .currency-cell { color: #333; }
+                body.dark .currency-cell { color: var(--gcs-dark-text-primary); }
+                
+                .monospace-cell {
+                    font-family: monospace;
+                }
+                body.light .monospace-cell { color: #6c757d; }
+                body.dark .monospace-cell { color: var(--gcs-dark-text-tertiary); }
+
+                /* --- Status Indicator --- */
+                .status-indicator {
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-start;
+                    gap: 8px;
+                }
+                .status-dot {
+                    height: 12px; width: 12px;
+                    border-radius: 50%;
+                    display: inline-block;
+                    flex-shrink: 0;
+                }
+                body.light .status-text { color: var(--gcs-dark-text); }
+                body.dark .status-text { color: var(--gcs-dark-text-secondary); }
+
+                .status-dot.status-pago { background-color: #dc3545; }
+                .status-dot.status-nao-encontrado { background-color: #ffc107; }
+                .status-dot.status-em-aberto { background-color: #28a745; }
+                .status-dot.status-outro { background-color: #6c757d; }
+
+                /* --- Botões --- */
+                .btn {
+                    display: inline-flex; align-items: center; justify-content: center;
+                    gap: 8px; padding: 10px 20px; border-radius: 5px;
+                    border: none; font-weight: bold; cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                .btn:disabled { cursor: not-allowed; opacity: 0.6; }
+                
+                .btn-secondary { border: 1px solid; font-weight: bold; }
+                body.light .btn-secondary { background: #f1f1f1; color: var(--gcs-dark-text); border-color: #ccc; }
+                body.light .btn-secondary:hover:not(:disabled) { background: #e0e0e0; }
+                body.dark .btn-secondary { background: var(--gcs-dark-bg-transparent); color: var(--gcs-dark-text-secondary); border-color: var(--gcs-dark-border); }
+                body.dark .btn-secondary:hover:not(:disabled) { background: rgba(25, 39, 53, 0.7); border-color: var(--gcs-dark-border-hover); }
+
+                .btn-visualizar {
+                    background: #344054; color: white; border: none;
+                    border-radius: 5px; padding: 8px 12px; cursor: pointer;
+                    display: inline-flex; align-items: center;
+                    justify-content: center; gap: 6px;
+                    transition: background-color 0.2s;
+                }
+                body.light .btn-visualizar:hover:not(:disabled) { background-color: #1d2939; }
+                body.dark .btn-visualizar {
+                    background: var(--gcs-dark-bg-transparent); color: var(--gcs-dark-text-secondary);
+                    border: 1px solid var(--gcs-dark-border);
+                }
+                body.dark .btn-visualizar:hover:not(:disabled) {
+                    background: rgba(25, 39, 53, 0.7);
+                    border-color: var(--gcs-dark-border-hover);
+                }
+
+                /* --- Modal Footer --- */
+                .financeiro-modal-footer {
+                    padding: 1.5rem;
+                    border-top: 1px solid;
+                    display: flex;
+                    justify-content: flex-end;
+                }
+                body.light .financeiro-modal-footer { border-top-color: #dee2e6; }
+                body.dark .financeiro-modal-footer { border-top-color: var(--gcs-dark-border); }
+
+            `}</style>
+            
+            <div onClick={onClose} className="financeiro-modal-backdrop"></div>
             <div
                 ref={modalRef}
+                className="financeiro-modal-glass"
                 style={{
-                    position: 'fixed', top: position.y, left: position.x, background: '#fff', borderRadius: 12, width: '90%', maxWidth: '1000px',
-                    minHeight: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', zIndex: 2147483651
+                    position: 'fixed',
+                    top: position.y,
+                    left: position.x
                 }}
             >
-                <div onMouseDown={handleMouseDown} style={{ padding: '1.5rem', borderBottom: '1px solid #dee2e6', cursor: 'move', backgroundColor: '#f1f5fb',
-                        borderTopLeftRadius: '12px', borderTopRightRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} >
-                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{modalTitle}</span>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', padding: 0 }}><FaTimes /></button>
+                <div onMouseDown={handleMouseDown} className="financeiro-modal-header">
+                    <span className="financeiro-modal-title">{modalTitle}</span>
+                    <button onClick={onClose} className="financeiro-modal-close-btn"><FaTimes /></button>
                 </div>
 
-                <div style={{ flexGrow: 1, padding: '1.5rem', overflowY: 'auto' }}>
+                <div className="financeiro-modal-content">
                     
                     {consultaType === 'dda' && (
                         <div>
                             {loadingBoletos ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '200px' }}>
-                                    <FaSpinner className="animate-spin" size={32} color="#1b4c89" />
-                                    <p style={{ marginTop: '1rem', color: '#1b4c89', fontWeight: 'bold' }}>Consultando boletos...</p>
+                                <div className="modal-spinner-container">
+                                    <FaSpinner className="animate-spin modal-spinner" />
+                                    <p className="modal-spinner-text">Consultando boletos...</p>
                                 </div>
                             ) : errorBoletos ? (
-                                <div style={{ color: '#dc3545', padding: '1rem', background: '#f8d7da', borderRadius: '5px', textAlign: 'center' }}>{errorBoletos}</div>
+                                <div className="modal-error-box">{errorBoletos}</div>
                             ) : sortedBoletos.length === 0 ? (
-                                <div style={{ textAlign: 'center', color: '#6c757d', paddingTop: '2rem' }}>Não foram encontrados boletos para esta raiz de CNPJ nos últimos 90 dias.</div>
+                                <div className="modal-empty-state">Não foram encontrados boletos para esta raiz de CNPJ nos últimos 90 dias.</div>
                             ) : (
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                                        <thead style={{ backgroundColor: '#f1f5fb', color: '#1b4c89' }}>
+                                <div className="modal-table-container">
+                                    <table className="modal-table">
+                                        <thead>
                                             <tr>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Fornecedor</th>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Emissão</th>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center', cursor: 'pointer' }} onClick={() => requestSortBoletos('vencimento')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'}}>
+                                                <th>Fornecedor</th>
+                                                <th style={{ textAlign: 'center' }}>Emissão</th>
+                                                <th style={{ textAlign: 'center' }}>
+                                                    <div className="th-sortable justify-center" onClick={() => requestSortBoletos('vencimento')}>
                                                         Vencimento <SortIcon columnKey="vencimento" sortConfig={sortConfigBoletos} />
                                                     </div>
                                                 </th>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', cursor: 'pointer' }} onClick={() => requestSortBoletos('Valor')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px'}}>
+                                                <th style={{ textAlign: 'right' }}>
+                                                    <div className="th-sortable justify-end" onClick={() => requestSortBoletos('Valor')}>
                                                         Valor <SortIcon columnKey="Valor" sortConfig={sortConfigBoletos} />
                                                     </div>
                                                 </th>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left', cursor: 'pointer' }} onClick={() => requestSortBoletos('Status')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '4px'}}>
+                                                <th>
+                                                    <div className="th-sortable justify-start" onClick={() => requestSortBoletos('Status')}>
                                                         Status <SortIcon columnKey="Status" sortConfig={sortConfigBoletos} />
                                                     </div>
                                                 </th>
-                                                <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Ações</th>
+                                                <th style={{ textAlign: 'center' }}>Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {sortedBoletos.map((boleto) => (
-                                                <tr key={boleto.registro} style={{ backgroundColor: '#fff', borderBottom: '1px solid #eee' }}>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>
+                                                <tr key={boleto.registro}>
+                                                    <td>
                                                         <div>{boleto.nome}</div>
-                                                        <div style={{ fontSize: '12px', color: '#6c757d', fontFamily: 'monospace' }}>{boleto.cnpj}</div>
+                                                        <div className="monospace-cell" style={{ fontSize: '12px' }}>{boleto.cnpj}</div>
                                                     </td>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'center' }}>{formatDate(boleto.emissao)}</td>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'center' }}>{formatDate(boleto.vencimento)}</td>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                                    <td style={{ textAlign: 'center' }}>{formatDate(boleto.emissao)}</td>
+                                                    <td style={{ textAlign: 'center' }}>{formatDate(boleto.vencimento)}</td>
+                                                    <td className="currency-cell" style={{ textAlign: 'right' }}>
                                                         {(boleto.Valor ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                     </td>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6' }}><StatusIndicator status={boleto.Status} /></td>
-                                                    <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                                    <td><StatusIndicator status={boleto.Status} /></td>
+                                                    <td style={{ textAlign: 'center' }}>
                                                         <button
                                                             onClick={() => handleVisualizarBoleto(boleto.registro)}
                                                             title="Visualizar Boleto"
                                                             disabled={visualizingRegistro === boleto.registro}
-                                                            style={{
-                                                                background: '#344054', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 12px', cursor: 'pointer',
-                                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'background-color 0.2s', minWidth: '110px'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d2939'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#344054'}
+                                                            className="btn-visualizar"
+                                                            style={{ minWidth: '110px' }}
                                                         >
                                                             {visualizingRegistro === boleto.registro ? <FaSpinner className="animate-spin" size={14} /> : <FaBarcode size={14} />}
                                                             <span>{visualizingRegistro === boleto.registro ? 'Aguarde' : 'Visualizar'}</span>
@@ -403,61 +691,57 @@ const FinanceiroModal = ({ isOpen, onClose, chave, consultaType }: FinanceiroMod
                     {consultaType === 'titulos' && (
                         <div>
                             {loadingPagamentos ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '200px' }}>
-                                    <FaSpinner className="animate-spin" size={32} color="#1b4c89" />
-                                    <p style={{ marginTop: '1rem', color: '#1b4c89', fontWeight: 'bold' }}>Consultando títulos...</p>
+                                <div className="modal-spinner-container">
+                                    <FaSpinner className="animate-spin modal-spinner" />
+                                    <p className="modal-spinner-text">Consultando títulos...</p>
                                 </div>
                             ) : errorPagamentos ? (
-                                <div style={{ color: '#dc3545', padding: '1rem', background: '#f8d7da', borderRadius: '5px', textAlign: 'center' }}>{errorPagamentos}</div>
+                                <div className="modal-error-box">{errorPagamentos}</div>
                             ) : sortedPagamentos.length === 0 ? (
-                                <div style={{ textAlign: 'center', color: '#6c757d', paddingTop: '2rem' }}>Nenhum título de pagamento foi encontrado para esta nota.</div>
+                                <div className="modal-empty-state">Nenhum título de pagamento foi encontrado para esta nota.</div>
                             ) : (
-                                <div style={{ overflowX: 'auto' }}>
-                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                                       <thead style={{ backgroundColor: '#f1f5fb', color: '#1b4c89' }}>
+                                <div className="modal-table-container">
+                                   <table className="modal-table">
+                                       <thead>
                                            <tr>
-                                               <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left' }}>Fornecedor</th>
-                                               <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'left', cursor: 'pointer' }} onClick={() => requestSortPagamentos('numero')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '4px'}}>
+                                               <th>Fornecedor</th>
+                                               <th>
+                                                    <div className="th-sortable justify-start" onClick={() => requestSortPagamentos('numero')}>
                                                         Título <SortIcon columnKey="numero" sortConfig={sortConfigPagamentos} />
                                                     </div>
                                                 </th>
-                                               <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center', cursor: 'pointer' }} onClick={() => requestSortPagamentos('dt_pgto')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'}}>
+                                               <th style={{ textAlign: 'center' }}>
+                                                    <div className="th-sortable justify-center" onClick={() => requestSortPagamentos('dt_pgto')}>
                                                         Data Pagamento <SortIcon columnKey="dt_pgto" sortConfig={sortConfigPagamentos} />
                                                     </div>
                                                 </th>
-                                               <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'right', cursor: 'pointer' }} onClick={() => requestSortPagamentos('valor')}>
-                                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px'}}>
+                                               <th style={{ textAlign: 'right' }}>
+                                                    <div className="th-sortable justify-end" onClick={() => requestSortPagamentos('valor')}>
                                                         Valor <SortIcon columnKey="valor" sortConfig={sortConfigPagamentos} />
                                                     </div>
                                                 </th>
-                                               <th style={{ padding: '12px', border: '1px solid #dee2e6', textAlign: 'center' }}>Ações</th>
+                                               <th style={{ textAlign: 'center' }}>Ações</th>
                                            </tr>
                                        </thead>
                                        <tbody>
                                            {sortedPagamentos.map((pag, index) => (
-                                               <tr key={`${pag.numero}-${pag.registro}-${index}`} style={{ backgroundColor: '#fff', borderBottom: '1px solid #eee' }}>
-                                                   <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>
+                                               <tr key={`${pag.numero}-${pag.registro}-${index}`}>
+                                                   <td>
                                                        <div>{pag.nome}</div>
-                                                       <div style={{ fontSize: '12px', color: '#6c757d', fontFamily: 'monospace' }}>{pag.cnpj}</div>
+                                                       <div className="monospace-cell" style={{ fontSize: '12px' }}>{pag.cnpj}</div>
                                                    </td>
-                                                   <td style={{ padding: '10px', border: '1px solid #dee2e6' }}>{pag.numero}</td>
-                                                   <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'center' }}>{formatDate(pag.dt_pgto)}</td>
-                                                   <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                                   <td>{pag.numero}</td>
+                                                   <td style={{ textAlign: 'center' }}>{formatDate(pag.dt_pgto)}</td>
+                                                   <td className="currency-cell" style={{ textAlign: 'right' }}>
                                                        {pag.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                    </td>
-                                                   <td style={{ padding: '10px', border: '1px solid #dee2e6', textAlign: 'center' }}>
+                                                   <td style={{ textAlign: 'center' }}>
                                                        <button
                                                            onClick={() => handleVisualizarComprovante(pag.registro)}
                                                            disabled={visualizingComprovante === pag.registro}
                                                            title="Visualizar Comprovante"
-                                                           style={{
-                                                               background: '#344054', color: 'white', border: 'none', borderRadius: '5px', padding: '8px 12px', cursor: 'pointer',
-                                                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'background-color 0.2s', minWidth: '130px'
-                                                           }}
-                                                           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d2939'}
-                                                           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#344054'}
+                                                           className="btn-visualizar"
+                                                           style={{ minWidth: '130px' }}
                                                        >
                                                           {visualizingComprovante === pag.registro ? <FaSpinner className="animate-spin" size={14} /> : <FaFileInvoice size={14} />}
                                                           <span>{visualizingComprovante === pag.registro ? 'Aguarde' : 'Comprovante'}</span>
@@ -474,8 +758,8 @@ const FinanceiroModal = ({ isOpen, onClose, chave, consultaType }: FinanceiroMod
 
                 </div>
 
-                <div style={{ padding: '1.5rem', borderTop: '1px solid #dee2e6', display: 'flex', justifyContent: 'flex-end' }}>
-                     <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Fechar</button>
+                <div className="financeiro-modal-footer">
+                     <button onClick={onClose} className="btn btn-secondary">Fechar</button>
                 </div>
             </div>
         </>
@@ -483,4 +767,3 @@ const FinanceiroModal = ({ isOpen, onClose, chave, consultaType }: FinanceiroMod
 };
 
 export default FinanceiroModal;
-

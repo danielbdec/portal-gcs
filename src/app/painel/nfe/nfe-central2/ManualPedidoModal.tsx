@@ -18,11 +18,9 @@ interface ItemNota {
     valor_unitario_bate?: string;
     qtd?: number;
     moeda?: number;
-    // --- ALTERAÇÃO 1: Adicionar campos opcionais para preservar o estado pré-existente ---
     registro_pedido?: number | null;
     ultima_ptax?: number | null;
     data_ultima_ptax?: string | null;
-    // --- FIM DA ALTERAÇÃO 1 ---
 }
 
 interface PedidoEncontrado {
@@ -70,41 +68,27 @@ const DiffTag = ({ valueBRL, pct }: { valueBRL: number; pct: number }) => {
     const isLoss = valueBRL > 0.001;
     const isGain = valueBRL < -0.001;
     const Icon = isLoss ? TrendingUp : TrendingDown;
-    const color = isLoss ? "#b91c1c" : isGain ? "#15803d" : "#6b7280";
-    const backgroundColor = isLoss ? "#fee2e2" : isGain ? "#dcfce7" : "#f1f5f9";
-    const borderColor = isLoss ? "#fecaca" : isGain ? "#bbf7d0" : "#e2e8f0";
+    
+    const tagClass = isLoss ? "is-loss" : isGain ? "is-gain" : "is-neutral";
   
     return (
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          fontWeight: 600,
-          color,
-          backgroundColor,
-          border: `1px solid ${borderColor}`,
-          padding: "4px 10px",
-          borderRadius: 999,
-          fontSize: '12px'
-        }}
-      >
+      <span className={`diff-tag ${tagClass}`}>
         <Icon size={16} />
         {valueBRL >= 0 ? "+ " : "- "} {Math.abs(valueBRL).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-        <span style={{ color: isLoss ? "#b91c1c" : isGain ? "#15803d" : "#64748b" }}>
+        <span className="diff-tag-percent">
           ({valueBRL >= 0 ? "+" : ""}{pct.toFixed(2)}%)
         </span>
       </span>
     );
 };
 
-const Meta = ({ children }: { children: React.ReactNode }) => {
-    return <div style={{ color: "#94a3b8", fontSize: 12, marginTop: '2px' }}>{children}</div>;
+const Meta = ({ children, className }: { children: React.ReactNode, className?: string }) => {
+    return <div className={`meta-text ${className || ''}`}>{children}</div>;
 };
 
 const AproximadoLabel = (
     <Tooltip title="Valor em R$ aproximado, convertido pela PTAX de referência vinda do ERP. O fornecedor pode adotar outra PTAX no fechamento, gerando diferenças.">
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span className="tooltip-label">
         Aprox. em R$ (PTAX empresa) <Info size={14} />
       </span>
     </Tooltip>
@@ -132,20 +116,30 @@ const ConfirmationModal = ({
     showCancelButton?: boolean
 }) => {
     if (!isOpen) return null;
+
+    let confirmButtonClass = "btn ";
+    if (confirmColor === "#dc3545") {
+        confirmButtonClass += "btn-danger";
+    } else if (confirmColor === "#007bff") {
+        confirmButtonClass += "btn-primary";
+    } else {
+        confirmButtonClass += "btn-primary"; // Fallback
+    }
+
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483652 }}></div>
-            <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 2147483653, maxWidth: '450px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <div onClick={onClose} className="confirm-modal-backdrop"></div>
+            <div className="confirm-modal-content">
+                <div className="confirm-modal-icon">
                     {icon}
                 </div>
-                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#333' }}>{title}</h3>
-                <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+                <h3 className="confirm-modal-title">{title}</h3>
+                <p className="confirm-modal-message">{message}</p>
+                <div className="confirm-modal-actions">
                     {showCancelButton && (
-                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                        <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
                     )}
-                    <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
+                    <button onClick={onConfirm} className={confirmButtonClass}>{confirmText}</button>
                 </div>
             </div>
         </>
@@ -162,7 +156,7 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
     activeItemInfo: { item: string; descricao: string; } | null;
 }) => {
     const modalRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [position, setPosition] = useState<{ x: number; y: number } | null>(null); // Posição inicial nula
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -170,11 +164,15 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
     const handleMouseDown = (e: React.MouseEvent) => {
         if (modalRef.current) {
             const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT' || target.closest('button')) {
                 return;
             }
             setIsDragging(true);
+            
+            // Se for o primeiro arraste, calcula a posição atual para evitar o "salto"
             const modalRect = modalRef.current.getBoundingClientRect();
+            setPosition({ x: modalRect.left, y: modalRect.top });
+            
             setOffset({
                 x: e.clientX - modalRect.left,
                 y: e.clientY - modalRect.top
@@ -208,12 +206,7 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
     useEffect(() => {
         if (isOpen) {
             setSearchTerm(''); 
-            if (modalRef.current) {
-                const modal = modalRef.current;
-                const initialX = (window.innerWidth - modal.offsetWidth) / 1.6;
-                const initialY = 100;
-                setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
-            }
+            setPosition(null); // Reseta a posição para que o CSS de centralização funcione
         }
     }, [isOpen]);
 
@@ -239,38 +232,32 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
         title = `Selecionar Pedido - Item ${activeItemInfo.item}: ${truncatedDesc}`;
     }
 
+    // Estilo dinâmico: usa a posição calculada SE o usuário arrastou,
+    // senão, deixa o CSS (com transform) cuidar da centralização.
+    const modalStyle: React.CSSProperties = position
+        ? { top: position.y, left: position.x, transform: 'none' } // Posição pós-arraste
+        : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }; // Posição inicial
+
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483650 }}></div>
+            <div onClick={onClose} className="search-modal-backdrop" style={{ zIndex: 2147483650 }}></div>
             <div
                 ref={modalRef}
+                className="search-modal-content" // Reutiliza a classe do ModalDetalhes
                 style={{
+                    ...modalStyle,
                     position: 'fixed',
-                    top: position.y,
-                    left: position.x,
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
                     zIndex: 2147483651,
                     width: '90%',
                     maxWidth: '700px',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
                 }}
             >
                 <div
                     onMouseDown={handleMouseDown}
-                    style={{
-                        padding: '1.5rem',
-                        borderBottom: '1px solid #dee2e6',
-                        cursor: 'move',
-                        backgroundColor: '#f1f5fb',
-                        borderTopLeftRadius: '8px',
-                        borderTopRightRadius: '8px'
-                    }}
+                    className="search-modal-header" // Reutiliza a classe
                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{title}</h4>
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
-                    </div>
+                    <h4 className="search-modal-title">{title}</h4>
+                    <button onClick={onClose} className="modal-close-btn">&times;</button>
                 </div>
                 <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <input
@@ -278,46 +265,46 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Buscar por nº do pedido ou descrição..."
-                        style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }}
+                        className="search-modal-input" // Reutiliza a classe
                         autoFocus
                     />
-                    {error && <div style={{ color: '#dc3545', padding: '1rem', background: '#f8d7da', borderRadius: '5px' }}>{error}</div>}
-                    <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '5px' }}>
+                    {error && <div className="search-modal-error">{error}</div>}
+                    <div className="search-modal-results-container">
                         {isLoading ? (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem' }}>
-                                <FaSpinner className="animate-spin" size={24} color="#1b4c89" />
+                            <div className="tab-spinner-container" style={{padding: '3rem', minHeight: '100px'}}>
+                                <div className="modal-tab-spinner"></div>
+                                <div className="modal-tab-spinner-text">Buscando...</div>
                             </div>
                         ) : filteredResults.length > 0 ? (
-                            filteredResults.map((p) => (
-                                <div
-                                    key={p.Registro}
-                                    onClick={() => { if (p) onSelect(p); }}
-                                    style={{ padding: '12px', cursor: 'pointer', borderBottom: '1px solid #eee', backgroundColor: '#fff', transition: 'background-color 0.2s' }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f8ff'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <strong style={{ color: '#1b4c89' }}>Pedido:</strong> {p.Pedido}
+                             <ul className="search-modal-results">
+                                {filteredResults.map((p) => (
+                                    <li
+                                        key={p.Registro}
+                                        onClick={() => { if (p) onSelect(p); }}
+                                        className="search-modal-result-item"
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <strong style={{ color: 'var(--gcs-blue-sky)' }}>Pedido:</strong> {p.Pedido}
+                                            </div>
+                                            <div style={{ fontSize: '0.9em' }}>
+                                                <strong>Saldo:</strong> {p.Saldo} {p.UM?.trim()}
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: '0.9em' }}>
-                                            <strong>Saldo:</strong> {p.Saldo} {p.UM?.trim()}
+                                        <div className="search-modal-result-subtext">{p.Produto}</div>
+                                        <div style={{ fontSize: '0.8em', textAlign: 'right' }}>
+                                            <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda)}
+                                            {p.moeda === 2 && typeof p.Valor === 'number' && typeof p.ultima_ptax === 'number' && (
+                                                <Meta className="meta-text">(aprox. {formatCurrency(p.Valor * p.ultima_ptax, 1)} @ {p.ultima_ptax.toFixed(4)})</Meta>
+                                            )}
                                         </div>
-                                    </div>
-                                    <div style={{ fontSize: '0.9em', color: '#6c757d', marginTop: '4px' }}>{p.Produto}</div>
-                                    <div style={{ fontSize: '0.8em', color: '#888', textAlign: 'right' }}>
-                                        <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda)}
-                                        {p.moeda === 2 && typeof p.Valor === 'number' && typeof p.ultima_ptax === 'number' && (
-                                            <Meta>
-                                                (aprox. {formatCurrency(p.Valor * p.ultima_ptax, 1)} @ {p.ultima_ptax.toFixed(4)})
-                                            </Meta>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
+                                    </li>
+                                ))
+                            }
+                            </ul>
                         ) : (
                             !error && (
-                                <div style={{ padding: '20px', textAlign: 'center', color: '#6c757d' }}>
+                                <div className="search-modal-no-results">
                                     {searchResults.length === 0 ? 
                                         "Não há pedidos em aberto para essa raiz de CNPJ." :
                                         "Nenhum resultado corresponde à sua busca."
@@ -361,7 +348,7 @@ const ManualPedidoModal = ({
     const [pedidoSearchResults, setPedidoSearchResults] = useState<PedidoEncontrado[]>([]);
     const [activeSearchItem, setActiveSearchItem] = useState<ItemPedidoManual | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [position, setPosition] = useState<{ x: number; y: number } | null>(null); // Posição inicial nula
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
 
@@ -386,16 +373,18 @@ const ManualPedidoModal = ({
     
     const expandedRowRender = (item: ItemPedidoManual) => {
         if (item.moeda !== 2 || !item.valor_pedido_api || !item.ultima_ptax || !item.valor_unitario_xml) {
-            return <div style={{padding: '1rem', background: '#fafafa', borderLeft: '4px solid #e2e8f0'}}>Não há detalhes de conversão para este item.</div>;
+            return <div className="expanded-row-content-simple">Não há detalhes de conversão para este item.</div>;
         }
     
         const { diferencaEmBRL, diferencaPercentual } = calcularComparativo(item);
     
         const pedidoBRL_aprox = item.valor_pedido_api * item.ultima_ptax;
         const nfUSD_pelaEmpresa = item.ultima_ptax ? (item.valor_unitario_xml / item.ultima_ptax) : 0;
+        
+        const diffClass = diferencaEmBRL > 0.001 ? "is-loss" : diferencaEmBRL < -0.001 ? "is-gain" : "is-neutral";
       
         return (
-            <div style={{ background: "#f8fafc", borderLeft: "4px solid #3b82f6", border: "1px solid #e2e8f0", padding: 12, borderRadius: 10, margin: "6px 0 4px" }}>
+            <div className="expanded-row-content">
                 <Descriptions size="small" column={3} bordered>
                     <Descriptions.Item label="Pedido (USD)">{formatCurrency(item.valor_pedido_api, 2)}</Descriptions.Item>
                     <Descriptions.Item label="PTAX ref.">
@@ -405,7 +394,7 @@ const ManualPedidoModal = ({
                     <Descriptions.Item label="NF (R$ efetivo)">{formatCurrency(item.valor_unitario_xml, 1)}</Descriptions.Item>
                     <Descriptions.Item label="NF (USD pela PTAX ref.)">{formatCurrency(nfUSD_pelaEmpresa, 2)}</Descriptions.Item>
                     <Descriptions.Item label="Diferença total (aprox.)">
-                        <span style={{ color: diferencaEmBRL > 0.001 ? "#b91c1c" : diferencaEmBRL < -0.001 ? "#15803d" : '#6b7280', fontWeight: 'bold' }}>
+                        <span className={`expanded-row-diff ${diffClass}`}>
                             {diferencaEmBRL >= 0 ? "+ " : ""}{formatCurrency(diferencaEmBRL, 1)} ({diferencaPercentual >= 0 ? "+" : ""}{diferencaPercentual.toFixed(2)}%)
                         </span>
                     </Descriptions.Item>
@@ -426,6 +415,7 @@ const ManualPedidoModal = ({
     useEffect(() => {
         if (isOpen) {
             setIsLoadingContent(true);
+            setPosition(null); // Reseta a posição para centralizar
             const timer = setTimeout(() => {
                 const initialItensManuais = items.map(item => {
                     // Um item é considerado "pré-preenchido" se ele já tiver um número de pedido.
@@ -585,11 +575,15 @@ const ManualPedidoModal = ({
     const handleMouseDown = (e: React.MouseEvent) => {
         if (modalRef.current) {
             const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT' || target.closest('button')) {
                 return;
             }
             setIsDragging(true);
+
+            // Se for o primeiro arraste, calcula a posição atual para evitar o "salto"
             const modalRect = modalRef.current.getBoundingClientRect();
+            setPosition({ x: modalRect.left, y: modalRect.top });
+
             setOffset({
                 x: e.clientX - modalRect.left,
                 y: e.clientY - modalRect.top
@@ -619,15 +613,6 @@ const ManualPedidoModal = ({
             document.removeEventListener('mouseup', handleMouseUp);
         };
     }, [isDragging, handleMouseMove, handleMouseUp]);
-
-    useEffect(() => {
-        if (isOpen && modalRef.current) {
-            const modal = modalRef.current;
-            const initialX = (window.innerWidth - modal.offsetWidth) / 2;
-            const initialY = 80;
-            setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
-        }
-    }, [isOpen]);
     
     const tableColumns: TableProps<ItemPedidoManual>['columns'] = [
         { title: 'Item', dataIndex: 'item_xml', key: 'item', width: '5%', align: 'center', render: (text) => <strong>{text}</strong> },
@@ -639,7 +624,7 @@ const ManualPedidoModal = ({
             width: '13%',
             align: 'right',
             render: (_, record) => (
-                <div style={{fontFamily: 'monospace', textAlign: 'right'}}>
+                <div className="currency-cell">
                     {formatCurrency(record.valor_unitario_xml, 1)}
                     {record.moeda === 2 && typeof record.valor_unitario_xml === 'number' && typeof record.ultima_ptax === 'number' && record.ultima_ptax > 0 && (
                         <Meta>(aprox. {formatCurrency(record.valor_unitario_xml / record.ultima_ptax, 2)})</Meta>
@@ -655,30 +640,18 @@ const ManualPedidoModal = ({
             render: (_, record) => (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                     <div
-                        style={{
-                            flex: 1,
-                            padding: '8px',
-                            borderRadius: '6px',
-                            border: '1px solid #ced4da',
-                            background: '#e9ecef',
-                            color: record.num_pedido ? '#495057' : '#6c757d',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            minHeight: '37px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >{record.num_pedido || 'Nenhum'}</div>
+                        className="pedido-display-box"
+                        style={{ color: record.num_pedido ? undefined : 'inherit' }}
+                    >
+                        {record.num_pedido || 'Nenhum'}
+                    </div>
                     <button
                         onClick={() => handleSearchPedido(record)}
                         title="Buscar Pedido"
                         disabled={isSaving || (isPedidoSearchLoading && activeSearchItem?.item_xml === record.item_xml)}
-                        style={{ background: '#eaf2fa', border: '1px solid #a3b8d1', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                        className="btn-icon-search"
                     >
-                        {isPedidoSearchLoading && activeSearchItem?.item_xml === record.item_xml ? <FaSpinner className="animate-spin" size={12} color="#1b4c89" /> : <FaSearch size={12} color="#1b4c89" />}
+                        {isPedidoSearchLoading && activeSearchItem?.item_xml === record.item_xml ? <FaSpinner className="animate-spin" size={12} /> : <FaSearch size={12} />}
                     </button>
                 </div>
             )
@@ -687,8 +660,8 @@ const ManualPedidoModal = ({
         {
             title: (
                 <Tooltip title="Valor na moeda do Pedido de Compra. Se for Dólar, exibe uma aproximação em Reais abaixo.">
-                    <span style={{display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help'}}>
-                        Valor Pedido <Info size={14} style={{ color: '#94a3b8' }} />
+                    <span className="tooltip-label">
+                        Valor Pedido <Info size={14} />
                     </span>
                 </Tooltip>
             ),
@@ -697,7 +670,7 @@ const ManualPedidoModal = ({
             width: '13%',
             align: 'right',
             render: (_, record) => (
-                <div style={{fontFamily: 'monospace', textAlign: 'right'}}>
+                <div className="currency-cell">
                     {formatCurrency(record.valor_pedido_api, record.moeda)}
                     {record.moeda === 2 && typeof record.valor_pedido_api === 'number' && typeof record.ultima_ptax === 'number' && record.ultima_ptax > 0 && (
                         <Meta>(aprox. {formatCurrency(record.valor_pedido_api * record.ultima_ptax, 1)} @ {record.ultima_ptax.toFixed(4)})</Meta>
@@ -708,8 +681,8 @@ const ManualPedidoModal = ({
         {
             title: (
                 <Tooltip title="Diferença calculada em Reais (R$), convertendo o valor do pedido quando necessário.">
-                    <span style={{display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help'}}>
-                        Diferença <Info size={14} style={{ color: '#94a3b8' }} />
+                    <span className="tooltip-label">
+                        Diferença <Info size={14} />
                     </span>
                 </Tooltip>
             ),
@@ -728,109 +701,579 @@ const ManualPedidoModal = ({
 
     const TotalBar = () => {
         return (
-            <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: "#f8fafc",
-                padding: "10px 16px",
-                borderRadius: 8,
-                border: "1px solid #e2e8f0",
-                marginTop: 12
-              }}>
+            <div className="total-bar-wrapper">
                 <strong style={{fontSize: '14px'}}>Total Diferença:</strong>
                 <DiffTag valueBRL={totalDiferenca} pct={totalDiferencaPercentual} />
             </div>
         );
     }
+    
+    // Estilo dinâmico: usa a posição calculada SE o usuário arrastou,
+    // senão, deixa o CSS (com transform) cuidar da centralização.
+    const modalStyle: React.CSSProperties = position
+        ? { top: position.y, left: position.x, transform: 'none' } // Posição pós-arraste
+        : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }; // Posição inicial
 
     return (
         <>
+            {/* O BLOCO DE ESTILO É INJETADO AQUI */}
             <style>{`
-                .invalid-row td {
-                    background-color: #fff2f0 !important;
+                /* --- === Base (copiado de ModalDetalhes) === --- */
+                :root {
+                    --gcs-blue: #00314A;
+                    --gcs-blue-light: #1b4c89;
+                    --gcs-blue-lighter: #a3b8d1;
+                    --gcs-blue-sky: #7DD3FC;
+                    --gcs-green: #5FB246;
+                    --gcs-green-dark: #28a745;
+                    --gcs-green-light: #effaf5;
+                    --gcs-green-border: #b7e4c7;
+                    --gcs-orange: #F58220;
+                    --gcs-orange-dark: #f7941d;
+                    --gcs-orange-light: #fffbe6;
+                    --gcs-orange-border: #ffe58f;
+                    --gcs-brand-red: #E11D2E;
+                    --gcs-red-light: #fff0f0;
+                    --gcs-red-border: #f5c2c7;
+                    --gcs-red-text: #721c24;
+                    --gcs-gray-light: #f1f5fb;
+                    --gcs-gray-border: #d0d7e2;
+                    --gcs-gray-text: #6c757d;
+                    --gcs-dark-text: #333;
+                    --gcs-dark-bg-transparent: rgba(25, 39, 53, 0.5);
+                    --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
+                    --gcs-dark-border: rgba(125, 173, 222, 0.2);
+                    --gcs-dark-border-hover: rgba(125, 173, 222, 0.4);
+                    --gcs-dark-text-primary: #F1F5F9;
+                    --gcs-dark-text-secondary: #CBD5E1;
+                    --gcs-dark-text-tertiary: #94A3B8;
                 }
-                .invalid-row td:first-child {
-                    border-left: 3px solid #f5222d !important;
+                .animate-spin {
+                    animation: spin 1s linear infinite;
                 }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                /* --- Base Modal --- */
+                .modal-detalhes-backdrop {
+                    position: fixed; top: 0; left: 0;
+                    width: 100vw; height: 100vh;
+                    background-color: rgba(0,0,0,0.6);
+                    z-index: 2147483648;
+                }
+                .modal-detalhes-glass {
+                    position: fixed;
+                    border-radius: 12px;
+                    width: 95%;
+                    
+                    /* --- CORREÇÃO 1: Tamanho do Modal Principal --- */
+                    max-width: 1200px; 
+                    /* --- FIM CORREÇÃO 1 --- */
+
+                    min-height: 400px;
+                    max-height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                    z-index: 2147483649;
+                    transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
+                }
+                body.light .modal-detalhes-glass {
+                    background: #fff;
+                    border: 1px solid #dee2e6;
+                }
+                body.dark .modal-detalhes-glass {
+                    background: var(--gcs-dark-bg-heavy);
+                    backdrop-filter: blur(16px);
+                    -webkit-backdrop-filter: blur(16px);
+                    border: 1px solid var(--gcs-dark-border);
+                }
+
+                /* --- Modal Header --- */
+                .modal-detalhes-header {
+                    padding: 1.5rem;
+                    border-bottom: 1px solid;
+                    flex-shrink: 0;
+                    cursor: move;
+                    border-top-left-radius: 12px;
+                    border-top-right-radius: 12px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    transition: background-color 0.3s ease, border-color 0.3s ease;
+                }
+                body.light .modal-detalhes-header {
+                    background-color: var(--gcs-gray-light);
+                    border-bottom-color: #dee2e6;
+                }
+                body.dark .modal-detalhes-header {
+                    background-color: rgba(25, 39, 53, 0.5);
+                    border-bottom-color: var(--gcs-dark-border);
+                }
+                .modal-detalhes-title {
+                    font-size: 1.2rem;
+                    font-weight: bold;
+                }
+                body.light .modal-detalhes-title { color: var(--gcs-dark-text); }
+                body.dark .modal-detalhes-title { color: var(--gcs-dark-text-primary); }
+                
+                .modal-close-btn {
+                    background: none; border: none; font-size: 1.75rem;
+                    cursor: pointer; padding: 0; line-height: 1;
+                }
+                body.light .modal-close-btn { color: var(--gcs-dark-text); }
+                body.dark .modal-close-btn { color: var(--gcs-dark-text-secondary); }
+                body.dark .modal-close-btn:hover { color: var(--gcs-dark-text-primary); }
+
+                /* --- Modal Content --- */
+                .modal-content-wrapper {
+                    padding: 1.5rem;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                    overflow: hidden;
+                    flex-grow: 1;
+                }
+                .modal-content-scrollable {
+                    overflow-y: auto;
+                    flex-grow: 1;
+                    /* Estilização da barra de rolagem para WebKit (Chrome, Safari) */
+                }
+                .modal-content-scrollable::-webkit-scrollbar {
+                    width: 8px;
+                }
+                .modal-content-scrollable::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .modal-content-scrollable::-webkit-scrollbar-thumb {
+                    background-color: rgba(0, 0, 0, 0.2);
+                    border-radius: 4px;
+                }
+                body.dark .modal-content-scrollable::-webkit-scrollbar-thumb {
+                    background-color: rgba(255, 255, 255, 0.2);
+                }
+                .modal-footer {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 1rem;
+                    margin-top: 1rem;
+                    flex-shrink: 0;
+                }
+                .modal-footer-actions {
+                    display: flex;
+                    gap: 1rem;
+                }
+
+                /* --- Spinners --- */
+                .modal-loading-container {
+                    display: flex; flex-direction: column; align-items: center;
+                    justify-content: center; padding: 3rem; color: var(--gcs-gray-text);
+                    min-height: 200px; flex-grow: 1;
+                }
+                .modal-main-spinner {
+                    width: 40px; height: 40px; border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                .modal-main-spinner-text { margin-top: 1rem; font-size: 1.1em; font-weight: bold; }
+                
+                body.light .modal-main-spinner { border: 4px solid #ccc; border-top: 4px solid var(--gcs-blue-light); }
+                body.light .modal-main-spinner-text { color: var(--gcs-blue-light); }
+                body.dark .modal-main-spinner { border: 4px solid var(--gcs-dark-border); border-top: 4px solid var(--gcs-blue-sky); }
+                body.dark .modal-main-spinner-text { color: var(--gcs-blue-sky); }
+                
+                .tab-spinner-container {
+                    display: flex; flex-direction: column; align-items: center;
+                    justify-content: center; padding-top: 3rem; padding-bottom: 3rem;
+                    min-height: 200px;
+                }
+                .modal-tab-spinner {
+                    width: 30px; height: 30px; border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                .modal-tab-spinner-text { margin-top: 1rem; font-weight: bold; font-size: 1rem; }
+                
+                body.light .modal-tab-spinner { border: 3px solid #ccc; border-top: 3px solid var(--gcs-blue-light); }
+                body.light .modal-tab-spinner-text { color: var(--gcs-blue-light); }
+                body.dark .modal-tab-spinner { border: 3px solid var(--gcs-dark-border); border-top: 3px solid var(--gcs-blue-sky); }
+                body.dark .modal-tab-spinner-text { color: var(--gcs-blue-sky); }
+
+                /* --- Botões --- */
+                .btn {
+                    display: inline-flex; align-items: center; justify-content: center;
+                    gap: 8px; padding: 10px 20px; border-radius: 5px;
+                    border: none; font-weight: bold; cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                .btn:disabled { cursor: not-allowed; opacity: 0.6; }
+                
+                .btn-primary { background-color: #007bff; color: white; }
+                .btn-primary:hover:not(:disabled) { background-color: #0056b3; }
+                
+                .btn-secondary { border: 1px solid; font-weight: bold; }
+                body.light .btn-secondary { background: #f1f1f1; color: var(--gcs-dark-text); border-color: #ccc; }
+                body.light .btn-secondary:hover:not(:disabled) { background: #e0e0e0; }
+                body.dark .btn-secondary { background: var(--gcs-dark-bg-transparent); color: var(--gcs-dark-text-secondary); border-color: var(--gcs-dark-border); }
+                body.dark .btn-secondary:hover:not(:disabled) { background: rgba(25, 39, 53, 0.7); border-color: var(--gcs-dark-border-hover); }
+
+                .btn-danger { background-color: var(--gcs-brand-red); color: white; }
+                .btn-danger:hover:not(:disabled) { background-color: #b01725; }
+                
+                .btn-green { background-color: var(--gcs-green-dark); color: white; }
+                .btn-green:hover:not(:disabled) { background-color: #1e7e34; }
+
+                .btn-ai {
+                    background: #fff; border: 2px solid #facc15; padding: 8px 16px;
+                    border-radius: 8px; cursor: pointer; display: flex;
+                    align-items: center; gap: 8px; font-weight: 600;
+                    font-size: 0.9rem; transition: all 0.2s ease;
+                }
+                body.light .btn-ai { color: #0f172a; }
+                body.light .btn-ai:hover:not(:disabled) { background: #fffbea; }
+                body.dark .btn-ai {
+                    background: rgba(250, 204, 21, 0.1); color: #FDE68A;
+                    border-color: #facc15;
+                }
+                body.dark .btn-ai:hover:not(:disabled) { background: rgba(250, 204, 21, 0.2); }
+                .btn-ai:disabled { opacity: 0.6; cursor: not-allowed; }
+
+                /* --- ConfirmationModal --- */
+                .confirm-modal-backdrop {
+                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                    background-color: rgba(0,0,0,0.5); z-index: 2147483652;
+                }
+                .confirm-modal-content {
+                    position: fixed; top: 50%; left: 50%;
+                    transform: translate(-50%, -50%); border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 2147483653;
+                    width: 90%; max-width: 450px; padding: 2rem; text-align: center;
+                }
+                body.light .confirm-modal-content { background-color: white; }
+                body.dark .confirm-modal-content { background: var(--gcs-dark-bg-heavy); border: 1px solid var(--gcs-dark-border); }
+                .confirm-modal-icon { display: flex; justify-content: center; margin-bottom: 1rem; }
+                .confirm-modal-title { margin-top: 0; margin-bottom: 1rem; font-size: 1.5rem; }
+                body.light .confirm-modal-title { color: #333; }
+                body.dark .confirm-modal-title { color: var(--gcs-dark-text-primary); }
+                .confirm-modal-message { line-height: 1.6; }
+                body.light .confirm-modal-message { color: #666; }
+                body.dark .confirm-modal-message { color: var(--gcs-dark-text-secondary); }
+                .confirm-modal-actions { margin-top: 1.5rem; display: flex; justify-content: center; gap: 1rem; }
+
+                /* --- PedidoSearchModal --- */
+                .search-modal-backdrop {
+                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                    background-color: rgba(0,0,0,0.5); z-index: 2147483650;
+                }
+                .search-modal-content {
+                    position: fixed; border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 2147483651;
+                    width: 90%; max-width: 700px;
+                }
+                body.light .search-modal-content { background-color: white; }
+                body.dark .search-modal-content { background: var(--gcs-dark-bg-heavy); border: 1px solid var(--gcs-dark-border); }
+                
+                .search-modal-header {
+                    padding: 1.5rem; border-bottom: 1px solid; cursor: move;
+                    border-top-left-radius: 8px; border-top-right-radius: 8px;
+                    display: flex; justify-content: space-between; align-items: center;
+                }
+                body.light .search-modal-header { background-color: var(--gcs-gray-light); border-bottom-color: #dee2e6; }
+                body.dark .search-modal-header { background-color: rgba(25, 39, 53, 0.5); border-bottom-color: var(--gcs-dark-border); }
+                
+                .search-modal-title { margin: 0; font-size: 1.1rem; }
+                body.light .search-modal-title { color: var(--gcs-dark-text); }
+                body.dark .search-modal-title { color: var(--gcs-dark-text-primary); }
+                
+                .search-modal-input {
+                    width: 100%; padding: 10px; border-radius: 5px;
+                    border: 1px solid; font-size: 1rem;
+                }
+                body.light .search-modal-input { background: #fff; border-color: #ccc; color: var(--gcs-dark-text); }
+                body.dark .search-modal-input { background: rgba(25, 39, 53, 0.5); border-color: var(--gcs-dark-border); color: var(--gcs-dark-text-primary); }
+                body.dark .search-modal-input:focus { border-color: var(--gcs-dark-border-hover); background: rgba(25, 39, 53, 0.7); }
+                
+                .search-modal-error {
+                    padding: 1rem; border-radius: 5px;
+                }
+                body.light .search-modal-error { color: #dc3545; background: #f8d7da; }
+                body.dark .search-modal-error { color: #F87171; background: rgba(225, 29, 46, 0.15); }
+
+                .search-modal-results-container {
+                    max-height: 350px; overflow-y: auto;
+                    border: 1px solid; border-radius: 5px;
+                }
+                body.light .search-modal-results-container { border-color: #eee; }
+                body.dark .search-modal-results-container { border-color: var(--gcs-dark-border); }
+                
+                .search-modal-results { list-style: none; padding: 0; margin: 0; }
+                .search-modal-result-item {
+                    padding: 12px; cursor: pointer; border-bottom: 1px solid;
+                    transition: background-color 0.2s ease-in-out;
+                }
+                body.light .search-modal-result-item { border-bottom-color: #eee; }
+                body.light .search-modal-result-item:hover { background-color: #f0f8ff; }
+                body.dark .search-modal-result-item { border-bottom-color: var(--gcs-dark-border); }
+                body.dark .search-modal-result-item:hover { background-color: rgba(25, 39, 53, 0.7); }
+                
+                .search-modal-result-subtext { font-size: 0.9em; margin-top: 4px; }
+                body.light .search-modal-result-subtext { color: #6c757d; }
+                body.dark .search-modal-result-subtext { color: var(--gcs-dark-text-tertiary); }
+                
+                .search-modal-no-results { padding: 20px; text-align: center; }
+                body.light .search-modal-no-results { color: #6c757d; }
+                body.dark .search-modal-no-results { color: var(--gcs-dark-text-tertiary); }
+
+                /* --- === Estilos Específicos deste Modal === --- */
+
+                /* Tabela e overrides Antd */
+                .validation-error-box {
+                    background: #fff5f5; color: #c53030; border: 1px solid #fc8181;
+                    padding: 12px; border-radius: 8px; margin-bottom: 1rem;
+                    text-align: center; font-weight: 500;
+                }
+                body.dark .validation-error-box {
+                    background: rgba(225, 29, 46, 0.15); color: #F87171;
+                    border-color: rgba(225, 29, 46, 0.3);
+                }
+
+                .ant-table-wrapper {
+                    border-radius: 8px;
+                    border: 1px solid;
+                    overflow: hidden; /* Garante que o antd respeite o border-radius */
+                }
+                body.light .ant-table-wrapper { border-color: #dee2e6; }
+                body.dark .ant-table-wrapper { border-color: var(--gcs-dark-border-hover); }
+
+                body.light .ant-table { background: #fff; }
+                body.dark .ant-table { background: transparent; }
+
+                .ant-table-thead > tr > th {
+                    font-weight: bold;
+                    transition: background 0.3s ease, color 0.3s ease;
+                }
+                body.light .ant-table-thead > tr > th {
+                    background: var(--gcs-gray-light);
+                    color: var(--gcs-blue-light);
+                    border-bottom: 1px solid #dee2e6;
+                }
+                body.dark .ant-table-thead > tr > th {
+                    background: rgba(25, 39, 53, 0.5);
+                    color: var(--gcs-blue-sky);
+                    border-bottom: 1px solid var(--gcs-dark-border-hover);
+                }
+                
+                .ant-table-tbody > tr > td {
+                    border-bottom: 1px solid;
+                    transition: background 0.3s ease, border 0.3s ease;
+                }
+                body.light .ant-table-tbody > tr > td {
+                    background: #fff;
+                    color: var(--gcs-dark-text);
+                    border-bottom-color: #f0f0f0;
+                }
+                body.dark .ant-table-tbody > tr > td {
+                    background: transparent;
+                    color: var(--gcs-dark-text-secondary);
+                    border-bottom-color: var(--gcs-dark-border);
+                }
+                
+                body.light .ant-table-tbody > tr.ant-table-row:hover > td { background: #f9f9f9; }
+                body.dark .ant-table-tbody > tr.ant-table-row:hover > td { background: rgba(25, 39, 53, 0.4); }
+
+                /* Linha Inválida */
+                body.light .invalid-row td { background-color: #fff2f0 !important; }
+                body.light .invalid-row td:first-child { border-left: 3px solid #f5222d !important; }
+                body.dark .invalid-row td { background-color: rgba(225, 29, 46, 0.1) !important; }
+                body.dark .invalid-row td:first-child { border-left: 3px solid #F87171 !important; }
+                
+                /* --- CORREÇÃO 2: Destaque da Linha Ativa (Contorno na TR) --- */
+                .active-search-row {
+                    outline: 2px solid var(--gcs-green-dark) !important;
+                    outline-offset: -1px; /* Ajuste para ficar mais justo */
+                }
+                body.dark .active-search-row {
+                    outline-color: var(--gcs-green) !important; /* Verde mais claro no escuro */
+                }
+                body.light .active-search-row > td {
+                    background-color: var(--gcs-green-light) !important;
+                }
+                body.dark .active-search-row > td {
+                    background-color: rgba(95, 178, 70, 0.1) !important;
+                }
+                /* --- FIM CORREÇÃO 2 --- */
+
+                /* Linha Expandida */
+                body.light .ant-table-expanded-row > td { background: #f8f9fa !important; }
+                body.dark .ant-table-expanded-row > td { background: rgba(25, 39, 53, 0.25) !important; }
+                
+                .expanded-row-content {
+                    border: 1px solid; border-left: 4px solid;
+                    padding: 12px; border-radius: 10px; margin: 6px 0 4px;
+                }
+                body.light .expanded-row-content { background: #f8fafc; border-color: #e2e8f0; border-left-color: #3b82f6; }
+                body.dark .expanded-row-content { background: rgba(25, 39, 53, 0.4); border-color: var(--gcs-dark-border-hover); border-left-color: var(--gcs-blue-sky); }
+                
+                .expanded-row-content-simple {
+                    padding: 1rem; border-left: 4px solid;
+                }
+                body.light .expanded-row-content-simple { background: #fafafa; border-left-color: #e2e8f0; }
+                body.dark .expanded-row-content-simple { background: rgba(25, 39, 53, 0.4); border-left-color: var(--gcs-dark-border-hover); }
+
+                .expanded-row-diff { font-weight: bold; }
+                .expanded-row-diff.is-loss { color: #b91c1c; }
+                .expanded-row-diff.is-gain { color: #15803d; }
+                body.light .expanded-row-diff.is-neutral { color: #6b7280; }
+                body.dark .expanded-row-diff.is-loss { color: #F87171; }
+                body.dark .expanded-row-diff.is-gain { color: #4ADE80; }
+                body.dark .expanded-row-diff.is-neutral { color: var(--gcs-dark-text-tertiary); }
+                
+                /* Overrides Antd Descriptions */
+                body.light .ant-descriptions { background: #fff; }
+                body.dark .ant-descriptions { background: rgba(25, 39, 53, 0.2); }
+                body.dark .ant-descriptions-bordered .ant-descriptions-view { border-color: var(--gcs-dark-border-hover); }
+                body.dark .ant-descriptions-item-label {
+                    background: rgba(25, 39, 53, 0.5) !important;
+                    color: var(--gcs-dark-text-primary) !important;
+                    border-color: var(--gcs-dark-border-hover) !important;
+                }
+                body.dark .ant-descriptions-item-content {
+                    color: var(--gcs-dark-text-secondary) !important;
+                    border-color: var(--gcs-dark-border-hover) !important;
+                }
+                body.dark .ant-descriptions-item-label small { color: var(--gcs-dark-text-tertiary); }
+                
+                /* Overrides Antd Tooltip */
+                body.light .ant-tooltip-inner {
+                    border-radius: 12px !important; border: 1px solid rgba(255,255,255,.35) !important;
+                    background: rgba(255,255,255,.25) !important; backdrop-filter: blur(14px) saturate(140%) !important;
+                    -webkit-backdrop-filter: blur(14px) saturate(140%) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+                    color: #00314A !important;
+                }
+                body.light .ant-tooltip-arrow::before, body.light .ant-tooltip-arrow::after { background: transparent !important; }
+                body.dark .ant-tooltip-inner {
+                    border-radius: 12px !important; border: 1px solid rgba(125,173,222,.28) !important;
+                    background: rgba(25,39,53,.50) !important; backdrop-filter: blur(14px) saturate(140%) !important;
+                    -webkit-backdrop-filter: blur(14px) saturate(140%) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+                    color: #E2E8F0 !important;
+                }
+                body.dark .ant-tooltip-arrow::before, body.dark .ant-tooltip-arrow::after { background: transparent !important; }
+
+                /* Componentes customizados da tabela */
+                .currency-cell { font-family: monospace; text-align: right; }
+                .meta-text { color: #94a3b8; font-size: 12px; margin-top: 2px; }
+                .tooltip-label { display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+                body.dark .tooltip-label { color: var(--gcs-dark-text-primary); }
+                body.dark .tooltip-label svg { color: var(--gcs-dark-text-tertiary); }
+
+                .pedido-display-box {
+                    flex: 1; padding: 8px; border-radius: 6px; border: 1px solid;
+                    text-align: center; white-space: nowrap; overflow: hidden;
+                    text-overflow: ellipsis; min-height: 37px;
+                    display: flex; align-items: center; justify-content: center;
+                }
+                body.light .pedido-display-box {
+                    border-color: #ced4da; background: #e9ecef; color: #495057;
+                }
+                body.dark .pedido-display-box {
+                    border-color: var(--gcs-dark-border-hover); background: rgba(25, 39, 53, 0.5);
+                    color: var(--gcs-dark-text-secondary);
+                }
+                body.light .pedido-display-box:not([style*="color"]) { color: #6c757d; } /* Placeholder */
+                body.dark .pedido-display-box:not([style*="color"]) { color: var(--gcs-dark-text-tertiary); } /* Placeholder */
+
+                .btn-icon-search {
+                    border: 1px solid; border-radius: 50%;
+                    width: 32px; height: 32px;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; flex-shrink: 0; transition: all 0.2s ease;
+                }
+                body.light .btn-icon-search {
+                    background: #eaf2fa; border-color: #a3b8d1; color: #1b4c89;
+                }
+                body.light .btn-icon-search:hover:not(:disabled) { background: #d4e5f7; }
+                body.dark .btn-icon-search {
+                    background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3);
+                    color: var(--gcs-blue-sky);
+                }
+                body.dark .btn-icon-search:hover:not(:disabled) { background: rgba(59, 130, 246, 0.25); }
+                .btn-icon-search:disabled { opacity: 0.6; cursor: not-allowed; }
+                
+                /* DiffTag */
+                .diff-tag {
+                    display: inline-flex; align-items: center; gap: 6px;
+                    font-weight: 600; padding: 4px 10px; border-radius: 999px;
+                    font-size: 12px; border: 1px solid;
+                }
+                .diff-tag-percent { opacity: 0.8; }
+                
+                body.light .diff-tag.is-loss { color: #b91c1c; background-color: #fee2e2; border-color: #fecaca; }
+                body.light .diff-tag.is-loss .diff-tag-percent { color: #b91c1c; }
+                body.light .diff-tag.is-gain { color: #15803d; background-color: #dcfce7; border-color: #bbf7d0; }
+                body.light .diff-tag.is-gain .diff-tag-percent { color: #15803d; }
+                body.light .diff-tag.is-neutral { color: #6b7280; background-color: #f1f5f9; border-color: #e2e8f0; }
+                body.light .diff-tag.is-neutral .diff-tag-percent { color: #64748b; }
+                
+                body.dark .diff-tag.is-loss { color: #F87171; background-color: rgba(225, 29, 46, 0.15); border-color: rgba(225, 29, 46, 0.3); }
+                body.dark .diff-tag.is-loss .diff-tag-percent { color: #F87171; }
+                body.dark .diff-tag.is-gain { color: #4ADE80; background-color: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
+                body.dark .diff-tag.is-gain .diff-tag-percent { color: #4ADE80; }
+                body.dark .diff-tag.is-neutral { color: #94A3B8; background-color: rgba(25, 39, 53, 0.4); border-color: var(--gcs-dark-border); }
+                body.dark .diff-tag.is-neutral .diff-tag-percent { color: #94A3B8; }
+
+                /* Total Bar */
+                .total-bar-wrapper {
+                    display: flex; justify-content: space-between; align-items: center;
+                    padding: 10px 16px; border-radius: 8px; border: 1px solid;
+                }
+                body.light .total-bar-wrapper { background: #f8fafc; border-color: #e2e8f0; color: var(--gcs-dark-text); }
+                body.dark .total-bar-wrapper { background: rgba(25, 39, 53, 0.25); border-color: var(--gcs-dark-border); color: var(--gcs-dark-text-primary); }
+
             `}</style>
-            <div onClick={isSaving ? undefined : () => setIsCancelConfirmOpen(true)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2147483648 }}></div>
+            
+            <div onClick={isSaving ? undefined : () => setIsCancelConfirmOpen(true)} className="modal-detalhes-backdrop"></div>
             <div
                 ref={modalRef}
+                className="modal-detalhes-glass"
                 style={{
                     position: 'fixed',
-                    top: position.y,
-                    left: position.x,
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    zIndex: 2147483649,
-                    width: '95%',
-                    maxWidth: '1500px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    maxHeight: '90vh',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+                    ...(position ? { top: position.y, left: position.x, transform: 'none' } : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' })
                 }}
             >
                 <div
                     onMouseDown={handleMouseDown}
-                    style={{
-                        padding: '1.5rem',
-                        borderBottom: '1px solid #e2e8f0',
-                        flexShrink: 0,
-                        cursor: 'move',
-                        backgroundColor: '#f8fafc',
-                        borderTopLeftRadius: '8px',
-                        borderTopRightRadius: '8px'
-                    }}
+                    className="modal-detalhes-header"
                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Informar Pedidos Manualmente</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <button
-                                onClick={handleAIAssist}
-                                disabled={isSaving || isAILoading}
-                                title="Usar assistente de IA para preencher os pedidos"
-                                style={{
-                                    background: '#fff', border: '2px solid #facc15', padding: '8px 16px', borderRadius: '8px',
-                                    cursor: (isSaving || isAILoading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-                                    gap: '8px', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
-                                    transition: 'all 0.2s ease', opacity: (isSaving || isAILoading) ? 0.6 : 1,
-                                }}
-                                onMouseEnter={(e) => { if (!isSaving && !isAILoading) e.currentTarget.style.background = '#fffbea'; }}
-                                onMouseLeave={(e) => { if (!isSaving && !isAILoading) e.currentTarget.style.background = '#fff'; }}
-                            >
-                                {isAILoading ? <FaSpinner className="animate-spin" /> : <Sparkles size={18} color="#f59e0b" />}
-                                <span>{isAILoading ? "Aguarde..." : "Preencher com IA"}</span>
-                            </button>
-                            <button onClick={isSaving || isAILoading ? undefined : () => setIsCancelConfirmOpen(true)} disabled={isSaving || isAILoading} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: (isSaving || isAILoading) ? 'not-allowed' : 'pointer' }}>&times;</button>
-                        </div>
+                    <span className="modal-detalhes-title">Informar Pedidos Manualmente</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <button
+                            onClick={handleAIAssist}
+                            disabled={isSaving || isAILoading}
+                            title="Usar assistente de IA para preencher os pedidos"
+                            className="btn-ai"
+                        >
+                            {isAILoading ? <FaSpinner className="animate-spin" /> : <Sparkles size={18} color="#f59e0b" />}
+                            <span>{isAILoading ? "Aguarde..." : "Preencher com IA"}</span>
+                        </button>
+                        <button onClick={isSaving || isAILoading ? undefined : () => setIsCancelConfirmOpen(true)} disabled={isSaving || isAILoading} className="modal-close-btn">&times;</button>
                     </div>
                 </div>
 
-                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden', flexGrow: 1 }}>
+                <div className="modal-content-wrapper">
                     {isLoadingContent ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: '#6c757d', minHeight: '200px' }}>
-                            <FaSpinner className="animate-spin" size={24} color="#1b4c89" />
-                            <span style={{marginLeft: '10px', fontSize: '1.1em'}}>Carregando...</span>
+                        <div className="modal-loading-container">
+                            <div className="modal-main-spinner"></div>
+                            <span className="modal-main-spinner-text">Carregando...</span>
                         </div>
                     ) : (
                         <>
-                            <div style={{ overflowY: 'auto', flexGrow: 1 }}>
-                                {validationError && (
-                                    <div style={{
-                                        background: '#fff5f5',
-                                        color: '#c53030',
-                                        border: '1px solid #fc8181',
-                                        padding: '12px',
-                                        borderRadius: '8px',
-                                        marginBottom: '1rem',
-                                        textAlign: 'center',
-                                        fontWeight: 500
-                                    }}>
-                                        {validationError}
-                                    </div>
-                                )}
+                            {validationError && (
+                                <div className="validation-error-box">
+                                    {validationError}
+                                </div>
+                            )}
+                            <div className="modal-content-scrollable">
                                 <Table
                                     dataSource={itensManuais}
                                     columns={tableColumns}
@@ -838,34 +1281,32 @@ const ManualPedidoModal = ({
                                     pagination={false}
                                     size="small"
                                     sticky
-                                    rowClassName={(record) => invalidRowIds.includes(record.item_xml) ? 'invalid-row' : ''}
+                                    rowClassName={(record) => {
+                                        let classes = [];
+                                        if (invalidRowIds.includes(record.item_xml)) {
+                                            classes.push('invalid-row');
+                                        }
+                                        if (activeSearchItem && activeSearchItem.item_xml === record.item_xml) {
+                                            classes.push('active-search-row'); // Nova classe de destaque
+                                        }
+                                        return classes.join(' ');
+                                    }}
                                     expandable={{
                                         expandedRowRender: (record) => expandedRowRender(record),
                                         rowExpandable: (record) => record.moeda === 2,
                                     }}
                                 />
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginTop: '1rem', flexShrink: 0 }}>
+                            <div className="modal-footer">
                                 <div style={{flex: 1}}>
                                     <TotalBar />
                                 </div>
-                                <div style={{ display: 'flex', gap: '1rem' }}>
-                                    <button onClick={() => setIsCancelConfirmOpen(true)} disabled={isSaving} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                                <div className="modal-footer-actions">
+                                    <button onClick={() => setIsCancelConfirmOpen(true)} disabled={isSaving} className="btn btn-secondary">Cancelar</button>
                                     <button 
                                         onClick={handleSave} 
                                         disabled={isSaving}
-                                        style={{ 
-                                            padding: '10px 20px', 
-                                            borderRadius: '5px', 
-                                            border: 'none', 
-                                            background: isSaving ? '#6c757d' : '#28a745', 
-                                            color: 'white', 
-                                            cursor: isSaving ? 'not-allowed' : 'pointer', 
-                                            display: 'flex', 
-                                            alignItems: 'center', 
-                                            gap: '8px', 
-                                            fontWeight: 'bold'
-                                        }}
+                                        className="btn btn-green"
                                     >
                                         {isSaving ? <><FaSpinner className="animate-spin" /> Salvando...</> : 'Salvar Alterações'}
                                     </button>

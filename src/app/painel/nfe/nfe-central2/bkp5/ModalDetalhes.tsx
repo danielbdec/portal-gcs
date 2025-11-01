@@ -1,9 +1,7 @@
 "use client";
 
-// --- CORREÇÃO: Imports do React combinados em uma única linha ---
-import React, { useEffect, useState, useCallback, useRef } from "react";
-// --- FIM DA CORREÇÃO ---
-
+import React from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { FaCheckCircle, FaTimesCircle, FaExclamationTriangle, FaListAlt, FaHistory, FaFileInvoice, FaSyncAlt, FaInfoCircle, FaUserFriends, FaSearch, FaTimes, FaSpinner, FaCopy, FaShieldAlt, FaPencilAlt, FaPlus } from "react-icons/fa";
 import { Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
