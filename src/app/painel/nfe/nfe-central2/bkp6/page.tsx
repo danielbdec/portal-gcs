@@ -1,9 +1,10 @@
+//
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Pagination, Tooltip, Spin } from "antd"; 
+import { Pagination, Tooltip } from "antd"; // Tooltip importado
 import * as XLSX from 'xlsx';
 import {
     PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector, Tooltip as RechartsTooltip
@@ -15,16 +16,21 @@ import {
     CheckSquare, Square,
     Sun, Moon 
 } from "lucide-react";
-import { LoadingOutlined } from "@ant-design/icons"; 
 import ModalDetalhes from "./ModalDetalhes";
-import NotificationModal from "./NotificationModal";
-import React from "react";
-import { createPortal } from "react-dom";
+// === CORREÇÃO DO CAMINHO DE IMPORTAÇÃO (Mantida) ===
+import NotificationModal from "./NotificationModal"; // Importado
+// ====================================================
+import React from "react"; // Mantido, mas a importação de Hooks deve ser na primeira linha
+import { createPortal } from "react-dom"; // Importando createPortal
 import "antd/dist/reset.css";
-import PriorityRibbonTabs, { RIBBON_STATUS_LIST } from "./PriorityRibbonTabs";
+// ===== ALTERAÇÃO: Importar o componente E a lista de status =====
+import PriorityRibbonTabs, { RIBBON_STATUS_LIST } from "./PriorityRibbonTabs"; // Importando PriorityRibbonTabs
+// ==============================================================
+// import Donut3DStatus from "./Donut3DStatus"; // Removido
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
+// ===== ALTERAÇÃO: SPINNER COM CLASSE (para tema) =====
 const LoadingSpinner = ({ text }: { text: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
         <div className="auth-spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -33,6 +39,7 @@ const LoadingSpinner = ({ text }: { text: string }) => (
         </div>
     </div>
 );
+// ======================================================
 
 const AcessoNegado = () => {
   const router = useRouter();
@@ -339,15 +346,17 @@ const popoverContent = (
         ref={popoverRef}
         className="filter-popover-content"
         style={{
+            // === CORREÇÃO: Posição ABSOLUTE + Posição Relativa (relPos) ===
             position: 'absolute',
             top: relPos.top,
             left: relPos.left,
             width: '360px',
+            // ====================================================================
             backgroundColor: 'white',
             borderRadius: '8px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
             border: '1px solid var(--gcs-border-color)',
-            zIndex: 99999999, 
+            zIndex: 99999999, // Z-index altíssimo mantido
             padding: '1rem',
         }}
     >
@@ -419,6 +428,7 @@ const renderPopoverInParent = () => {
     if (!isOpen || !isBrowser) return null;
     const parent = scrollParentRef.current;
     if (!parent) return null;
+    // Usando zIndex alto do popoverContent (99999999)
     return createPortal(popoverContent, parent);
 };
 // --- Fim da nova lógica ---
@@ -433,6 +443,7 @@ return (
               if (!isOpen) {
                 // calcula e ancora no parent imediatamente
                 setTimeout(() => {
+                  // garante que scrollParent foi definido
                   const btn = buttonRef.current;
                   const parent = getScrollParent(btn as any) as HTMLElement | null;
                   scrollParentRef.current = parent || (document.scrollingElement as HTMLElement);
@@ -440,6 +451,7 @@ return (
                 }, 0);
               }
             }}
+            // --- Fim da nova lógica ---
             title="Filtros Avançados" 
             className="btn btn-outline-gray btn-filter-toggle" 
             style={{padding: '9px'}}
@@ -450,7 +462,7 @@ return (
 
         {/* --- Nova lógica de ancoragem (Render) --- */}
         {renderPopoverInParent()}
-      
+        {/* --- Fim da nova lógica --- */}
     </div>
 );
 };
@@ -524,6 +536,7 @@ export default function ConsultaNotas() {
   const [conferenciaNota, setConferenciaNota] = useState<Nota | null>(null);
   const [newConferenciaStatus, setNewConferenciaStatus] = useState<'S' | 'N' | null>(null);
   const [isSubmittingConferencia, setIsSubmittingConferencia] = useState(false);
+  // O NotificationModal não precisa de z-index ajustado aqui, pois ele usa createPortal no body.
   const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
 
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -550,70 +563,27 @@ export default function ConsultaNotas() {
   const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
   const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
 
-  const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
-  const hasFetchedTheme = useRef(false);
-  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  // --- ESTADO DO TEMA ADICIONADO ---
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
+  // --- EFEITOS DE TEMA ADICIONADOS ---
+  // 1. Carregar tema do localStorage ao montar
   useEffect(() => {
-    const fetchThemeData = async () => {
-      if (!session?.user?.email) return;
-
-      try {
-        const res = await fetch("/api/portal/consulta-tema", { method: "POST" });
-        if (!res.ok) throw new Error('Falha ao buscar tema');
-        
-        const userData = await res.json(); 
-        
-        if (userData && userData.tema) {
-          const apiTheme = userData.tema === 'E' ? 'dark' : 'light';
-          setTheme(apiTheme);
-        } else {
-          setTheme('light');
-        }
-      } catch (err) {
-        console.error("Erro ao buscar tema, usando 'light' como padrão:", err);
-        setTheme('light');
-      }
-    };
-
-    if (status === "authenticated" && session && !hasFetchedTheme.current) {
-      hasFetchedTheme.current = true;
-      fetchThemeData();
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else {
+      setTheme('light'); // Padrão é claro
     }
-  }, [status, session]); 
+  }, []);
 
+  // 2. Aplicar tema ao body e salvar no localStorage
   useEffect(() => {
-    if (theme) {
-      localStorage.setItem('theme', theme);
-      document.body.classList.remove('light', 'dark');
-      document.body.classList.add(theme);
-    }
-  }, [theme]); 
-
-  const handleThemeChange = async (newTheme: 'light' | 'dark') => {
-    if (!session?.user?.email || isSavingTheme || newTheme === theme) return;
-
-    const oldTheme = theme;
-    setIsSavingTheme(true);
-    setTheme(newTheme); 
-
-    try {
-      const response = await fetch('/api/portal/altera-tema', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tema: newTheme }),
-      });
-      const result = await response.json();
-      if (!response.ok || result.status !== 'ok') {
-        throw new Error(result.message || 'Falha ao salvar o tema.');
-      }
-    } catch (error: any) {
-      console.error("Erro ao salvar tema:", error);
-      setTheme(oldTheme); 
-    } finally {
-      setIsSavingTheme(false);
-    }
-  };
+    localStorage.setItem('theme', theme);
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(theme);
+  }, [theme]);
+  // --- FIM DOS EFEITOS DE TEMA ---
 
 
   useEffect(() => {
@@ -643,16 +613,16 @@ export default function ConsultaNotas() {
       return;
     }
     if (status === 'authenticated') {
-      const user: any = session.user; 
+      const user = session.user;
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralDeNotas');
 
       if (hasAccess) {
         setAuthStatus('authorized');
       } else {
-        router.push('/login'); 
+        router.push('/login');
       }
     } else {
-        router.push('/login'); 
+        router.push('/login');
     }
   }, [status, session, router]);
 
@@ -664,7 +634,9 @@ export default function ConsultaNotas() {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  const statusDisponiveis = RIBBON_STATUS_LIST;
+  // ===== ALTERAÇÃO: A lista de status agora é importada do componente =====
+  const statusDisponiveis = RIBBON_STATUS_LIST; // Importado de PriorityRibbonTabs
+  // ========================================================================
 
 
   const statusCounts = useMemo(() => {
@@ -676,9 +648,10 @@ export default function ConsultaNotas() {
   const dadosGraficoStatus = useMemo(() => {
     return statusDisponiveis
       .filter(key => key !== "Todos" && (statusCounts[key] || 0) > 0)
-      .map(name => ({ name, value: statusCounts[name] })); 
-  }, [statusCounts, statusDisponiveis]); 
-
+      .map(name => ({ name, value: statusCounts[name] })); // CORRIGIDO: de key para name
+  // ===== ALTERAÇÃO: Removido 'statusDisponiveis' do array de dependência =====
+  }, [statusCounts]);
+  // ==========================================================================
 
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
@@ -723,6 +696,7 @@ export default function ConsultaNotas() {
     setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
   };
 
+  // ATUALIZADO: Handler para o Donut
   const handleChartClick = (data: any) => {
     if (data && data.name) {
         const statusName = data.name;
@@ -866,18 +840,21 @@ export default function ConsultaNotas() {
     "Importado": "var(--gcs-green)",
     "Manual": "#343a40",
     "Falha ERP": "#8B0000",
+    // ===== ALTERAÇÃO: Cor "Compras" (fallback) =====
     "Compras": "#FACC15",
+    // ===============================================
     "Fiscal": "#00314A",
     "Enviadas": "#17a2b8",
   };
   
+  // *** ADICIONADO: Mapeamento de Cores/Gradientes do Donut ***
   const coresStatusDonut: Record<string, string> = {
     "Erro I.A.": "url(#gradVermelho)",
     "Não Recebidas": "url(#gradLaranja)",
     "Importado": "url(#gradVerde)",
     "Manual": "url(#gradCinza)",
     "Falha ERP": "url(#gradVermelho)",
-    "Compras": "url(#gradAmarelo)", 
+    "Compras": "url(#gradAmarelo)", // Corrigido
     "Fiscal": "url(#gradAzul)",
     "Enviadas": "url(#gradAzulClaro)",
   };
@@ -931,14 +908,17 @@ export default function ConsultaNotas() {
 
   // --- FUNÇÕES DE CONFERÊNCIA (CHECKBOX) ---
 
+  // 1. Abre o modal de confirmação
   const handleCheckboxClick = (nota: Nota) => {
-      if (isSubmittingConferencia) return;
+      if (isSubmittingConferencia) return; // Impede cliques duplos
       const newStatus = nota.conferido === 'S' ? 'N' : 'S';
       setConferenciaNota(nota);
       setNewConferenciaStatus(newStatus);
       setIsConfirmConferenciaOpen(true);
   };
 
+  // 2. Fech
+  // 2. Fecha o modal de confirmação
   const handleCloseConferencia = () => {
       if (isSubmittingConferencia) return;
       setIsConfirmConferenciaOpen(false);
@@ -946,25 +926,31 @@ export default function ConsultaNotas() {
       setNewConferenciaStatus(null);
   };
 
+  // 3. Chamada à API após clicar em "Sim"
   const handleConfirmConferencia = async () => {
-      console.log("handleConfirmConferencia: Iniciando..."); 
+      console.log("handleConfirmConferencia: Iniciando..."); // Log 1
+
+      // 1. Verifica a sessão
       if (!session?.user?.email) {
-          console.error("handleConfirmConferencia: Erro - Sessão ou email do usuário não encontrado.");
+          console.error("handleConfirmConferencia: Erro - Sessão ou email do usuário não encontrado."); // Log 2
           setNotification({ visible: true, type: 'error', message: 'Erro: Sessão do usuário não encontrada. Faça login novamente.' });
           setIsConfirmConferenciaOpen(false);
           return;
       }
-      console.log("handleConfirmConferencia: Sessão OK, Email:", session.user.email); 
+      console.log("handleConfirmConferencia: Sessão OK, Email:", session.user.email); // Log 3
+
+      // 2. Verifica os dados da nota
       if (!conferenciaNota || !newConferenciaStatus) {
-          console.error("handleConfirmConferencia: Erro - Dados da nota ou novo status ausentes.");
+          console.error("handleConfirmConferencia: Erro - Dados da nota ou novo status ausentes."); // Log 4
           setNotification({ visible: true, type: 'error', message: 'Erro: Informações da nota não encontradas. Tente novamente.' });
           setIsConfirmConferenciaOpen(false);
           return;
       }
-      console.log("handleConfirmConferencia: Dados da nota OK:", { chave: conferenciaNota.chave, novoStatus: newConferenciaStatus }); 
+      console.log("handleConfirmConferencia: Dados da nota OK:", { chave: conferenciaNota.chave, novoStatus: newConferenciaStatus }); // Log 5
 
+      // 3. Inicia o envio
       setIsSubmittingConferencia(true);
-      console.log("handleConfirmConferencia: Enviando para API /api/nfe/nfe-conferencia..."); 
+      console.log("handleConfirmConferencia: Enviando para API /api/nfe/nfe-conferencia..."); // Log 6
 
       try {
           const bodyPayload = {
@@ -972,40 +958,40 @@ export default function ConsultaNotas() {
               email_solicitante: session.user.email,
               conferido: newConferenciaStatus
           };
-          console.log("handleConfirmConferencia: Payload:", JSON.stringify(bodyPayload));
+          console.log("handleConfirmConferencia: Payload:", JSON.stringify(bodyPayload)); // Log 7
 
           const response = await fetch('/api/nfe/nfe-conferencia', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(bodyPayload)
           });
-          console.log("handleConfirmConferencia: Resposta da API recebida, Status HTTP:", response.status);
+          console.log("handleConfirmConferencia: Resposta da API recebida, Status HTTP:", response.status); // Log 8
 
           let result: any = {};
           try {
               result = await response.json();
-              console.log("handleConfirmConferencia: Corpo da Resposta (JSON):", result);
+              console.log("handleConfirmConferencia: Corpo da Resposta (JSON):", result); // Log 9
           } catch (jsonError) {
               const textResponse = await response.text().catch(() => "Erro ao ler corpo da resposta");
-              console.error("handleConfirmConferencia: Resposta não é JSON. Resposta como Texto:", textResponse); 
+              console.error("handleConfirmConferencia: Resposta não é JSON. Resposta como Texto:", textResponse); // Log 10
               result = { status: 'error', message: `Erro ${response.status}: ${response.statusText}. Resposta do servidor não é JSON.` };
           }
 
           if (response.ok && result?.status === 'ok') {
-              console.log("handleConfirmConferencia: Sucesso! Status HTTP OK e status interno 'ok'.");
+              console.log("handleConfirmConferencia: Sucesso! Status HTTP OK e status interno 'ok'."); // Log 11
               setNotification({ visible: true, type: 'success', message: `Nota ${newConferenciaStatus === 'S' ? 'marcada' : 'desmarcada'} com sucesso!` });
               fetchNotas(); // Recarrega os dados
           } else {
-              console.error("handleConfirmConferencia: Falha - Resposta não OK ou status interno diferente de 'ok'.");
+              console.error("handleConfirmConferencia: Falha - Resposta não OK ou status interno diferente de 'ok'."); // Log 12
               const errorMessage = result?.message || `Erro ao se comunicar com o servidor (HTTP ${response.status})`;
               throw new Error(errorMessage);
           }
 
       } catch (error: any) {
-          console.error("handleConfirmConferencia: Erro no bloco catch:", error); 
+          console.error("handleConfirmConferencia: Erro no bloco catch:", error); // Log 13
           setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível realizar a operação.' });
       } finally {
-          console.log("handleConfirmConferencia: Bloco finally executado.");
+          console.log("handleConfirmConferencia: Bloco finally executado."); // Log 14
           setIsSubmittingConferencia(false);
           setIsConfirmConferenciaOpen(false);
           setConferenciaNota(null);
@@ -1013,9 +999,10 @@ export default function ConsultaNotas() {
       }
   };
 
+  // 4. Fecha o modal de notificação
   const handleCloseNotification = () => {
       setNotification({ visible: false, type: 'success', message: '' });
-      console.log("handleCloseNotification: Notificação fechada.");
+      console.log("handleCloseNotification: Notificação fechada."); // Log 15
   };
   // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
 
@@ -1031,6 +1018,7 @@ export default function ConsultaNotas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus, paginaAtual, pageSize, busca, filtroStatus, advancedFilters, sortConfig]);
 
+  // *** ADICIONADO: Estilos dinâmicos do Tooltip ***
   const glassTooltipStyle: React.CSSProperties = {
     borderRadius: '12px',
     border: '1px solid',
@@ -1050,34 +1038,12 @@ export default function ConsultaNotas() {
   const tooltipItemStyle: React.CSSProperties = {
     color: theme === 'dark' ? '#E2E8F0' : '#00314A',
     };
+  // *** FIM DOS ESTILOS DINÂMICOS ***
 
-  // --- CORREÇÃO: LÓGICA DE LOADING PRINCIPAL ---
-  if (authStatus === 'loading' || !theme) {
+  if (authStatus === 'loading') {
     return (
-        <div className="main-container" style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            padding: "2rem", 
-            minHeight: "100vh",
-            // Define um fundo padrão ANTES do 'theme' ser carregado
-            backgroundColor: "#E9ECEF" 
-        }}>
-            {/* O spinner da Antd é usado para consistência com o Perfil */}
-            <Spin 
-              indicator={<LoadingOutlined style={{ fontSize: 48, color: 'var(--gcs-blue)' }} spin />} 
-              tip={
-                <span style={{ 
-                  color: 'var(--gcs-blue)', 
-                  marginTop: '1rem', 
-                  fontWeight: 'bold',
-                  fontSize: '1.1rem' 
-                }}>
-                  {/* --- CORREÇÃO DO TEXTO --- */}
-                  Aguarde, verificando acesso...
-                </span>
-              }
-            />
+        <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
+            <LoadingSpinner text="A verificar permissões..." />
         </div>
     );
   }
@@ -1095,21 +1061,22 @@ export default function ConsultaNotas() {
     const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
     const sin = Math.sin(-RADIAN * midAngle);
     const cos = Math.cos(-RADIAN * midAngle);
-    const sx = cx + (outerRadius + 2) * cos; 
+    const sx = cx + (outerRadius + 2) * cos; // Diminuído o popout
     const sy = cy + (outerRadius + 2) * sin;
-    const mx = cx + (outerRadius + 15) * cos; 
+    const mx = cx + (outerRadius + 15) * cos; // Diminuída a linha
     const my = cy + (outerRadius + 15) * sin;
-    const ex = mx + (cos >= 0 ? 1 : -1) * 15; 
+    const ex = mx + (cos >= 0 ? 1 : -1) * 15; // Diminuída a linha
     const ey = my;
     const textAnchor = cos >= 0 ? 'start' : 'end';
     
+    // Define a cor do texto com base no tema
     const labelFillColor = theme === 'dark' ? '#F1F5F9' : '#333';
     const percentFillColor = theme === 'dark' ? '#94A3B8' : '#999';
 
     return (
       <g>
         <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 4} outerRadius={outerRadius + 8} fill={fill} />
+        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 4} outerRadius={outerRadius + 8} fill={fill} /> {/* Aumentado o pop-out */}
         <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
         <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
         <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill={labelFillColor} style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
@@ -1118,39 +1085,50 @@ export default function ConsultaNotas() {
     );
   };
 
+  // --- COMPONENTE CHECKBOX FINAL (RESTAURADO COM LÓGICA CORRIGIDA) ---
   const ConferidoCheckbox = ({ conferido, onClick }: { conferido: 'S' | 'N' | null | undefined, onClick: () => void }) => {
+    // Log removido, pois confirmamos que o valor chega corretamente.
+    // console.log(`ConferidoCheckbox FINAL - Recebido: '${conferido}'`);
+
     const isChecked = conferido === 'S';
+    // Usa as variáveis CSS originais para cor
     const color = isChecked ? 'var(--gcs-green)' : 'var(--gcs-gray-dark)';
 
     return (
         <button
             onClick={onClick}
             title={isChecked ? "Desmarcar conferência" : "Marcar como conferido"}
-            disabled={isSubmittingConferencia} 
+            disabled={isSubmittingConferencia} // Usa a variável do escopo pai
             style={{
                 background: 'none',
-                border: 'none', 
+                border: 'none', // Sem borda extra
                 cursor: isSubmittingConferencia ? 'wait' : 'pointer',
-                padding: '4px', 
+                padding: '4px', // Padding original
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: color, 
-                opacity: isSubmittingConferencia ? 0.5 : 1, 
+                color: color, // Cor baseada no estado
+                opacity: isSubmittingConferencia ? 0.5 : 1, // Opacidade se estiver submetendo
+                // Animação de giro pode ser adicionada aqui se desejar,
+                // mas requer passar qual nota está sendo processada.
+                // Ex: animation: isProcessingThisNota ? 'spin 1s linear infinite' : 'none'
             }}
-            className="conferido-checkbox-btn"
+            className="conferido-checkbox-btn" // Classe para o tema escuro
         >
+            {/* Renderização condicional direta dos ícones */}
             {isChecked ? (
                 <CheckSquare size={20} />
             ) : (
                 <Square size={20} />
             )}
+            {/* Texto de debug removido */}
         </button>
     );
   };
 
 
   return (<>
+    {/* --- SVG DE GRADIENTES (DO VISÃO GERAL) --- */}
     <svg width="0" height="0" style={{ position: 'absolute', zIndex: -1 }}>
         <defs>
           <linearGradient id="gradLaranja" x1="0" y1="0" x2="0" y2="1">
@@ -1161,14 +1139,17 @@ export default function ConsultaNotas() {
             <stop offset="0%" stopColor="#9DDE5B" />
             <stop offset="100%" stopColor="#5FB246" />
           </linearGradient>
+          {/* --- NOVOS GRADIENTES ADICIONADOS --- */}
           <linearGradient id="gradVermelho" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#ff6f61" />
             <stop offset="100%" stopColor="#E11D2E" />
           </linearGradient>
+          {/* ===== ALTERAÇÃO: Cor "Compras" (Amarelo) ===== */}
           <linearGradient id="gradAmarelo" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#FDE68A" />
             <stop offset="100%" stopColor="#FACC15" />
           </linearGradient>
+          {/* ============================================== */}
           <linearGradient id="gradAzul" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#1F4E79" />
             <stop offset="100%" stopColor="#00314A" />
@@ -1196,14 +1177,18 @@ export default function ConsultaNotas() {
             --gcs-gray-dark: #6c757d;
             --gcs-border-color: #dee2e6;
             --gcs-gray-soft: #adb5bd;
+
+            /* Cores do Funil (usadas pelo novo componente) */
             --gcs-red-light-bg: #f8d7da;
             --gcs-red-border: #f1c2c7;
             --gcs-red-text: #b22c38;
             --gcs-brand-red: #E11D2E;
+
             --gcs-orange-light-bg: #fff8e1;
             --gcs-orange-border: #FDBA74;
             --gcs-orange-text: #F58220;
             --gcs-brand-orange: #EA580C;
+
             --gcs-blue-light-bg: #f1f5fb;
             --gcs-blue-border: #a3b8d1;
             --gcs-blue-text: #00314A;
@@ -1269,6 +1254,7 @@ export default function ConsultaNotas() {
 
         body.light .data-row:hover { background-color: var(--gcs-gray-light) !important; cursor: default; }
         
+        /* ===== CORREÇÃO: .tabs-card ADICIONADO AQUI ===== */
         body.light .kpi-card, 
         body.light .chart-card, 
         body.light .main-content-card, 
@@ -1280,10 +1266,13 @@ export default function ConsultaNotas() {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); 
             border: 1px solid var(--gcs-border-color);
         }
+        /* ============================================== */
 
+        /* ===== CORREÇÃO: Padding removido do .tabs-card ===== */
         body.light .tabs-card {
-            padding: 0; 
+            padding: 0; /* O componente interno (Ribbon) já tem padding */
         }
+        /* ====================================================== */
         
         body.light .kpi-card, body.light .chart-card, body.light .main-content-card, body.light .content-card { padding: 1.5rem; }
 
@@ -1294,6 +1283,7 @@ export default function ConsultaNotas() {
         body.light .responsive-table td { color: #333; }
         body.light .responsive-table td::before { color: var(--gcs-blue); }
 
+        /* CORREÇÃO TABELA */
         body.light .table-note-number { font-weight: bold; color: #343a40; }
         body.light .table-note-series { color: var(--gcs-gray-dark); }
 
@@ -1309,37 +1299,36 @@ export default function ConsultaNotas() {
         }
         body.light .recharts-legend-item-text { color: #333 !important; }
         
+        /* ===== ALTERAÇÃO: SPINNER MODO CLARO ===== */
         body.light .loading-text { color: var(--gcs-blue); }
         body.light .auth-spinner {
             border: 4px solid var(--gcs-gray-medium);
             border-top: 4px solid var(--gcs-blue);
         }
+        /* ======================================== */
         
+        /* ===== ALTERAÇÃO: Cores KPI MODO CLARO ===== */
         body.light h4.kpi-title {
-            color: #4A5568 !important; 
+            color: #4A5568 !important; /* Cinza escuro, menos "apagado" */
             font-weight: 600 !important;
         }
-        body.light p.kpi-value-green { color: #2F855A !important; } 
-        body.light p.kpi-value-orange { color: #DD6B20 !important; }
+        body.light p.kpi-value-green { color: #2F855A !important; } /* Verde mais vivo */
+        body.light p.kpi-value-orange { color: #DD6B20 !important; } /* Laranja mais vivo */
+        /* ========================================= */
 
         /* Botão de Tema - Modo Claro */
         .theme-toggle-btn {
           background: none; border: 1px solid transparent; border-radius: 8px; padding: 9px; cursor: pointer;
           display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
-          min-width: 42px; min-height: 42px; /* Para acomodar spinner */
         }
         body.light .theme-toggle-btn { 
           color: var(--gcs-gray-dark); 
           border-color: var(--gcs-border-color); 
           background: #fff;
         }
-        body.light .theme-toggle-btn:hover:not(:disabled) { 
+        body.light .theme-toggle-btn:hover { 
           background: var(--gcs-gray-light); 
           border-color: var(--gcs-gray-dark);
-        }
-        /* Cor do spinner no modo claro */
-        body.light .theme-toggle-btn .ant-spin-dot-item {
-            background-color: var(--gcs-blue);
         }
 
         /* Popover de Filtro - Modo Claro */
@@ -1356,12 +1345,15 @@ export default function ConsultaNotas() {
             border: 1px solid var(--gcs-border-color);
         }
         
+        /* ===== ADICIONADO: Correção Hover Botão "Todos" MODO CLARO ===== */
         body.light .seg-item:hover:not([aria-pressed="true"]) {
             transform: translateY(-0.5px) scale(1.01);
             box-shadow: 0 6px 12px rgba(0,0,0,.05) !important;
             border-color: #B0B0B0 !important;
         }
+        /* ========================================================== */
         
+        /* ===== ALTERAÇÃO: Tooltip ANTD MODO CLARO (Glassmorphism) ===== */
         .ant-tooltip-inner {
           border-radius: 12px !important;
           border: 1px solid rgba(255,255,255,.35) !important;
@@ -1375,6 +1367,7 @@ export default function ConsultaNotas() {
         .ant-tooltip-arrow::after {
           background: transparent !important;
         }
+        /* ========================================================== */
 
         /* --- MODO ESCURO --- */
         body.dark {
@@ -1401,11 +1394,13 @@ export default function ConsultaNotas() {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
         }
         
+        /* ===== CORREÇÃO: .tabs-card no MODO ESCURO ===== */
         body.dark .tabs-card {
             background: transparent;
             border: none;
             box-shadow: none;
         }
+        /* =========================================== */
 
         body.dark .kpi-card, body.dark .chart-card, body.dark .main-content-card, body.dark .content-card { padding: 1.5rem; }
 
@@ -1414,30 +1409,35 @@ export default function ConsultaNotas() {
         body.dark .page-title svg {
           color: #F1F5F9 !important;
         }
+        /* Cores dos Textos de Rodapé do Header */
         body.dark .time-ago-text { 
-          color: #BFDBFE !important; 
+          color: #BFDBFE !important; /* Azul claro para melhor contraste */
         }
         body.dark .filter-applied-text { 
-          color: #FECACA !important; 
+          color: #FECACA !important; /* Vermelho mais claro para melhor contraste */
         }
         
-        body.dark h4.kpi-title { 
-          color: #E2E8F0 !important; 
+        /* ===== ALTERAÇÃO: Cores KPI MODO ESCURO ===== */
+        body.dark h4.kpi-title { /* Título do gráfico E Título KPI */
+          color: #E2E8F0 !important; /* Branco Suave */
           font-weight: 600 !important;
         }
-        body.dark p.kpi-value-green { color: #A7F3D0 !important; } 
-        body.dark p.kpi-value-orange { color: #FCD34D !important; } 
-        
+        body.dark p.kpi-value-green { color: #A7F3D0 !important; } /* Verde mais vivo */
+        body.dark p.kpi-value-orange { color: #FCD34D !important; } /* Laranja/Amarelo mais vivo */
+        /* ========================================= */
+
+        /* ===== ALTERAÇÃO: SPINNER MODO ESCURO ===== */
         body.dark .loading-text { color: #93C5FD; }
         body.dark .auth-spinner {
-            border: 4px solid rgba(125, 173, 222, 0.2); 
-            border-top: 4px solid #BFDBFE; 
+            border: 4px solid rgba(125, 173, 222, 0.2); /* Trilha escura/transparente */
+            border-top: 4px solid #BFDBFE; /* Ativo claro */
         }
-        
+        /* ========================================= */
+
         body.dark .ant-pagination-total-text { color: #CBD5E1 !important; }
         
         /* Botões */
-        body.dark .btn-green { background-color: var(--gcs-green); color: white; }
+        body.dark .btn-green { background-color: var(--gcs-green); color: white; } /* Mantém verde */
         body.dark .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
         
         body.dark .btn-dark-gray {
@@ -1464,13 +1464,9 @@ export default function ConsultaNotas() {
           color: #E2E8F0 !important;
           border-color: rgba(125, 173, 222, 0.3) !important;
         }
-        body.dark .theme-toggle-btn:hover:not(:disabled) { 
+        body.dark .theme-toggle-btn:hover { 
           background-color: rgba(40, 60, 80, 0.7) !important;
           border-color: rgba(125, 173, 222, 0.5) !important;
-        }
-         /* Cor do spinner no modo escuro */
-        body.dark .theme-toggle-btn .ant-spin-dot-item {
-            background-color: #BFDBFE;
         }
         
         /* Input de Busca */
@@ -1494,14 +1490,16 @@ export default function ConsultaNotas() {
             background-color: rgba(40, 60, 80, 0.3) !important;
         }
         body.dark .responsive-table td { color: #CBD5E1; }
-        body.dark .conferido-checkbox-btn { color: #94A3B8; }
-        body.dark .conferido-checkbox-btn[style*="rgb(40, 167, 69)"] { color: var(--gcs-green) !important; }
+        body.dark .conferido-checkbox-btn { color: #94A3B8; } /* Cor do checkbox não conferido */
+        body.dark .conferido-checkbox-btn[style*="rgb(40, 167, 69)"] { color: var(--gcs-green) !important; } /* Cor do conferido */
 
+        /* CORREÇÃO TABELA */
         body.dark .table-note-number { font-weight: bold; color: #E2E8F0; }
         body.dark .table-note-series { color: #94A3B8; }
 
+
         /* Tabela Mobile */
-        body.dark .responsive-table tr { 
+        body.dark .responsive-table tr { /* card da linha mobile */
             border: 1px solid rgba(125, 173, 222, 0.2) !important;
         }
         body.dark .responsive-table td {
@@ -1569,12 +1567,22 @@ export default function ConsultaNotas() {
           box-shadow: 0 8px 24px rgba(0,0,0,0.1) !important;
         }
         
+        /* ===== ADICIONADO: Correção Borda do Ribbon ===== */
         body.dark .ribbon {
+            /* Força a borda a ser igual aos outros cards */
             border-color: rgba(125, 173, 222, 0.2) !important;
         }
         body.dark .ribbon .left {
+            /* Força a linha pontilhada a usar a mesma cor */
             border-color: rgba(125, 173, 222, 0.2) !important;
         }
+        /* ============================================== */
+
+        /* ===== ALTERAÇÃO: Bloco de CSS do componente antigo REMOVIDO DAQUI ===== */
+        /* As regras .seg.p1, .seg:hover, .seg-head, .tag, etc. 
+           que estavam aqui foram REMOVIDAS. 
+        */
+        /* ===================================================================== */
 
         /* Botões internos (SegmentItem) - Padrão (Todos) */
         body.dark .seg-item {
@@ -1583,12 +1591,15 @@ export default function ConsultaNotas() {
           border-color: rgba(125, 173, 222, 0.2) !important;
         }
         
+        /* ===== ALTERADO: Correção Hover Botão "Todos" MODO ESCURO ===== */
         body.dark .seg-item:hover:not([aria-pressed="true"]) {
            border-color: rgba(125, 173, 222, 0.5) !important;
+           /* Efeitos do componente interno adicionados para consistência */
            transform: translateY(-0.5px) scale(1.01);
            box-shadow: 0 10px 22px rgba(0,0,0,.12);
            filter: brightness(1.02);
         }
+        /* ========================================================= */
 
         body.dark .seg-item[aria-pressed="true"] { /* "Todos" Ativo */
           border-color: #3B82F6 !important;
@@ -1597,6 +1608,7 @@ export default function ConsultaNotas() {
           color: #F1F5F9 !important;
         }
         
+        /* ===== ALTERAÇÃO: Tooltip ANTD MODO ESCURO (Glassmorphism) ===== */
         body.dark .ant-tooltip-inner {
            border-radius: 12px !important;
            border: 1px solid rgba(125,173,222,.28) !important;
@@ -1610,6 +1622,7 @@ export default function ConsultaNotas() {
          body.dark .ant-tooltip-arrow::after {
           background: transparent !important;
         }
+        /* ========================================================== */
 
 
         /* --- RESPONSIVIDADE (MEDIA QUERIES) --- */
@@ -1648,9 +1661,11 @@ export default function ConsultaNotas() {
              body.dark .kpi-card, body.dark .chart-card, body.dark .main-content-card {
                 padding: 1rem;
              }
+             /* Ajuste para PriorityRibbonTabs */
              body.light .tabs-card, body.dark .tabs-card {
                 padding: 0;
              }
+
 
             .responsive-table thead {
                 display: none;
@@ -1694,6 +1709,9 @@ export default function ConsultaNotas() {
             }
         }
         
+        /* === REMOVIDA CORREÇÃO CRÍTICA DO OVERFLOW (Lógica ABSOLUTE) === */
+        /* A nova lógica de ancoragem (getScrollParent) não precisa disso */
+        
     `}</style>
 
     <div className="main-container" style={{ padding: "2rem", minHeight: "100vh" }}>
@@ -1717,6 +1735,7 @@ export default function ConsultaNotas() {
             <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem' }}>
                 Gráfico por Status
             </h4>
+            {/* --- GRÁFICO RECHARTS ATUALIZADO (PONTO 1) --- */}
             <div style={{ width: 280, height: 220 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart key={chartKey}>
@@ -1726,19 +1745,21 @@ export default function ConsultaNotas() {
                             nameKey="name"
                             cx="50%"
                             cy="45%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            cornerRadius={8}
-                            stroke={theme === 'dark' ? "rgba(25, 39, 53, 0.5)" : "rgba(255,255,255,.35)"}
-                            strokeWidth={1}
+                            innerRadius={50} // Estilo Donut
+                            outerRadius={80} // Estilo Donut
+                            cornerRadius={8} // Estilo Donut
+                            stroke={theme === 'dark' ? "rgba(25, 39, 53, 0.5)" : "rgba(255,255,255,.35)"} // Estilo Donut
+                            strokeWidth={1} // Estilo Donut
                             paddingAngle={3}
+                            // Mantendo a interatividade que você já tinha
                             activeIndex={activeIndex}
                             activeShape={renderActiveShape}
                             onMouseEnter={onPieEnter}
                             onPieLeave={onPieLeave}
-                            onClick={(data) => handleChartClick(data.payload.payload)}
+                            onClick={(data) => handleChartClick(data.payload.payload)} // Corrigido para pegar o payload
                         >
                             {dadosGraficoStatus.map((entry, index) => {
+                                // Mapeia cores/gradientes
                                 const pieFill = coresStatusDonut[entry.name] || coresStatus[entry.name] || '#ccc';
                                 return <Cell key={`cell-${index}`} fill={pieFill} />;
                             })}
@@ -1751,6 +1772,7 @@ export default function ConsultaNotas() {
                             wrapperStyle={{ fontSize: '12px', marginTop: '10px' }}
                             formatter={renderLegendText}
                         />
+                        {/* ADICIONADO: Tooltip com estilos dinâmicos */}
                         <RechartsTooltip 
                             contentStyle={glassTooltipStyle} 
                             labelStyle={tooltipLabelStyle} 
@@ -1762,7 +1784,7 @@ export default function ConsultaNotas() {
         </div>
 
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
-            <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} />
                 <span>Central de Notas</span>
             </h2>
@@ -1794,20 +1816,14 @@ export default function ConsultaNotas() {
                         <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
                             <FileDown size={20} />
                         </button>
-                        
+                        {/* --- BOTÃO DE TEMA ADICIONADO --- */}
                         <button
-                          onClick={() => handleThemeChange(theme === 'light' ? 'dark' : 'light')}
+                          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
                           className="theme-toggle-btn"
                           title={theme === 'light' ? 'Mudar para tema escuro' : 'Mudar para tema claro'}
-                          disabled={isSavingTheme}
                         >
-                          {isSavingTheme ? (
-                            <Spin indicator={<LoadingOutlined style={{ fontSize: 20, color: 'currentColor' }} spin />} />
-                          ) : (
-                            theme === 'light' ? <Moon size={20} /> : <Sun size={20} />
-                          )}
+                          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                         </button>
-                        
                     </div>
                     <div style={{ height: 'auto', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
                         {timeAgo && !loading && (
@@ -1848,13 +1864,18 @@ export default function ConsultaNotas() {
         </div>
       </div>
 
+      {/* ===== CORREÇÃO: Estilos inline problemáticos removidos ===== */}
       <div 
         className="tabs-card" 
         style={{
           marginBottom: "1.5rem",
           padding: 0
+          // background: "transparent", // REMOVIDO
+          // border: "none", // REMOVIDO
+          // boxShadow: "none", // REMOVIDO
         }}
       >
+      {/* ======================================================== */}
         <PriorityRibbonTabs
           filtroStatus={filtroStatus}
           statusCounts={statusCounts as any}
@@ -1862,10 +1883,10 @@ export default function ConsultaNotas() {
             if (key === "outras") return;
             handleFiltroStatusChange(key);
           }}
-          forceTheme={theme || 'light'} 
         />
       </div>
 
+      {/* ===== ALTERAÇÃO: SPINNER COM CLASSE (para tema) ===== */}
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
           <div className="auth-spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -1889,6 +1910,7 @@ export default function ConsultaNotas() {
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
+                  {/* --- COLUNAS DE DATA SUBSTITUÍDAS --- */}
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><Calendar size={16} style={{marginRight: '8px'}}/> Datas</div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><TrendingUp size={16} style={{marginRight: '8px'}} /> Status Setor</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('observacao')} className="th-sortable"><MessageSquare size={16} style={{marginRight: '8px'}}/> Observação <SortIcon columnKey="observacao" /></div></th>
@@ -1909,6 +1931,7 @@ export default function ConsultaNotas() {
                       statusNotaCor = 'var(--gcs-orange)';
                   }
 
+                  // --- CONTEÚDO DO TOOLTIP DE DATA ---
                   const dateTooltipContent = (
                     <div style={{fontSize: '12px', textAlign: 'left'}}>
                         <div style={{marginBottom: '4px'}}><strong>Recebimento:</strong> {nota.dt_recebimento} {nota.hr_Recebimento}</div>
@@ -1918,7 +1941,7 @@ export default function ConsultaNotas() {
 
                   return (
                     <tr
-                      key={nota.chave}
+                      key={nota.chave} // Usar a chave como key é mais seguro
                       className="data-row"
                     >
                       <td data-label="Conferido" className="td-conferido" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
@@ -1937,6 +1960,7 @@ export default function ConsultaNotas() {
                       </td>
                       <td data-label="Filial" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.filial}</td>
                       <td data-label="Nota / Série" style={{ padding: '14px 12px', verticalAlign: 'middle', whiteSpace: "nowrap" }}>
+                          {/* --- ESTILO CORRIGIDO (PONTO 2) --- */}
                           <span className="table-note-number">{nota.nf}</span>
                           <span className="table-note-series"> / {nota.serie}</span>
                       </td>
@@ -1956,6 +1980,7 @@ export default function ConsultaNotas() {
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
                       
+                      {/* --- COLUNA DE DATA UNIFICADA --- */}
                       <td data-label="Datas" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <Tooltip title={dateTooltipContent} placement="top">
                             <span style={{cursor: 'help'}}><Calendar size={18} /></span>

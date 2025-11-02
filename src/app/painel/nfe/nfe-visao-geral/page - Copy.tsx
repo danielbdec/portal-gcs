@@ -9,7 +9,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList, LineChart, Line
 } from "recharts";
 import { Lock, LayoutDashboard, Sun, Moon, Loader2 } from "lucide-react";
-import { LoadingOutlined } from "@ant-design/icons"; 
 import "antd/dist/reset.css";
 
 // --- DEFINIÇÕES DE DADOS E INTERFACES ---
@@ -35,6 +34,7 @@ interface Nota {
   dt_lcto_protheus?: string;
 }
 
+// Interface para os dados do novo gráfico
 interface EnvioWpp {
   id: number;
   data_insercao: string;
@@ -47,6 +47,7 @@ interface EnvioWpp {
 type RankingFilterType = 'geral' | 'mes' | 'semana';
 type ThemeType = 'light' | 'dark';
 
+// Cores base (ainda usadas nas tags da tabela)
 const coresStatusTabela: { [key: string]: string } = {
   lançadas: "#5FB246",
   pendentes: "#F58220",
@@ -97,39 +98,19 @@ const parseDate = (dateString: string | null | undefined): { day: number, month:
 
 // --- COMPONENTES AUXILIARES ---
 
-// --- CORREÇÃO: Voltando ao <Spin> + <div className="loading-text"> ---
 const LoadingSpinner = ({ text }: { text: string }) => (
-  <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '2rem',
-      textAlign: 'center',
-      height: '100vh',
-      backgroundColor: "#E9ECEF" // Fundo claro padrão
-    }}>
-    <Spin 
-      indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} 
-    />
-    {/* O texto é um div separado, como no seu original */}
-    <div 
-      style={{ marginTop: '1rem', fontWeight: 'bold', fontSize: '1.1rem' }} 
-      className="loading-text" // A classe é estilizada pelo CSS global
-    >
-      {text}
-    </div>
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center', height: '100vh' }}>
+    <Spin size="large" />
+    <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }} className="loading-text">{text}</div>
   </div>
 );
-// --- FIM DA CORREÇÃO ---
-
 
 const AcessoNegado = () => {
   const router = useRouter();
   return (
     <div className="content-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '600px', margin: '10vh auto', backgroundColor: '#fff', borderRadius: '12px' }}>
       <Lock size={48} color="var(--gcs-orange)" />
-      <h2 style={{ marginTop: '1.frem', color: 'var(--gcs-blue)' }}>Acesso Negado</h2>
+      <h2 style={{ marginTop: '1.5rem', color: 'var(--gcs-blue)' }}>Acesso Negado</h2>
       <p style={{ color: 'var(--gcs-gray-dark)', maxWidth: '400px', margin: '1rem auto' }}>Você não tem as permissões necessárias para visualizar esta página.</p>
       <button onClick={() => router.push('/painel')} className="btn btn-green" style={{ marginTop: '1rem' }}>Voltar ao Painel</button>
     </div>
@@ -151,75 +132,22 @@ export default function StatusOverview() {
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("Todos");
   const [rankingFilter, setRankingFilter] = useState<RankingFilterType>('geral');
-  
-  const [theme, setTheme] = useState<ThemeType | null>(null); // Começa nulo
-  const [isSavingTheme, setIsSavingTheme] = useState(false);
-  const hasFetchedTheme = useRef(false);
-  
+  const [theme, setTheme] = useState<ThemeType>('light');
   const [loadingFilter, setLoadingFilter] = useState<RankingFilterType | null>(null);
   const fetchFlagRef = useRef(false);
 
-  // useEffect para buscar o tema global
+  // Efeito para carregar o tema do localStorage
   useEffect(() => {
-    const fetchThemeData = async () => {
-      try {
-        const res = await fetch("/api/portal/consulta-tema", { method: "POST" });
-        if (!res.ok) throw new Error('Falha ao buscar tema');
-        
-        const userData = await res.json(); // Espera { tema: "E" }
-        
-        if (userData && userData.tema) {
-          const apiTheme = userData.tema === 'E' ? 'dark' : 'light';
-          setTheme(apiTheme);
-        } else {
-          setTheme('light'); // Fallback
-        }
-      } catch (err) {
-        console.error("Erro ao buscar tema, usando 'light' como padrão:", err);
-        setTheme('light'); // Fallback
-      }
-    };
-
-    if (status === "authenticated" && session && !hasFetchedTheme.current) {
-      hasFetchedTheme.current = true;
-      fetchThemeData();
-    }
-  }, [status, session]);
+    const savedTheme = localStorage.getItem('dashboardTheme') as ThemeType;
+    if (savedTheme) setTheme(savedTheme);
+  }, []);
 
   // Efeito para APLICAR E SALVAR o tema no localStorage e <body>
   useEffect(() => {
-    if (theme) {
-      localStorage.setItem('dashboardTheme', theme);
-      document.body.classList.remove('light', 'dark');
-      document.body.classList.add(theme);
-    }
+    localStorage.setItem('dashboardTheme', theme);
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(theme);
   }, [theme]);
-
-  // Função para alterar o tema global
-  const handleThemeChange = async (newTheme: ThemeType) => {
-    if (!session?.user?.email || isSavingTheme || newTheme === theme) return;
-
-    const oldTheme = theme;
-    setIsSavingTheme(true);
-    setTheme(newTheme); 
-
-    try {
-      const response = await fetch('/api/portal/altera-tema', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tema: newTheme }),
-      });
-      const result = await response.json();
-      if (!response.ok || result.status !== 'ok') {
-        throw new Error(result.message || 'Falha ao salvar o tema.');
-      }
-    } catch (error: any) {
-      console.error("Erro ao salvar tema:", error);
-      setTheme(oldTheme); 
-    } finally {
-      setIsSavingTheme(false);
-    }
-  };
 
   const [chartData, setChartData] = useState<{
     dadosPorStatusPizza: any[],
@@ -389,13 +317,15 @@ export default function StatusOverview() {
       .map(mes => ({ mes, manual: mesesContagem[mes].manual, automatico: mesesContagem[mes].automatico }))
       .filter(d => d.manual > 0 || d.automatico > 0);
 
+    // ===== Tempo médio com 2 casas decimais =====
     const dadosTempoMedio = mesesNomes
       .map(mes => {
         const media = mesesContagem[mes].count > 0 ? (mesesContagem[mes].totalDias / mesesContagem[mes].count) : 0;
-        return { mes, dias: +(media.toFixed(2)) };
+        return { mes, dias: +(media.toFixed(2)) }; // já arredondado para 2
       })
       .filter(d => d.dias > 0);
 
+    // --- LÓGICA GRÁFICOS 90 DIAS ---
     const lineChartData = new Map<string, { manual: number, automatico: number }>();
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -423,6 +353,7 @@ export default function StatusOverview() {
     const firstActiveDayIndex = sortedLineChartData.findIndex(d => d.manual > 0 || d.automatico > 0);
     const dadosUltimos90Dias = firstActiveDayIndex > -1 ? sortedLineChartData.slice(firstActiveDayIndex) : [];
 
+    // --- Lançados vs Enviados ---
     const lancadosVsEnviadosMap = new Map<string, { lancados: number, enviados: number }>();
     for (const [dateKey, counts] of lineChartData.entries()) {
       lancadosVsEnviadosMap.set(dateKey, { lancados: counts.manual + counts.automatico, enviados: 0 });
@@ -442,6 +373,7 @@ export default function StatusOverview() {
     const firstActiveDayIndexLvE = sortedLancadosVsEnviados.findIndex(d => d.lancados > 0 || d.enviados > 0);
     const dadosLancadosVsEnviados = firstActiveDayIndexLvE > -1 ? sortedLancadosVsEnviados.slice(firstActiveDayIndexLvE) : [];
 
+    // --- Ranking WPP ---
     const todayRanking = new Date();
     todayRanking.setHours(23, 59, 59, 999);
     const lastWeek = new Date();
@@ -503,15 +435,10 @@ export default function StatusOverview() {
     { title: "Data Atualização", dataIndex: "data", key: "data" },
   ];
 
-  // Lógica de Loading de Página
-  if (authStatus === 'loading' || !theme) {
-    return <LoadingSpinner text="Aguarde, verificando acesso..." />;
-  }
+  if (authStatus === 'loading') return <div style={{ backgroundColor: "#E9ECEF", minHeight: "100vh" }}><LoadingSpinner text="A verificar permissões..." /></div>;
+  if (authStatus === 'unauthorized') return <div style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}><AcessoNegado /></div>;
 
-  if (authStatus === 'unauthorized') {
-    return <div style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}><AcessoNegado /></div>;
-  }
-
+  // --- ESTILOS DINÂMICOS BASEADOS NO TEMA ---
   const kpiOrangeColor = theme === 'light' ? '#F58220' : '#FFA24A';
   const kpiWhiteStrong = theme === 'dark'  ? '#F9FBFF' : '#00314A';
 
@@ -532,17 +459,22 @@ export default function StatusOverview() {
     ...baseFilterStyle, background: '#3B82F6', color: 'white', border: '1px solid #3B82F6'
   };
 
+  // *** CORREÇÃO: Definindo estilos de tooltip dinâmicos ***
   const glassTooltipStyle: React.CSSProperties = {
     borderRadius: '12px',
     border: '1px solid',
     backdropFilter: 'blur(14px) saturate(140%)',
     WebkitBackdropFilter: 'blur(14px) saturate(140%)',
     boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+    // Aplicando a cor dinamicamente
     color: theme === 'dark' ? '#E2E8F0' : '#00314A', 
+    // Aplicando o fundo dinamicamente
     background: theme === 'dark' ? 'rgba(25,39,53,.50)' : 'rgba(255,255,255,.25)',
+    // Aplicando a borda dinamicamente
     borderColor: theme === 'dark' ? 'rgba(125,173,222,.28)' : 'rgba(255,255,255,.35)',
   };
 
+  // Estes também precisam ser dinâmicos para garantir
   const tooltipLabelStyle: React.CSSProperties = {
     color: theme === 'dark' ? '#E2E8F0' : '#00314A',
     fontWeight: 'bold',
@@ -602,19 +534,12 @@ export default function StatusOverview() {
                       </select>
                     </div>
                   </div>
-                  
-                  {/* --- Botão de Tema com Spinner --- */}
                   <button
-                    onClick={() => handleThemeChange(theme === 'light' ? 'dark' : 'light')}
+                    onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
                     className="theme-toggle-btn"
                     aria-label={theme === 'light' ? 'Mudar para tema escuro' : 'Mudar para tema claro'}
-                    disabled={isSavingTheme}
                   >
-                    {isSavingTheme ? (
-                       <Spin indicator={<LoadingOutlined style={{ fontSize: 20, color: 'currentColor' }} spin />} />
-                    ) : (
-                       theme === 'light' ? <Moon size={20} /> : <Sun size={20} />
-                    )}
+                    {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                   </button>
                 </div>
               </div>
@@ -651,11 +576,15 @@ export default function StatusOverview() {
                         return <Cell key={`cell-${index}`} fill={pieFill} />;
                       })}
                     </Pie>
+                    
+                    {/* *** CORREÇÃO APLICADA AQUI: Passando os estilos dinâmicos *** */}
                     <Tooltip 
                       contentStyle={glassTooltipStyle} 
                       labelStyle={tooltipLabelStyle} 
                       itemStyle={tooltipItemStyle} 
                     />
+                    
+                    {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                     <Legend verticalAlign="bottom" height={36} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -669,7 +598,10 @@ export default function StatusOverview() {
                       <XAxis dataKey="mes" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                       <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                       <Tooltip />
+                      {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                       <Legend verticalAlign="bottom" height={36} />
+
+                      {/* Segmento de baixo (Manual) — sem raio e sem stroke para não aparecer “costura” */}
                       <Bar
                         dataKey="manual"
                         name="Manual"
@@ -680,6 +612,8 @@ export default function StatusOverview() {
                         stroke="none"
                         isAnimationActive
                       />
+
+                      {/* Segmento de cima (Automático) — com raios só no topo; sem stroke para borda interiça */}
                       <Bar
                         dataKey="automatico"
                         name="Automático"
@@ -728,6 +662,7 @@ export default function StatusOverview() {
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
+                  {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                   <Legend verticalAlign="bottom" height={36} />
                   <Line
                     type="monotone"
@@ -759,6 +694,7 @@ export default function StatusOverview() {
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
+                  {/* ALTERAÇÃO 1: Removido 'formatter', será controlado via CSS global */}
                   <Legend verticalAlign="bottom" height={36} />
                   <Line
                     type="monotone"
@@ -961,21 +897,7 @@ export default function StatusOverview() {
         body.light .page-title { color: var(--gcs-blue); }
         body.light .page-title svg { color: var(--gcs-blue); }
         body.light .filters-container label { color: #333; }
-        
-        /* --- CORREÇÃO: Estilo de texto de loading (fallback) --- */
-        .loading-text,
-        body.light .loading-text,
-        body.light .ant-spin-text {
-          color: var(--gcs-blue) !important;
-          margin-top: 1rem;
-          font-weight: bold;
-          font-size: 1.1rem;
-        }
-        .ant-spin-dot-item,
-        body.light .ant-spin-dot-item {
-            background-color: var(--gcs-blue) !important;
-        }
-        /* --- FIM DA CORREÇÃO --- */
+        body.light .loading-text { color: var(--gcs-blue); }
 
         body.light .filters-container select {
           padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; color: #333;
@@ -994,6 +916,7 @@ export default function StatusOverview() {
 
         body.light .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; fill: #335360 !important; font-weight: 600; }
         
+        {/* ALTERAÇÃO 1: Regra CSS forte para a legenda no modo CLARO */}
         body.light .recharts-legend-item-text { 
           color: #335360 !important; 
           font-size: 12px !important;
@@ -1052,24 +975,13 @@ export default function StatusOverview() {
         body.dark .page-title { color: #F1F5F9; }
         body.dark .page-title svg { color: #F1F5F9; }
         body.dark .filters-container label { color: #E2E8F0; }
-        
-        /* --- CORREÇÃO: Estilo de texto de loading (dark) --- */
-        body.dark .loading-text,
-        body.dark .ant-spin-text {
-          color: #93C5FD !important;
-          margin-top: 1rem;
-          font-weight: bold;
-          font-size: 1.1rem;
-        }
-        body.dark .ant-spin-dot-item {
-            background-color: #BFDBFE !important; /* Azul claro */
-        }
-        /* --- FIM DA CORREÇÃO --- */
+        body.dark .loading-text { color: #93C5FD; }
 
+        {/* ALTERAÇÃO 2: Estilo do filtro 'select' para azul escuro */}
         body.dark .filters-container select {
           padding: 6px 10px; border-radius: 6px; 
-          border: 1px solid rgba(125, 173, 222, 0.3); /* Borda vidro */
-          background-color: rgba(25, 39, 53, 0.5); /* Fundo vidro */
+          border: 1px solid #004a6f; 
+          background-color: #00314A; 
           color: #E2E8F0;
         }
 
@@ -1086,6 +998,7 @@ export default function StatusOverview() {
 
         body.dark .recharts-text.recharts-cartesian-axis-tick-value { font-size: 12px; fill: #E2E8F0 !important; font-weight: 600; }
         
+        {/* ALTERAÇÃO 1: Regra CSS forte para a legenda no modo ESCURO */}
         body.dark .recharts-legend-item-text { 
           color: #E2E8F0 !important; 
           font-size: 12px !important;
@@ -1108,34 +1021,17 @@ export default function StatusOverview() {
         .filters-container div { display: flex; align-items: center; gap: 0.5rem; }
         .filters-container label { font-weight: 500; white-space: nowrap; }
 
-        /* --- Estilos do Botão de Tema (Consistente com 'perfil') --- */
         .theme-toggle-btn {
           background: none; border: 1px solid transparent; border-radius: 8px; padding: 6px; cursor: pointer;
           display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; align-self: flex-end;
-          min-width: 34px;
-          min-height: 34px;
         }
-        body.light .theme-toggle-btn { 
-          color: var(--gcs-blue); 
-          border-color: #ccc; 
-          background: #fff;
-        }
-        body.dark .theme-toggle-btn { 
-          color: #93C5FD; 
-          border-color: rgba(125, 173, 222, 0.3); 
-          background-color: rgba(147, 197, 253, 0.1); 
-        }
+        body.light .theme-toggle-btn { color: var(--gcs-blue); border-color: #ccc; }
         
-        body.light .theme-toggle-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); }
-        body.dark .theme-toggle-btn:hover:not(:disabled) { background: rgba(147, 197, 253, 0.2); }
-        .theme-toggle-btn:disabled {
-            opacity: 0.6;
-            cursor: wait;
-        }
-        .theme-toggle-btn .ant-spin {
-           color: currentColor;
-        }
-        /* --- Fim dos Estilos do Botão de Tema --- */
+        body.dark .theme-toggle-btn { color: #93C5FD; border-color: #93C5FD; background-color: rgba(147, 197, 253, 0.1); }
+        
+        body.light .theme-toggle-btn:hover { background: rgba(0, 0, 0, 0.05); }
+        
+        body.dark .theme-toggle-btn:hover { background: rgba(147, 197, 253, 0.2); }
 
         .chart-placeholder { height: 300px; display: flex; align-items: center; justify-content: center; text-align: center; }
         body.light .chart-placeholder { color: #888; }

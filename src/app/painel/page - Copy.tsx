@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
@@ -10,7 +9,7 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const [loadingLogout, setLoadingLogout] = useState(false);
 
-  const orangeColor = "#f97316"; // usado só no spinner
+  const orangeColor = "#f97316";
   const blueGradient = "linear-gradient(90deg, #1e3a8a, #60a5fa)";
 
   const gradientStyle = {
@@ -76,10 +75,23 @@ export default function HomePage() {
       <div style={{ marginTop: "2rem" }}>
         <Button
           className="btn-laranja"
-          onClick={() => {
+          // ===== INÍCIO DA CORREÇÃO =====
+          onClick={async () => {
             setLoadingLogout(true);
-            signOut({ callbackUrl: "/" });
+            
+            // Pega a URL base da aplicação para o redirecionamento pós-logout
+            const postLogoutUrl = process.env.NEXT_PUBLIC_NEXTAUTH_URL || window.location.origin;
+            
+            // Monta a URL de logout completa da Microsoft
+            const microsoftLogoutUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(postLogoutUrl)}`;
+            
+            // Faz o logout da sessão local sem recarregar a página (para evitar o loop)
+            await signOut({ redirect: false });
+            
+            // Redireciona o navegador para a página de logout da Microsoft
+            window.location.href = microsoftLogoutUrl;
           }}
+          // ===== FIM DA CORREÇÃO =====
         >
           Sair
         </Button>
