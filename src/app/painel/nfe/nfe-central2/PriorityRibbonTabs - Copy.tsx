@@ -347,19 +347,18 @@ export default function PriorityRibbonTabs({
         }
         .flagsBg{ position:absolute; inset:0; width:100%; height:100%; z-index:0; }
 
-        /* --- CORREÇÃO DE ALINHAMENTO E ESPAÇAMENTO --- */
+        /* Cada segmento ocupa toda a altura e centraliza header+chips */
         .seg{
           position:relative; z-index:1;
           height:120px;
           display:grid;
           grid-template-rows: auto auto;
-          align-content: start;      /* <<< CORRIGIDO: De volta para 'start' */
+          align-content: start;      /* <<< CORREÇÃO: Alinha todos os headers no topo */
           justify-items: center;
-          row-gap: 16px;             /* <<< AUMENTADO: Para 16px */
-          padding-top: 16px;         /* <<< ADICIONADO: Padding de 16px */
+          row-gap: 8px;
+          padding-top: 6px;
           min-width: 0;
         }
-        /* --- FIM DA CORREÇÃO --- */
 
         /* “Notches”: reserva nas bordas para o bico da seta vizinha */
         :root{ --notch: 84px; }

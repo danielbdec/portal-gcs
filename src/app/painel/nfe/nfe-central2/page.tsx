@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-// --- MUDANÇA 1: Importar Spin e LoadingOutlined ---
 import { Pagination, Tooltip, Spin } from "antd"; 
 import * as XLSX from 'xlsx';
 import {
@@ -16,7 +15,7 @@ import {
     CheckSquare, Square,
     Sun, Moon 
 } from "lucide-react";
-import { LoadingOutlined } from "@ant-design/icons"; // Import para o spinner do botão
+import { LoadingOutlined } from "@ant-design/icons"; 
 import ModalDetalhes from "./ModalDetalhes";
 import NotificationModal from "./NotificationModal";
 import React from "react";
@@ -551,65 +550,52 @@ export default function ConsultaNotas() {
   const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
   const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
 
-  // --- MUDANÇA 2: ESTADO DO TEMA GLOBAL ---
-  // Inicia como 'null' para sabermos que ainda não foi carregado
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
-  // Ref para garantir que a busca do tema ocorra apenas uma vez
   const hasFetchedTheme = useRef(false);
-  // Estado para o spinner do botão de tema
   const [isSavingTheme, setIsSavingTheme] = useState(false);
-  // --- FIM DA MUDANÇA 2 ---
 
-  // --- MUDANÇA 3: BUSCAR TEMA GLOBAL NA API ---
   useEffect(() => {
     const fetchThemeData = async () => {
-      // Evita chamadas se a sessão não estiver pronta
       if (!session?.user?.email) return;
 
       try {
         const res = await fetch("/api/portal/consulta-tema", { method: "POST" });
         if (!res.ok) throw new Error('Falha ao buscar tema');
         
-        const userData = await res.json(); // Espera { tema: "E" }
+        const userData = await res.json(); 
         
         if (userData && userData.tema) {
           const apiTheme = userData.tema === 'E' ? 'dark' : 'light';
           setTheme(apiTheme);
         } else {
-          setTheme('light'); // Fallback
+          setTheme('light');
         }
       } catch (err) {
         console.error("Erro ao buscar tema, usando 'light' como padrão:", err);
-        setTheme('light'); // Fallback
+        setTheme('light');
       }
     };
 
-    // Lógica de execução única (baseada na do 'page_perfil')
     if (status === "authenticated" && session && !hasFetchedTheme.current) {
       hasFetchedTheme.current = true;
       fetchThemeData();
     }
   }, [status, session]); 
-  // --- FIM DA MUDANÇA 3 ---
 
-  // --- MUDANÇA 4: APLICAR TEMA QUANDO O ESTADO MUDAR ---
-  // Este useEffect reage à mudança de 'theme' (seja da API ou do clique)
   useEffect(() => {
     if (theme) {
       localStorage.setItem('theme', theme);
       document.body.classList.remove('light', 'dark');
       document.body.classList.add(theme);
     }
-  }, [theme]); // Depende APENAS de 'theme'
-  // --- FIM DA MUDANÇA 4 ---
+  }, [theme]); 
 
-  // --- MUDANÇA 5: FUNÇÃO PARA SALVAR O TEMA GLOBAL ---
   const handleThemeChange = async (newTheme: 'light' | 'dark') => {
     if (!session?.user?.email || isSavingTheme || newTheme === theme) return;
 
     const oldTheme = theme;
     setIsSavingTheme(true);
-    setTheme(newTheme); // Otimista
+    setTheme(newTheme); 
 
     try {
       const response = await fetch('/api/portal/altera-tema', {
@@ -621,15 +607,13 @@ export default function ConsultaNotas() {
       if (!response.ok || result.status !== 'ok') {
         throw new Error(result.message || 'Falha ao salvar o tema.');
       }
-      // Sucesso, não precisa de notificação, o botão é o feedback
     } catch (error: any) {
       console.error("Erro ao salvar tema:", error);
-      setTheme(oldTheme); // Reverte
+      setTheme(oldTheme); 
     } finally {
       setIsSavingTheme(false);
     }
   };
-  // --- FIM DA MUDANÇA 5 ---
 
 
   useEffect(() => {
@@ -659,16 +643,16 @@ export default function ConsultaNotas() {
       return;
     }
     if (status === 'authenticated') {
-      const user: any = session.user; // Cast para 'any' para acessar 'funcoes'
+      const user: any = session.user; 
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralDeNotas');
 
       if (hasAccess) {
         setAuthStatus('authorized');
       } else {
-        router.push('/login'); // Redireciona se não tiver acesso
+        router.push('/login'); 
       }
     } else {
-        router.push('/login'); // Redireciona se não estiver autenticado
+        router.push('/login'); 
     }
   }, [status, session, router]);
 
@@ -693,7 +677,7 @@ export default function ConsultaNotas() {
     return statusDisponiveis
       .filter(key => key !== "Todos" && (statusCounts[key] || 0) > 0)
       .map(name => ({ name, value: statusCounts[name] })); 
-  }, [statusCounts, statusDisponiveis]); // Adicionado statusDisponiveis
+  }, [statusCounts, statusDisponiveis]); 
 
 
   const areFiltersApplied = useMemo(() => {
@@ -1067,12 +1051,33 @@ export default function ConsultaNotas() {
     color: theme === 'dark' ? '#E2E8F0' : '#00314A',
     };
 
-  // --- MUDANÇA 6: LÓGICA DE LOADING PRINCIPAL ---
-  // A página agora espera a autenticação E o carregamento do tema
+  // --- CORREÇÃO: LÓGICA DE LOADING PRINCIPAL ---
   if (authStatus === 'loading' || !theme) {
     return (
-        <div className="main-container" style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}>
-            <LoadingSpinner text="A verificar permissões..." />
+        <div className="main-container" style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            padding: "2rem", 
+            minHeight: "100vh",
+            // Define um fundo padrão ANTES do 'theme' ser carregado
+            backgroundColor: "#E9ECEF" 
+        }}>
+            {/* O spinner da Antd é usado para consistência com o Perfil */}
+            <Spin 
+              indicator={<LoadingOutlined style={{ fontSize: 48, color: 'var(--gcs-blue)' }} spin />} 
+              tip={
+                <span style={{ 
+                  color: 'var(--gcs-blue)', 
+                  marginTop: '1rem', 
+                  fontWeight: 'bold',
+                  fontSize: '1.1rem' 
+                }}>
+                  {/* --- CORREÇÃO DO TEXTO --- */}
+                  Aguarde, verificando acesso...
+                </span>
+              }
+            />
         </div>
     );
   }
@@ -1757,7 +1762,7 @@ export default function ConsultaNotas() {
         </div>
 
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
-            <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} />
                 <span>Central de Notas</span>
             </h2>
@@ -1790,7 +1795,6 @@ export default function ConsultaNotas() {
                             <FileDown size={20} />
                         </button>
                         
-                        {/* --- MUDANÇA 7: BOTÃO DE TEMA ATUALIZADO --- */}
                         <button
                           onClick={() => handleThemeChange(theme === 'light' ? 'dark' : 'light')}
                           className="theme-toggle-btn"
@@ -1803,7 +1807,6 @@ export default function ConsultaNotas() {
                             theme === 'light' ? <Moon size={20} /> : <Sun size={20} />
                           )}
                         </button>
-                        {/* --- FIM DA MUDANÇA 7 --- */}
                         
                     </div>
                     <div style={{ height: 'auto', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
@@ -1859,7 +1862,6 @@ export default function ConsultaNotas() {
             if (key === "outras") return;
             handleFiltroStatusChange(key);
           }}
-          // Passa o tema para o componente filho
           forceTheme={theme || 'light'} 
         />
       </div>

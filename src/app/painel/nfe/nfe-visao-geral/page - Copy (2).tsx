@@ -44,16 +44,6 @@ interface EnvioWpp {
   telefone_fmt_canon: string;
 }
 
-interface DadosDiarios {
-  date: string; // "DD/MM"
-  fullDate: string; // "YYYY-MM-DD"
-  manual: number;
-  automatico: number;
-  lancados: number;
-  enviados: number;
-  recebidos: number;
-}
-
 type RankingFilterType = 'geral' | 'mes' | 'semana';
 type ThemeType = 'light' | 'dark';
 
@@ -107,8 +97,9 @@ const parseDate = (dateString: string | null | undefined): { day: number, month:
 
 // --- COMPONENTES AUXILIARES ---
 
-const LoadingSpinner = ({ text, fullPage = false }: { text: string, fullPage?: boolean }) => {
-  const containerStyle: React.CSSProperties = fullPage ? {
+// --- CORREÇÃO: Voltando ao <Spin> + <div className="loading-text"> ---
+const LoadingSpinner = ({ text }: { text: string }) => (
+  <div style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -117,31 +108,20 @@ const LoadingSpinner = ({ text, fullPage = false }: { text: string, fullPage?: b
       textAlign: 'center',
       height: '100vh',
       backgroundColor: "#E9ECEF" // Fundo claro padrão
-  } : {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '4rem 2rem', 
-      textAlign: 'center',
-      minHeight: '400px', 
-      backgroundColor: "transparent" 
-  };
-  
-  return (
-    <div style={containerStyle}>
-      <Spin 
-        indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} 
-      />
-      <div 
-        style={{ marginTop: '1rem', fontWeight: 'bold', fontSize: '1.1rem' }} 
-        className="loading-text" 
-      >
-        {text}
-      </div>
+    }}>
+    <Spin 
+      indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} 
+    />
+    {/* O texto é um div separado, como no seu original */}
+    <div 
+      style={{ marginTop: '1rem', fontWeight: 'bold', fontSize: '1.1rem' }} 
+      className="loading-text" // A classe é estilizada pelo CSS global
+    >
+      {text}
     </div>
-  );
-};
+  </div>
+);
+// --- FIM DA CORREÇÃO ---
 
 
 const AcessoNegado = () => {
@@ -244,7 +224,8 @@ export default function StatusOverview() {
   const [chartData, setChartData] = useState<{
     dadosPorStatusPizza: any[],
     dadosPorMes: any[],
-    dados90Dias: DadosDiarios[],
+    dadosUltimos90Dias: any[],
+    dadosLancadosVsEnviados: any[],
     dadosTempoMedio: any[],
     topFornecedoresProblema: any[],
     pendentesPorComprador: any[],
@@ -252,7 +233,8 @@ export default function StatusOverview() {
   }>({
     dadosPorStatusPizza: [],
     dadosPorMes: [],
-    dados90Dias: [],
+    dadosUltimos90Dias: [],
+    dadosLancadosVsEnviados: [],
     dadosTempoMedio: [],
     topFornecedoresProblema: [],
     pendentesPorComprador: [],
@@ -332,12 +314,6 @@ export default function StatusOverview() {
       return yearMatch && monthMatch;
     });
 
-    const lancadasSet = new Set(
-      notas
-        .filter(n => norm(n.status_nf) === 'manual' || norm(n.status_nf) === 'importado')
-        .map(n => n.chave)
-    );
-
     const stats = { lançadasPizza: 0, pendentesPizza: 0, enviadasWhatsApp: 0, pendentesCompras: 0, pendentesFiscal: 0 };
     const processedNotas: any[] = [];
     const fornecedoresComProblema = new Map<string, number>();
@@ -347,13 +323,13 @@ export default function StatusOverview() {
     for (const nota of notasFiltradas) {
       const parsedDate = parseDate(nota.dt_atualizacao);
       const nfStatusNorm = norm(nota.status_nf);
-      const isLancada = lancadasSet.has(nota.chave); // Usa o Set
+      const isLancada = nfStatusNorm === 'manual' || nfStatusNorm === 'importado';
 
       if (isLancada) { stats.lançadasPizza++; } else { stats.pendentesPizza++; }
 
       let statusTabelaKey: string = "pendentes";
       if (nfStatusNorm.includes('erro')) { statusTabelaKey = "com erro"; }
-      else if (isLancada) { statusTabelaKey = "lançadas"; }
+      else if (norm(nota.status_lancamento) === 'concluido' || nfStatusNorm === 'importado') { statusTabelaKey = "lançadas"; }
 
       if (nota.status_envio_unidade?.trim().toUpperCase() === 'SIM') stats.enviadasWhatsApp++;
       if (norm(nota.status_compras) !== 'concluido' && !isCTE(nota)) stats.pendentesCompras++;
@@ -420,8 +396,7 @@ export default function StatusOverview() {
       })
       .filter(d => d.dias > 0);
 
-    // --- Lógica unificada para dados de 90 dias ---
-    const dailyDataMap = new Map<string, DadosDiarios>();
+    const lineChartData = new Map<string, { manual: number, automatico: number }>();
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
@@ -429,73 +404,44 @@ export default function StatusOverview() {
     ninetyDaysAgo.setDate(today.getDate() - 90);
     ninetyDaysAgo.setHours(0, 0, 0, 0);
 
-    // Função para pegar ou criar um dia no mapa
-    const getDayEntry = (dateKey: string): DadosDiarios => {
-      if (!dailyDataMap.has(dateKey)) {
-        dailyDataMap.set(dateKey, {
-          date: `${dateKey.split('-')[2]}/${dateKey.split('-')[1]}`, // DD/MM
-          fullDate: dateKey, // YYYY-MM-DD
-          manual: 0,
-          automatico: 0,
-          lancados: 0,
-          enviados: 0,
-          recebidos: 0
-        });
-      }
-      return dailyDataMap.get(dateKey)!;
-    };
-
-    // Loop 1: Processa Notas (Lançamentos e Recebidos)
     for (const nota of notas) {
-      // Processa Lançamentos
-      const parsedLcto = parseDate(nota.dt_lcto_protheus);
-      if (parsedLcto && parsedLcto.dateObj >= ninetyDaysAgo && parsedLcto.dateObj <= today) {
-        const dateKey = parsedLcto.dateObj.toISOString().split('T')[0];
-        const dayData = getDayEntry(dateKey);
+      const parsedDate = parseDate(nota.dt_lcto_protheus);
+      if (parsedDate && parsedDate.dateObj >= ninetyDaysAgo && parsedDate.dateObj <= today) {
+        const dateKey = parsedDate.dateObj.toISOString().split('T')[0];
+        if (!lineChartData.has(dateKey)) lineChartData.set(dateKey, { manual: 0, automatico: 0 });
+        const dayData = lineChartData.get(dateKey)!;
         const statusNf = norm(nota.status_nf);
-        
-        if (statusNf === 'manual') {
-          dayData.manual++;
-        } else if (statusNf === 'importado') {
-          dayData.automatico++;
-        }
-      }
-      
-      // Processa Recebidos
-      const parsedRec = parseDate(nota.dt_recebimento);
-      if (parsedRec && parsedRec.dateObj >= ninetyDaysAgo && parsedRec.dateObj <= today) {
-        const dateKey = parsedRec.dateObj.toISOString().split('T')[0];
-        const dayData = getDayEntry(dateKey);
-        dayData.recebidos++;
+        if (statusNf === 'manual') dayData.manual++;
+        else if (statusNf === 'importado') dayData.automatico++;
       }
     }
 
-    // Loop 2: Processa Envios Wpp
+    const sortedLineChartData = Array.from(lineChartData.entries())
+      .map(([date, counts]) => ({ date: `${date.split('-')[2]}/${date.split('-')[1]}`, fullDate: date, ...counts }))
+      .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+
+    const firstActiveDayIndex = sortedLineChartData.findIndex(d => d.manual > 0 || d.automatico > 0);
+    const dadosUltimos90Dias = firstActiveDayIndex > -1 ? sortedLineChartData.slice(firstActiveDayIndex) : [];
+
+    const lancadosVsEnviadosMap = new Map<string, { lancados: number, enviados: number }>();
+    for (const [dateKey, counts] of lineChartData.entries()) {
+      lancadosVsEnviadosMap.set(dateKey, { lancados: counts.manual + counts.automatico, enviados: 0 });
+    }
     for (const envio of rankingEnvio) {
       const parsedDate = parseDate(envio.data_insercao);
       if (parsedDate && parsedDate.dateObj >= ninetyDaysAgo && parsedDate.dateObj <= today) {
         const dateKey = parsedDate.dateObj.toISOString().split('T')[0];
-        const dayData = getDayEntry(dateKey);
-        dayData.enviados++;
+        const entry = lancadosVsEnviadosMap.get(dateKey) || { lancados: 0, enviados: 0 };
+        entry.enviados++;
+        lancadosVsEnviadosMap.set(dateKey, entry);
       }
     }
+    const sortedLancadosVsEnviados = Array.from(lancadosVsEnviadosMap.entries())
+      .map(([date, counts]) => ({ date: `${date.split('-')[2]}/${date.split('-')[1]}`, fullDate: date, ...counts }))
+      .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+    const firstActiveDayIndexLvE = sortedLancadosVsEnviados.findIndex(d => d.lancados > 0 || d.enviados > 0);
+    const dadosLancadosVsEnviados = firstActiveDayIndexLvE > -1 ? sortedLancadosVsEnviados.slice(firstActiveDayIndexLvE) : [];
 
-    // Loop 3: Calcula totais e formata
-    const sortedDailyData: DadosDiarios[] = [];
-    for (const entry of dailyDataMap.values()) {
-      entry.lancados = entry.manual + entry.automatico;
-      sortedDailyData.push(entry);
-    }
-    
-    // Ordena por data
-    sortedDailyData.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-
-    // Filtra para remover dias vazios no início
-    const firstActiveDayIndex = sortedDailyData.findIndex(d => d.manual > 0 || d.automatico > 0 || d.enviados > 0 || d.recebidos > 0);
-    const dados90Dias = firstActiveDayIndex > -1 ? sortedDailyData.slice(firstActiveDayIndex) : [];
-    // --- FIM DA LÓGICA UNIFICADA ---
-
-    // --- Ranking WPP (Lógica de Barras Empilhadas) ---
     const todayRanking = new Date();
     todayRanking.setHours(23, 59, 59, 999);
     const lastWeek = new Date();
@@ -514,28 +460,14 @@ export default function StatusOverview() {
       return false;
     });
 
-    const rankingCounts = new Map<string, { totalEnvios: number, totalLancadas: number }>();
+    const rankingCounts = new Map<string, number>();
     for (const envio of filteredRankingEnvio) {
       const user = envio.nome_usuario || "Desconhecido";
-      const chave = envio.chave_acesso;
-      
-      let counts = rankingCounts.get(user) || { totalEnvios: 0, totalLancadas: 0 };
-      counts.totalEnvios++;
-      
-      if (lancadasSet.has(chave)) {
-        counts.totalLancadas++;
-      }
-      rankingCounts.set(user, counts);
+      rankingCounts.set(user, (rankingCounts.get(user) || 0) + 1);
     }
-    
     const rankingEnvioData = Array.from(rankingCounts.entries())
-      .map(([name, counts]) => ({ 
-        name,
-        lancadas: counts.totalLancadas,
-        naoLancadas: counts.totalEnvios - counts.totalLancadas, 
-        total: counts.totalEnvios
-      }))
-      .sort((a, b) => b.total - a.total) 
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     return {
@@ -544,19 +476,19 @@ export default function StatusOverview() {
       dadosPorStatusPizza,
       ultimasNotas,
       dadosPorMes,
-      dados90Dias, 
+      dadosUltimos90Dias,
       dadosTempoMedio,
       topFornecedoresProblema,
       pendentesPorComprador,
       rankingEnvioData,
-      dadosLancadosVsEnviados: [] 
+      dadosLancadosVsEnviados
     };
   }, [notas, selectedYear, selectedMonth, rankingEnvio, rankingFilter]);
 
   useEffect(() => {
     if (!loading) {
       const timer = setTimeout(() => {
-        setChartData(computedStats as any); // Cast para 'any' para aceitar a nova estrutura
+        setChartData(computedStats);
         setLoadingFilter(null);
       }, 100);
       return () => clearTimeout(timer);
@@ -573,14 +505,12 @@ export default function StatusOverview() {
 
   // Lógica de Loading de Página
   if (authStatus === 'loading' || !theme) {
-    return <LoadingSpinner text="Aguarde, verificando acesso..." fullPage={true} />;
+    return <LoadingSpinner text="Aguarde, verificando acesso..." />;
   }
 
   if (authStatus === 'unauthorized') {
     return <div style={{ padding: "2rem", backgroundColor: "#E9ECEF", minHeight: "100vh" }}><AcessoNegado /></div>;
   }
-
-  const gridStrokeColor = theme === 'dark' ? 'rgba(125, 173, 222, 0.2)' : 'rgba(0, 0, 0, 0.1)';
 
   const kpiOrangeColor = theme === 'light' ? '#F58220' : '#FFA24A';
   const kpiWhiteStrong = theme === 'dark'  ? '#F9FBFF' : '#00314A';
@@ -631,10 +561,6 @@ export default function StatusOverview() {
           <linearGradient id="gradAzul" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#004a6f" />
             <stop offset="100%" stopColor="#00314A" />
-          </linearGradient>
-          <linearGradient id="gradAzulClaro" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3B82F6" />
-            <stop offset="100%" stopColor="#2563EB" />
           </linearGradient>
           <linearGradient id="gradPrata" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F0F0F0" />
@@ -739,7 +665,7 @@ export default function StatusOverview() {
                 {selectedYear === "Todos" ? <div className="chart-placeholder">Selecione um ano para ver o detalhamento mensal.</div> : (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={chartData.dadosPorMes} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid stroke={gridStrokeColor} strokeDasharray="3 8" />
+                      <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                       <XAxis dataKey="mes" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                       <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                       <Tooltip />
@@ -757,7 +683,7 @@ export default function StatusOverview() {
                       <Bar
                         dataKey="automatico"
                         name="Automático"
-                        fill="url(#gradAzul)"
+                        fill={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
                         radius={[10, 10, 0, 0]}
                         barSize={28}
                         stackId="a"
@@ -794,11 +720,11 @@ export default function StatusOverview() {
               </Card>
             </div>
 
-            {/* --- Gráfico de Linha 90 dias (Lançamentos) --- */}
+            {/* Gráfico de Linha 90 dias */}
             <Card title="Lançamentos no Protheus por Dia (Últimos 90 dias)" className="kpi-card chart-full-width">
               <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={chartData.dados90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid stroke={gridStrokeColor} strokeDasharray="3 8" />
+                <LineChart data={chartData.dadosUltimos90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
@@ -816,7 +742,7 @@ export default function StatusOverview() {
                     type="monotone"
                     dataKey="automatico"
                     name="Automático"
-                    stroke="url(#gradAzul)"
+                    stroke={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
                     strokeWidth={3}
                     dot={{ r: 3, strokeWidth: 0, fill: theme === 'dark' ? '#E2E8F0' : '#00314A' }}
                     activeDot={{ r: 5 }}
@@ -825,29 +751,20 @@ export default function StatusOverview() {
               </ResponsiveContainer>
             </Card>
 
-            {/* --- Gráfico Atividade Diária (Lançados x Enviados x Recebidos) --- */}
-            <Card title="Atividade Diária (Últimos 90 dias)" className="kpi-card chart-full-width">
+            {/* Gráfico Lançados vs Enviados */}
+            <Card title="Lançados vs Enviados (Últimos 90 dias)" className="kpi-card chart-full-width">
               <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={chartData.dados90Dias} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid stroke={gridStrokeColor} strokeDasharray="3 8" />
+                <LineChart data={chartData.dadosLancadosVsEnviados} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                   <XAxis dataKey="date" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                   <YAxis tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                   <Tooltip />
                   <Legend verticalAlign="bottom" height={36} />
                   <Line
                     type="monotone"
-                    dataKey="recebidos"
-                    name="Notas Recebidas"
-                    stroke="url(#gradAzulClaro)" /* Nova cor */
-                    strokeWidth={3}
-                    dot={{ r: 3, strokeWidth: 0, fill: theme === 'dark' ? '#E2E8F0' : '#00314A' }}
-                    activeDot={{ r: 5 }}
-                  />
-                  <Line
-                    type="monotone"
                     dataKey="lancados"
                     name="Total Lançado"
-                    stroke={theme === 'dark' ? "url(#gradPrata)" : "rgba(100, 100, 100, 0.8)"} // Prata/Cinza
+                    stroke={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
                     strokeWidth={3}
                     dot={{ r: 3, strokeWidth: 0, fill: theme === 'dark' ? '#E2E8F0' : '#00314A' }}
                     activeDot={{ r: 5 }}
@@ -855,7 +772,7 @@ export default function StatusOverview() {
                   <Line
                     type="monotone"
                     dataKey="enviados"
-                    name="Total Enviado Wpp"
+                    name="Total Enviado"
                     stroke="url(#gradVerde)"
                     strokeWidth={3}
                     dot={{ r: 3, strokeWidth: 0, fill: theme === 'dark' ? '#E2E8F0' : '#00314A' }}
@@ -871,7 +788,7 @@ export default function StatusOverview() {
               <Card title={`Tempo Médio de Lançamento (Ano: ${selectedYear})`} className="kpi-card">
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={chartData.dadosTempoMedio} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid stroke={gridStrokeColor} strokeDasharray="3 8" />
+                    <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                     <XAxis dataKey="mes" tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600, fontSize: 12 }} />
                     <YAxis
                       label={{ value: 'Dias', angle: -90, position: 'insideLeft' }}
@@ -882,7 +799,7 @@ export default function StatusOverview() {
                     <Bar
                       dataKey="dias"
                       name="Média de Dias"
-                      fill="url(#gradAzul)"
+                      fill={theme === 'dark' ? 'url(#gradPrata)' : 'url(#gradAzul)'}
                       radius={[10, 10, 8, 8]}
                       barSize={28}
                     >
@@ -897,8 +814,9 @@ export default function StatusOverview() {
                 </ResponsiveContainer>
               </Card>
 
+              {/* Ranking WPP */}
               <Card
-                title="Ranking Envio (Quantidade)"
+                title="Ranking de Envio (Qtd de Notas)"
                 className="kpi-card"
                 extra={(
                   <div>
@@ -931,39 +849,13 @@ export default function StatusOverview() {
                 ) : (
                   <ResponsiveContainer width="100%" height={350}>
                     <BarChart layout="vertical" data={chartData.rankingEnvioData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid stroke={gridStrokeColor} strokeDasharray="3 8" />
+                      <CartesianGrid stroke="rgba(255,255,255,.18)" strokeDasharray="3 8" />
                       <XAxis type="number" allowDecimals={false} tick={{ fill: theme === 'dark' ? '#CBD5E1' : '#335360', fontWeight: 600, fontSize: 12 }} />
                       <YAxis type="category" dataKey="name" width={150} interval={0} scale="band" tickFormatter={(tick) => tick.length > 20 ? `${tick.substring(0, 20)}...` : tick} tick={{ fill: theme === 'dark' ? '#E2E8F0' : '#00314A', fontWeight: 600 }} />
-                      <Tooltip 
-                        contentStyle={glassTooltipStyle}
-                      />
-                      <Legend verticalAlign="bottom" height={36} />
-                      {/* --- CORREÇÃO: Cores Invertidas --- */}
-                      <Bar
-                        dataKey="lancadas"
-                        name="Lançadas"
-                        stackId="a"
-                        fill="url(#gradVerde)" // Lançadas = Verde
-                        radius={[10, 0, 0, 10]} 
-                        barSize={22}
-                      />
-                      <Bar
-                        dataKey="naoLancadas"
-                        name="Não Lançadas"
-                        stackId="a"
-                        fill="url(#gradLaranja)" // Não Lançadas = Laranja
-                        radius={[0, 10, 10, 0]} 
-                        barSize={22}
-                      >
-                        {/* --- CORREÇÃO: Cor do Label no Tema Escuro --- */}
-                        <LabelList 
-                          dataKey="total" 
-                          position="right" 
-                          fill={theme === 'dark' ? '#F1F5F9' : '#333'} 
-                          fontWeight="bold" 
-                        />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Notas Enviadas" fill="url(#gradVerde)" radius={[10, 10, 10, 10]} barSize={22}>
+                        <LabelList dataKey="count" position="right" />
                       </Bar>
-                      {/* --- FIM DA CORREÇÃO --- */}
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -1070,6 +962,7 @@ export default function StatusOverview() {
         body.light .page-title svg { color: var(--gcs-blue); }
         body.light .filters-container label { color: #333; }
         
+        /* --- CORREÇÃO: Estilo de texto de loading (fallback) --- */
         .loading-text,
         body.light .loading-text,
         body.light .ant-spin-text {
@@ -1082,6 +975,7 @@ export default function StatusOverview() {
         body.light .ant-spin-dot-item {
             background-color: var(--gcs-blue) !important;
         }
+        /* --- FIM DA CORREÇÃO --- */
 
         body.light .filters-container select {
           padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; color: #333;
@@ -1159,6 +1053,7 @@ export default function StatusOverview() {
         body.dark .page-title svg { color: #F1F5F9; }
         body.dark .filters-container label { color: #E2E8F0; }
         
+        /* --- CORREÇÃO: Estilo de texto de loading (dark) --- */
         body.dark .loading-text,
         body.dark .ant-spin-text {
           color: #93C5FD !important;
@@ -1169,6 +1064,7 @@ export default function StatusOverview() {
         body.dark .ant-spin-dot-item {
             background-color: #BFDBFE !important; /* Azul claro */
         }
+        /* --- FIM DA CORREÇÃO --- */
 
         body.dark .filters-container select {
           padding: 6px 10px; border-radius: 6px; 
@@ -1230,17 +1126,8 @@ export default function StatusOverview() {
           background-color: rgba(147, 197, 253, 0.1); 
         }
         
-        /* --- CORREÇÃO: Hover do Botão de Tema --- */
-        body.light .theme-toggle-btn:hover:not(:disabled) { 
-          background: rgba(0, 0, 0, 0.05); 
-          border-color: var(--gcs-blue);
-        }
-        body.dark .theme-toggle-btn:hover:not(:disabled) { 
-          background: rgba(147, 197, 253, 0.3); 
-          border-color: rgba(125, 173, 222, 0.7);
-        }
-        /* --- FIM DA CORREÇÃO --- */
-
+        body.light .theme-toggle-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); }
+        body.dark .theme-toggle-btn:hover:not(:disabled) { background: rgba(147, 197, 253, 0.2); }
         .theme-toggle-btn:disabled {
             opacity: 0.6;
             cursor: wait;
