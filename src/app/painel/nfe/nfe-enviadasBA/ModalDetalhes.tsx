@@ -307,7 +307,7 @@ const ConfirmationModal = ({
                 <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
                 <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
                     {showCancelButton && (
-                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1ff1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
                     )}
                     <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
                 </div>
@@ -440,29 +440,6 @@ const CompradorSearch = ({ chave, email, onSelect, selectedComprador, disabled }
                 <div id="comprador-display" style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '5px', background: '#e9ecef', color: selectedComprador ? '#000' : '#6c757d' }}>
                     {selectedComprador ? `${selectedComprador.nome} (${selectedComprador.cod})` : 'Nenhum comprador selecionado'}
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setIsSearchModalOpen(true)}
-                    disabled={disabled}
-                    style={{
-                        padding: '10px 15px',
-                        border: 'none',
-                        background: disabled ? '#6c757d' : '#007bff',
-                        color: 'white',
-                        borderRadius: '5px',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'background-color 0.2s',
-                        opacity: disabled ? 0.65 : 1
-                    }}
-                    onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = '#0056b3'; }}
-                    onMouseLeave={(e) => { if (!disabled) e.currentTarget.style.background = '#007bff'; }}
-                    title="Pesquisar comprador"
-                >
-                    <FaSearch /> Pesquisar
-                </button>
             </div>
             <SearchModal
                 isOpen={isSearchModalOpen}
@@ -1330,61 +1307,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                           <p style={{ margin: 0, lineHeight: 1.6 }}>
                               {assistantMessage}
                           </p>
-                          <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                              <button
-                                  onClick={() => setIsManualPedidoModalOpen(true)}
-                                  disabled={isButtonDisabled || isSubmitting || areAssistantButtonsDisabled}
-                                  style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      padding: '10px 20px',
-                                      borderRadius: '5px',
-                                      border: 'none',
-                                      background: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? '#6c757d' : '#17a2b8',
-                                      color: 'white',
-                                      cursor: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 'not-allowed' : 'pointer',
-                                      fontWeight: 'bold',
-                                      transition: 'background-color 0.2s',
-                                      opacity: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 0.6 : 1
-                                  }}
-                              >
-                                  <FaPencilAlt size={14} />
-                                  Pedido Manual
-                              </button>
-                              <button
-                                  onClick={handleReprocessar}
-                                  disabled={isButtonDisabled || isSubmitting || areAssistantButtonsDisabled}
-                                  style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      gap: '8px',
-                                      padding: '10px 20px',
-                                      borderRadius: '5px',
-                                      border: 'none',
-                                      background: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? '#6c757d' : '#f7941d',
-                                      color: 'white',
-                                      cursor: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 'not-allowed' : 'pointer',
-                                      fontWeight: 'bold',
-                                      transition: 'background-color 0.2s',
-                                      opacity: (isButtonDisabled || isSubmitting || areAssistantButtonsDisabled) ? 0.6 : 1,
-                                      minWidth: '230px'
-                                  }}
-                              >
-                                  {isReprocessing ? (
-                                    <>
-                                        <FaSpinner className="animate-spin" size={14} />
-                                        <span>Aguarde...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                        <FaSyncAlt size={14} />
-                                        <span>Forçar Reprocessamento</span>
-                                    </>
-                                  )}
-                              </button>
-                          </div>
                       </div>
 
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><FaListAlt /> Itens da Nota Fiscal</h3>
@@ -1613,25 +1535,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                                         }}>
                                             {isTesPendente && !hasLoadedTes ? ( // Adicionado !hasLoadedTes para mostrar pendente antes do spinner
                                                 <div>
-                                                    <button
-                                                        disabled
-                                                        style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '8px',
-                                                            padding: '10px 20px',
-                                                            borderRadius: '5px',
-                                                            border: 'none',
-                                                            background: '#6c757d',
-                                                            color: 'white',
-                                                            cursor: 'not-allowed',
-                                                            fontWeight: 'bold',
-                                                            opacity: 0.65
-                                                        }}
-                                                    >
-                                                        <FaPencilAlt size={14} />
-                                                        Informar TES manual
-                                                    </button>
                                                     <p style={{ color: '#495057', fontSize: '0.9rem', marginTop: '0.75rem', fontWeight: '500' }}>
                                                         Aguarde o processamento do assistente fiscal para continuar.
                                                     </p>
@@ -1644,61 +1547,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                                                             : 'Um ou mais itens não possuem uma sugestão de TES ou apresentaram erro. Por favor, revise as informações para dar continuidade ao processo.'
                                                         }
                                                     </p>
-                                                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                                            <button
-                                                                onClick={() => setIsManualTesModalOpen(true)}
-                                                                disabled={isButtonDisabled || isSubmitting}
-                                                                style={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '8px',
-                                                                    padding: '10px 20px',
-                                                                    borderRadius: '5px',
-                                                                    border: 'none',
-                                                                    background: (isButtonDisabled || isSubmitting) ? '#6c757d' : '#17a2b8',
-                                                                    color: 'white',
-                                                                    cursor: (isButtonDisabled || isSubmitting) ? 'not-allowed' : 'pointer',
-                                                                    fontWeight: 'bold',
-                                                                    transition: 'background-color 0.2s',
-                                                                    opacity: (isButtonDisabled || isSubmitting) ? 0.6 : 1
-                                                                }}
-                                                            >
-                                                                <FaPencilAlt size={14} />
-                                                                Informar TES manual
-                                                            </button>
-                                                            <button
-                                                                onClick={handleReprocessarFiscal}
-                                                                disabled={isButtonDisabled || isSubmitting || isReprocessingTes}
-                                                                style={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    gap: '8px',
-                                                                    padding: '10px 20px',
-                                                                    borderRadius: '5px',
-                                                                    border: 'none',
-                                                                    background: (isButtonDisabled || isSubmitting || isReprocessingTes) ? '#6c757d' : '#f7941d',
-                                                                    color: 'white',
-                                                                    cursor: (isButtonDisabled || isSubmitting || isReprocessingTes) ? 'not-allowed' : 'pointer',
-                                                                    fontWeight: 'bold',
-                                                                    transition: 'background-color 0.2s',
-                                                                    opacity: (isButtonDisabled || isSubmitting || isReprocessingTes) ? 0.6 : 1,
-                                                                    minWidth: '180px'
-                                                                }}
-                                                            >
-                                                                {isReprocessingTes ? (
-                                                                <>
-                                                                    <FaSpinner className="animate-spin" size={14} />
-                                                                    <span>Reprocessando...</span>
-                                                                </>
-                                                                ) : (
-                                                                <>
-                                                                    <FaSyncAlt size={14} />
-                                                                    <span>Reprocessar TES</span>
-                                                                </>
-                                                                )}
-                                                            </button>
-                                                        </div>
                                                 </>
                                             )}
                                         </div>
@@ -1767,33 +1615,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                                                         Ao clicar no botão abaixo, você marcará esta nota para ser lançada manualmente no Protheus.
                                                         Esta ação é irreversível e impedirá o lançamento automático através deste portal.
                                                     </p>
-                                                    <div style={{ marginTop: '1.5rem' }}>
-                                                        <button
-                                                            onClick={() => setShowConfirmModal(true)}
-                                                            disabled={isButtonDisabled || isSubmitting }
-                                                            style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                padding: '10px 20px',
-                                                                borderRadius: '5px',
-                                                                border: 'none',
-                                                                background: (isButtonDisabled || isSubmitting) ? '#6c757d' : '#dc3545',
-                                                                color: 'white',
-                                                                cursor: (isButtonDisabled || isSubmitting) ? 'not-allowed' : 'pointer',
-                                                                fontWeight: 'bold',
-                                                                transition: 'background-color 0.2s',
-                                                                opacity: (isButtonDisabled || isSubmitting) ? 0.6 : 1
-                                                            }}
-                                                        >
-                                                            <FaShieldAlt style={{ marginRight: '8px' }} />
-                                                            Lançamento Manual
-                                                        </button>
-                                                        {isButtonDisabled && (
-                                                            <p style={{ color: '#dc3545', fontSize: '0.9rem', marginTop: '1rem', fontWeight: 'bold' }}>
-                                                                Esta opção não está disponível pois a nota já foi importada ou marcada como manual/finalizada.
-                                                            </p>
-                                                        )}
-                                                    </div>
                                                 </>
                                             )}
                                         </div>
@@ -1817,44 +1638,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                                 <p style={{ margin: '0 0 1.5rem 0', lineHeight: 1.6, fontSize: '14px', color: '#333' }}>
                                     Consulte os boletos registrados no DDA (Débito Direto Autorizado) ou os pagamentos financeiros gerados para esta nota fiscal diretamente no ERP.
                                 </p>
-                                <div style={{ display: 'flex', gap: '1rem' }}>
-                                    <button
-                                        onClick={() => handleOpenFinanceiroModal('dda')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            padding: '10px 20px',
-                                            borderRadius: '5px',
-                                            border: 'none',
-                                            background: '#17a2b8',
-                                            color: 'white',
-                                            cursor: 'pointer',
-                                            fontWeight: 'bold',
-                                            transition: 'background-color 0.2s'
-                                        }}
-                                    >
-                                        Consultar Boletos (DDA)
-                                    </button>
-                                    <button
-                                        onClick={() => handleOpenFinanceiroModal('titulos')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            padding: '10px 20px',
-                                            borderRadius: '5px',
-                                            border: 'none',
-                                            background: '#f7941d',
-                                            color: 'white',
-                                            cursor: 'pointer',
-                                            fontWeight: 'bold',
-                                            transition: 'background-color 0.2s'
-                                        }}
-                                    >
-                                        Consultar pagamentos (ERP)
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     )}
@@ -1892,31 +1675,6 @@ export default function ModalDetalhes({ chave, statusNF, visivel, onClose, nomeF
                                   <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#6c757d', marginTop: '4px' }}>
                                       {MAX_MOTIVO_LENGTH - motivoTransferencia.length} caracteres restantes
                                   </div>
-                              </div>
-
-                              <div>
-                                  <button
-                                      onClick={() => setShowTransferConfirmModal(true)}
-                                      disabled={!selectedComprador || !motivoTransferencia.trim() || isSubmitting || isButtonDisabled}
-                                      style={{
-                                          padding: '10px 20px',
-                                          borderRadius: '5px',
-                                          border: 'none',
-                                          background: (!selectedComprador || !motivoTransferencia.trim() || isButtonDisabled) ? '#6c757d' : '#007bff',
-                                          color: 'white',
-                                          cursor: (!selectedComprador || !motivoTransferencia.trim() || isSubmitting || isButtonDisabled) ? 'not-allowed' : 'pointer',
-                                          fontWeight: 'bold',
-                                          transition: 'background-color 0.2s',
-                                          opacity: (!selectedComprador || !motivoTransferencia.trim() || isSubmitting || isButtonDisabled) ? 0.6 : 1
-                                      }}
-                                  >
-                                      Transferir
-                                  </button>
-                                  {isButtonDisabled && (
-                                      <p style={{ color: '#dc3545', fontSize: '0.9rem', marginTop: '1rem', fontWeight: 'bold' }}>
-                                          Esta opção não está disponível pois a nota já foi importada ou marcada como manual/finalizada.
-                                      </p>
-                                  )}
                               </div>
                             </div>
                           )}
