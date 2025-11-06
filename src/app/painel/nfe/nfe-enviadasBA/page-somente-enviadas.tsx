@@ -522,7 +522,7 @@ export default function ConsultaNotas() {
           sortBy: sortKeyToBackend(sortConfig.key),
           sortDir: sortConfig.direction || 'asc',
           filial: '0402',
-          // status_envio_unidade: 'SIM', // <-- REMOVIDO
+          status_envio_unidade: 'SIM',
         };
 
         // Adiciona filtros avançados (exceto filial)
@@ -561,7 +561,7 @@ export default function ConsultaNotas() {
             ...tabBody, // Filtros da aba são adicionados por último
             // Garante que os filtros permanentes estejam presentes mesmo que advanced/tab tentem mudar
             filial: '0402',
-            // status_envio_unidade: 'SIM', // <-- REMOVIDO
+            status_envio_unidade: 'SIM',
         };
 
         // Remove chaves com valor undefined
@@ -986,7 +986,7 @@ export default function ConsultaNotas() {
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} color="var(--gcs-blue)" />
-                <span>Notas Fiscais - BA (Filial 0402)</span> {/* Título revertido */}
+                <span>Notas Enviadas - BA (Filial 0402)</span> {/* Título atualizado */}
             </h2>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -1087,7 +1087,7 @@ export default function ConsultaNotas() {
         </div>
       ) : notasPaginadas.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--gcs-gray-dark)", marginTop: "4rem", fontSize: '1.1rem' }}>
-          Nenhuma nota encontrada para os filtros aplicados (Filial 0402).
+          Nenhuma nota encontrada para os filtros aplicados (Filial 0402 e Enviadas).
         </div>
       ) : (
         <>

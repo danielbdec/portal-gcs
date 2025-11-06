@@ -18,8 +18,9 @@ import {
   FolderArchive,
   Banknote,
   Send,
-  ChevronUp, // Ícone para seta para cima
-  ChevronDown, // Ícone para seta para baixo
+  ChevronUp, 
+  ChevronDown, 
+  FileText, // <<< ÍCONE MANTIDO PARA O NOVO MÓDULO
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
 import Image from "next/image";
@@ -91,9 +92,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     
     scrollIntervalRef.current = setInterval(() => {
       if (menuContainerRef.current) {
-        // ==================================================================
-        // VELOCIDADE AJUSTADA (de 20 para 10)
-        // ==================================================================
         const scrollAmount = 10; // Velocidade da rolagem
         if (direction === "up") {
           menuContainerRef.current.scrollTop -= scrollAmount;
@@ -153,7 +151,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-visao-geral"),
       });
     }
-
+    // ... (restante dos sub-itens de NF Entrada) ...
     if (isAdmin || user.funcoes?.includes("nfEntrada.centralDeNotas")) {
       nfEntradaSubItems.push({
         key: "centralnfe",
@@ -162,7 +160,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-central"),
       });
     }
-
     if (isAdmin || user.funcoes?.includes("nfEntrada.notasEnviadas")) {
       nfEntradaSubItems.push({
         key: "notasenviadasba",
@@ -171,7 +168,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-enviadasBA"),
       });
     }
-
     if (isAdmin || user.funcoes?.includes("nfEntrada.centralFinanceiro")) {
       nfEntradaSubItems.push({
         key: "centralfinanceiro",
@@ -180,7 +176,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-central-financeiro"),
       });
     }
-    
     if (isAdmin || user.funcoes?.includes("nfEntrada.centralCompras")) {
       nfEntradaSubItems.push({
         key: "centralcompras",
@@ -223,8 +218,32 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       });
     }
 
+    // --- NOVO MÓDULO: CADERNO AGRÍCOLA ---
+    const cadernoAgricolaSubItems: any[] = [];
+    if (isAdmin || user.funcoes?.includes("caderno.safra")) {
+      cadernoAgricolaSubItems.push({
+        key: "cadernoAgricolaSafra",
+        icon: <FileChartLine size={18} color="white" />, // Usei o ícone de gráfico
+        label: "Caderno Agricola",
+        onClick: () => router.push("/painel/caderno-agricola/safra"),
+      });
+    }
+    
+    if (cadernoAgricolaSubItems.length > 0) {
+      menuItems.push({
+        key: "cadernoagricola",
+        icon: <FileText size={iconSize} color="white" />, // Ícone principal do módulo
+        label: "Gestão Agrícola",
+        children: cadernoAgricolaSubItems,
+      });
+    }
+    // --- FIM DO NOVO MÓDULO ---
+
     // Sub-itens do menu Agrogestor
     const agrogestorSubItems: any[] = [];
+    
+    // (Item de caderno agrícola foi REMOVIDO DAQUI)
+    
     if (isAdmin || user.funcoes?.includes("agrogestor.empreendimentos")) {
       agrogestorSubItems.push({
         key: "agrogestorEmpreendimentos",
@@ -273,6 +292,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (!pathname) return undefined;
       if (pathname.startsWith("/painel/perfil")) return "perfil";
       if (pathname.startsWith("/painel/cadastro-usuarios")) return "cadastro-usuarios";
+      
+      // NF Entrada
       if (pathname.startsWith("/painel/nfe/nfe-visao-geral")) return "visaogeralnfe";
       if (pathname.startsWith("/painel/nfe/nfe-central")) return "centralnfe";
       if (pathname.startsWith("/painel/nfe/nfe-enviadasBA")) return "notasenviadasba";
@@ -281,6 +302,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-compras")) return "pendenciacompras";
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-fiscal")) return "pendenciafiscal";
       if (pathname.startsWith("/painel/nfe/nfe-regras-fiscais")) return "regrafiscalnfe";
+      
+      // --- ATUALIZAÇÃO DO GETSELECTEDKEY ---
+      if (pathname.startsWith("/painel/caderno-agricola/safra")) return "cadernoAgricolaSafra";
+      // --- FIM DA ATUALIZAÇÃO ---
+
+      // Agrogestor
       if (pathname.startsWith("/painel/agrogestor/empreendimento")) return "agrogestorEmpreendimentos";
       if (pathname.startsWith("/painel/agrogestor/condicionantes")) return "agrogestorCondicionantes";
       if (pathname.startsWith("/painel/agrogestor/gestao-empreendimento")) return "agrogestorGestao";
@@ -445,6 +472,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               padding: "1rem",
               paddingLeft: collapsed ? "0.5rem" : "1.5rem",
               paddingRight: collapsed ? "0.5rem" : "1.5rem",
+      
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
