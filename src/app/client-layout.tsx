@@ -20,7 +20,8 @@ import {
   Send,
   ChevronUp, 
   ChevronDown, 
-  FileText, // <<< ÍCONE MANTIDO PARA O NOVO MÓDULO
+  FileText, // Ícone principal de Gestão Agrícola
+  MapPin,   // <<< ÍCONE ADICIONADO PARA PIVÔ
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
 import Image from "next/image";
@@ -218,26 +219,38 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       });
     }
 
-    // --- NOVO MÓDULO: CADERNO AGRÍCOLA ---
-    const cadernoAgricolaSubItems: any[] = [];
+    // --- MÓDULO: GESTÃO AGRÍCOLA ---
+    const gestaoAgricolaSubItems: any[] = [];
+    
+    // --- ITEM 1: CADERNO AGRÍCOLA (CORRIGIDO) ---
     if (isAdmin || user.funcoes?.includes("caderno.safra")) {
-      cadernoAgricolaSubItems.push({
-        key: "cadernoAgricolaSafra",
-        icon: <FileChartLine size={18} color="white" />, // Usei o ícone de gráfico
-        label: "Caderno Agricola",
-        onClick: () => router.push("/painel/caderno-agricola/safra"),
+      gestaoAgricolaSubItems.push({
+        key: "cadernoAgricola", // Chave corrigida
+        icon: <FileChartLine size={18} color="white" />,
+        label: "Caderno Agrícola", // Label corrigido
+        onClick: () => router.push("/painel/gestao-agricola/caderno-agricola"), // Rota corrigida
       });
     }
     
-    if (cadernoAgricolaSubItems.length > 0) {
-      menuItems.push({
-        key: "cadernoagricola",
-        icon: <FileText size={iconSize} color="white" />, // Ícone principal do módulo
-        label: "Gestão Agrícola",
-        children: cadernoAgricolaSubItems,
+    // --- ITEM 2: PIVÔS E TALHÕES (NOVO) ---
+    if (isAdmin || user.funcoes?.includes("gestao.agricola.pivo")) {
+      gestaoAgricolaSubItems.push({
+        key: "pivoTalhao",
+        icon: <MapPin size={18} color="white" />,
+        label: "Pivôs e Talhões",
+        onClick: () => router.push("/painel/gestao-agricola/cadastros/pivo-talhao"),
       });
     }
-    // --- FIM DO NOVO MÓDULO ---
+    
+    if (gestaoAgricolaSubItems.length > 0) {
+      menuItems.push({
+        key: "gestaoagricola", // Chave principal do grupo
+        icon: <FileText size={iconSize} color="white" />, // Ícone principal do módulo
+        label: "Gestão Agrícola",
+        children: gestaoAgricolaSubItems,
+      });
+    }
+    // --- FIM DO MÓDULO ---
 
     // Sub-itens do menu Agrogestor
     const agrogestorSubItems: any[] = [];
@@ -303,8 +316,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-fiscal")) return "pendenciafiscal";
       if (pathname.startsWith("/painel/nfe/nfe-regras-fiscais")) return "regrafiscalnfe";
       
-      // --- ATUALIZAÇÃO DO GETSELECTEDKEY ---
-      if (pathname.startsWith("/painel/caderno-agricola/safra")) return "cadernoAgricolaSafra";
+      // --- ATUALIZAÇÃO DO GETSELECTEDKEY (Gestão Agrícola) ---
+      if (pathname.startsWith("/painel/gestao-agricola/caderno-agricola")) return "cadernoAgricola";
+      if (pathname.startsWith("/painel/gestao-agricola/cadastros/pivo-talhao")) return "pivoTalhao";
       // --- FIM DA ATUALIZAÇÃO ---
 
       // Agrogestor
