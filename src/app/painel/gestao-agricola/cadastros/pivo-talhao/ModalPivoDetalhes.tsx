@@ -5,14 +5,15 @@
  * - ATUALIZADO: Agora usa o layout de Glasmorfismo do seu exemplo.
  * - ATUALIZADO: Implementada a lógica de arrastar (drag).
  * - ATUALIZADO: Botões e estilos (light/dark) baseados no seu CSS.
- * - CORREÇÃO (Modo Escuro): Texto do conteúdo (como 'Pivô 01')
- * agora é branco, corrigindo o problema de legibilidade.
+ * - CORREÇÃO (Modo Escuro): Corrigido o seletor de CSS para
+ * '.ant-descriptions-bordered' para que o texto do conteúdo
+ * fique claro no modo escuro.
  * =========================================================================
  */
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Descriptions, Tag, Button } from 'antd'; // Mantém Descriptions e Tag
+import { Button, Descriptions, Tag } from 'antd'; // Importa do AntD
 import { Eye } from 'lucide-react';
 
 // Interface completa do item (baseada no page.tsx)
@@ -29,18 +30,22 @@ interface PivoTalhao {
   status_original: 'A' | 'I';
   dt_inclusao: string;
   dt_alteracao: string | null;
+  // Campos adicionais do mock/API
   filial?: string;
   gid_telemetria?: string;
-  kml?: string;
+  kml?: string | null;
   [key: string]: any;
 }
 
 // Helper de Data (copiado do page.tsx para autonomia)
 const formatProtheusDateTime = (dateString: string | null | undefined): string => {
-    if (!dateString) return '—';
+    if (!dateString) {
+        return '—';
+    }
     try {
         const dateTest = new Date(dateString);
         if (isNaN(dateTest.getTime())) {
+            // Tenta formato YYYYMMDD
             if (dateString.length === 8) {
                 const year = dateString.substring(0, 4);
                 const month = dateString.substring(4, 6);
@@ -49,16 +54,23 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
             }
             return '—';
         }
+
+        // Padrão ISO '2025-10-01T10:00:00'
         const year = dateString.substring(0, 4);
         const month = dateString.substring(5, 7);
         const day = dateString.substring(8, 10);
+        
         if(dateString.length >= 16) {
             const hour = dateString.substring(11, 13);
             const minute = dateString.substring(14, 16);
             return `${day}/${month}/${year} ${hour}:${minute}`;
         }
+        
+        // Retorna apenas data se não houver hora
         return `${day}/${month}/${year}`;
+
     } catch (error) {
+        // console.error("Erro ao formatar data Protheus:", error);
         return '—';
     }
 };
@@ -80,9 +92,8 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
   useEffect(() => {
     if (visible && modalRef.current) {
         const modal = modalRef.current;
-        const modalWidth = 700; // Largura do modal de detalhes
-        const initialX = (window.innerWidth - modalWidth) / 2;
-        const initialY = 40; 
+        const initialX = (window.innerWidth - modal.offsetWidth) / 2;
+        const initialY = 40; // Um pouco abaixo do topo
         setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
     }
   }, [visible]);
@@ -91,8 +102,8 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
   const handleMouseDown = (e: React.MouseEvent) => {
       if (modalRef.current) {
           const target = e.target as HTMLElement;
-          // Impede o "arrastar" ao clicar em botões
-          if (target.tagName === 'BUTTON' || target.closest('button')) {
+          // Não arrasta se clicar em botões ou selects
+          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.closest('button') || target.closest('.ant-select-selector') || target.closest('.ant-descriptions-item-content')) {
               return;
           }
           setIsDragging(true);
@@ -130,7 +141,7 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
 
   const modalTitle = (
     <div className="modal-pivo-detalhes-title">
-      <Eye size={20} color={'var(--gcs-blue)'} />
+      <Eye size={20} />
       <span>Detalhes do Item (ID: {item.id})</span>
     </div>
   );
@@ -138,12 +149,14 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
   return (
     <>
       {/* --- ESTILOS DO ModalSafra_exemplo.tsx --- */}
-      {/* Classes renomeadas para '.modal-pivo-detalhes-' */}
+      {/* (Classes prefixadas com '.modal-pivo-detalhes-') */}
       <style>{`
+        /* --- Variáveis --- */
         :root {
             --gcs-blue: #00314A;
             --gcs-orange: #F58220;
             --gcs-gray-light: #f1f5fb;
+            --gcs-gray-border: #d0d7e2;
             --gcs-dark-text: #333;
             --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
             --gcs-dark-border: rgba(125, 173, 222, 0.2);
@@ -267,42 +280,45 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
             background-color: var(--gcs-orange) !important;
             border-color: var(--gcs-orange) !important;
             color: white !important;
+            font-weight: 600;
         }
         .btn-cancelar-laranja:hover:not(:disabled) {
-            background-color: #d17814 !important;
+            background-color: #d17814 !important; /* Laranja mais escuro */
             border-color: #d17814 !important;
         }
 
         /* --- Estilos AntD Descriptions --- */
-        body.dark .ant-descriptions-view {
+        /* CORREÇÃO MODO CLARO (para 'bordered') */
+        body.light .ant-descriptions-bordered .ant-descriptions-view {
+            border: 1px solid var(--gcs-gray-border) !important;
+            border-radius: 8px;
+        }
+        body.light .ant-descriptions-bordered .ant-descriptions-item-label {
+             background-color: var(--gcs-gray-light);
+             font-weight: 600;
+        }
+        
+        /* CORREÇÃO MODO ESCURO (para 'bordered') */
+        body.dark .ant-descriptions-bordered .ant-descriptions-view {
             border: 1px solid var(--gcs-dark-border) !important;
-            background: transparent; /* CORREÇÃO */
+            border-radius: 8px;
         }
-        body.dark .ant-descriptions-item-label,
-        body.dark .ant-descriptions-item-content {
-            border-inline-end: 1px solid var(--gcs-dark-border) !important;
-            border-bottom: 1px solid var(--gcs-dark-border) !important;
-        }
-        body.dark .ant-descriptions-row:last-child .ant-descriptions-item-label,
-        body.dark .ant-descriptions-row:last-child .ant-descriptions-item-content {
-             border-bottom: none !important;
-        }
-        body.dark .ant-descriptions-item-label {
+        body.dark .ant-descriptions-bordered .ant-descriptions-item-label {
             background-color: rgba(25, 39, 53, 0.5) !important;
-            color: var(--gcs-dark-text-primary);
+            color: var(--gcs-dark-text-primary) !important;
             font-weight: 600;
         }
-        /* CORREÇÃO MODO ESCURO (COM !important) */
-        body.dark .ant-descriptions-item-content {
-             color: var(--gcs-dark-text-secondary) !important;
+        body.dark .modal-pivo-detalhes-glass .ant-descriptions-bordered .ant-descriptions-item-content {
+             color: var(--gcs-dark-text-secondary, #CBD5E1) !important;
         }
         /* FIM CORREÇÃO */
         
         body.dark .ant-tag {
-            color: var(--gcs-dark-text-primary) !important;
-            background: var(--gcs-dark-bg-transparent) !important;
-            border-color: var(--gcs-dark-border) !important;
+            background: rgba(125, 173, 222, 0.2) !important;
+            border-color: rgba(125, 173, 222, 0.4) !important;
         }
+        body.dark .ant-tag-green { color: #A7F3D0 !important; }
+        body.dark .ant-tag-red { color: #F87171 !important; }
       `}</style>
 
       <div 
@@ -369,7 +385,7 @@ const ModalPivoDetalhes: React.FC<ModalPivoDetalhesProps> = ({ visible, onClose,
           <div className="modal-pivo-detalhes-footer">
             <Button 
                 key="back" 
-                onClick={onClose} 
+                onClick={onClose}
                 className="btn-cancelar-laranja" // Botão Laranja
             >
               Fechar

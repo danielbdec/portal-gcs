@@ -13,32 +13,64 @@
  * 3. Cores do Gráfico: Adicionadas novas cores para culturas.
  * 4. CRUD: Texto do botão "Cadastrar Talhão/Pivo".
  * 5. API: Função handleSavePivo ativada para usar fetch real.
- * 6. FIX CAMINHO: Importação do NotificationModal corrigida para a raiz.
+ * 6. CORREÇÃO: Adicionado 'email' ao mock 'useSession'.
+ * 7. FIX: Caminhos de importação dos modais ajustados para a raiz.
+ * 8. CORREÇÃO (CRÍTICA): Removidos dados mockados do bloco 'catch' em 'fetchPivos'.
+ * 9. CORREÇÃO (CRÍTICA): Corrigida a lógica de cores do gráfico (case-sensitivity).
+ * 10. ADICIONADO CAMPO 'FILIAL':
+ * - Adicionado 'filial' à interface PivoTalhao.
+ * - Adicionado 'filial' ao mapeamento de fetchPivos.
+ * - Adicionado 'filial' ao filtro de busca.
+ * - Adicionada coluna "Filial" na tabela.
+ * 11. ATUALIZAÇÃO GRÁFICO (renderActiveShape):
+ * - Revertida a solução <foreignObject> (que causava corte).
+ * - Reimplementado com <text> e <tspan> nativos do SVG.
+ * - Corrigida a quebra de linha (Nome, ha, %).
+ * - Ajustada a posição do texto para evitar corte nas laterais.
+ * 12. ATUALIZAÇÃO GRÁFICO (Tooltip):
+ * - Substituído o texto do 'activeShape' por um <RechartsTooltip> customizado.
+ * - 'renderActiveShape' agora apenas destaca a fatia.
+ * - O Tooltip ('CustomTooltip') renderiza um <div> com glassmorphism,
+ * resolvendo o corte de texto e a sobreposição da legenda.
+ * 13. CORREÇÃO GRÁFICO (Tooltip):
+ * - Corrigido o bug que exibia (NaN%) no tooltip.
+ * - Corrigido bug de parênteses duplicados no tooltip.
+ * 14. CORREÇÃO GRÁFICO (Tooltip):
+ * - Corrigida a lógica de verificação do percentual que causava (0.0%)
+ * incorretamente (check 'falsy' em vez de 'typeof').
+ * 15. CORREÇÃO GRÁFICO (Tooltip):
+ * - Adicionada lógica para tratar 'NaN' (quando há 1 item) e exibir '100.0%'.
+ * 16. ATUALIZAÇÃO TABELA:
+ * - Movida a coluna "Filial" para ser a primeira coluna da tabela.
+ * 17. CORREÇÃO GRÁFICO (Tooltip):
+ * - O percentual do Tooltip do Recharts é instável (dá NaN).
+ * - Adicionado 'totalAreaCultura' (useMemo) para calcular o total.
+ * - Tooltip agora calcula o percentual manualmente (valor / total).
+ * 18. ATUALIZAÇÃO TABELA:
+ * - Trocada a posição das colunas "Status" e "Filial".
+ * Status agora é a 1ª, Filial é a 2ª.
+ * 19. ATUALIZAÇÃO DADOS:
+ * - Adicionado 'gid_telemetria' e 'kml' à interface PivoTalhao.
+ * - Adicionado 'gid_telemetria' e 'kml' ao mapeamento de fetchPivos.
+ * 20. ATUALIZAÇÃO VISUAL:
+ * - Removidas colunas "Safra" e "Cultura" da tabela.
+ * - Removida lógica de busca por "Safra" e "Cultura" no filtro e placeholder.
+ * - Gráfico alterado de "Área por Cultura" para "Área por Bloco".
  * =========================================================================
  */
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-// --- Imports de Pacotes (Simulados para o Preview) ---
-// import { useSession } from "next-auth/react";
-// import { useRouter } from "next/navigation";
+// --- Imports de Pacotes (Reais) ---
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import React from "react";
 
-// --- Simulações (Mocks) para o Preview ---
-const useSession = () => ({
-  data: {
-    user: {
-      is_admin: true,
-      funcoes: ["gestao.agricola.pivo"]
-    }
-  },
-  status: "authenticated"
-});
-const useRouter = () => ({ push: (path: string) => console.log(`[MockRouter] Navigating to: ${path}`) });
-// --- Fim das Simulações ---
-
-
-import { Tooltip, Spin, Pagination, message, Empty, Table, Dropdown, Menu, Space, Button, Input } from "antd";
+// --- Imports de UI (Ant Design e Lucide) ---
+import {
+    Tooltip, Spin, Pagination, message, Empty, Table, Dropdown, Menu, Space, Button, Input,
+    Modal as AntModal, Form, InputNumber, Select, Alert, Descriptions, Tag
+} from "antd";
 import type { MenuProps } from 'antd';
 import * as XLSX from 'xlsx';
 import {
@@ -47,17 +79,18 @@ import {
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Lock,
     Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
-    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark,
+    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart,
     CheckSquare, Square, Sun, Moon, Plus, MoreVertical, Edit, Trash2, Eye,
-    Hash, FileBadge, CalendarDays, MapPin, Trees, AreaChart // <<< Ícones corretos
+    Hash, FileBadge, CalendarDays, MapPin, Trees, AreaChart,
+    Landmark // 10. Ícone Landmark adicionado
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
-// import "antd/dist/reset.css"; // <-- REMOVIDO: Este import causou erro de compilação no preview.
+import "antd/dist/reset.css"; // <-- Restaurado
 
 // --- Imports dos Modais ---
+// 7. FIX: Caminhos ajustados para a raiz
 import ModalPivo from "./ModalPivo";
 import ModalPivoDetalhes from "./ModalPivoDetalhes";
-// ATUALIZAÇÃO 6: Caminho corrigido para a raiz
 import NotificationModal from "./NotificationModal";
 
 
@@ -67,10 +100,13 @@ interface PivoTalhao {
   key: string;
   nome: string;
   safra: string;
+  filial: string; // 10. CAMPO ADICIONADO
   bloco: string | null;
   ha: number | null;
   cultura: string | null;
   variedade: string | null;
+  gid_telemetria: string | null; // 19. CAMPO ADICIONADO
+  kml: string | null; // 19. CAMPO ADICIONADO
   status: string; // "Aberto" ou "Inativo"
   status_original: 'A' | 'I';
   dt_inclusao: string;
@@ -183,8 +219,8 @@ const FiltroAbasStatus = ({ filtroAtual, onChange }: {
 // --- PÁGINA PRINCIPAL DO CRUD ---
 
 export default function GestaoPivoPage() {
-  const { data: session, status } = useSession() as any; // Cast para 'any' para aceitar o mock
-  const router = useRouter();
+  const { data: session, status } = useSession(); // <-- Implementação real
+  const router = useRouter(); // <-- Implementação real
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
   const [pivos, setPivos] = useState<PivoTalhao[]>([]); // Estado renomeado
 
@@ -228,33 +264,48 @@ export default function GestaoPivoPage() {
     ];
   }, [pivos]);
 
-  // ATUALIZAÇÃO 2: dadosGraficoCultura é o novo array para o gráfico.
-  const dadosGraficoCultura = useMemo(() => {
-    const culturaMap = new Map<string, number>();
+  // ATUALIZAÇÃO 20: dadosGraficoBloco é o novo array para o gráfico.
+  const dadosGraficoBloco = useMemo(() => {
+    const blocoMap = new Map<string, number>();
     pivos.forEach(item => {
-        const cultura = item.cultura || 'N/A'; // Agrupa nulos como 'N/A'
+        // Agrupa por 'bloco', tratando nulo como 'N/A'
+        const bloco = (item.bloco || 'N/A').toUpperCase(); 
         const area = item.ha || 0;
-        culturaMap.set(cultura, (culturaMap.get(cultura) || 0) + area);
+        blocoMap.set(bloco, (blocoMap.get(bloco) || 0) + area);
     });
 
-    return Array.from(culturaMap.entries())
+    return Array.from(blocoMap.entries())
         .map(([name, value]) => ({
             name: name,
             value: parseFloat(value.toFixed(2)) // Arredonda para 2 casas decimais
         }))
-        .filter(d => d.value > 0) // Remove culturas com área 0
+        .filter(d => d.value > 0) // Remove blocos com área 0
         .sort((a, b) => b.value - a.value); // Ordena da maior para a menor
   }, [pivos]);
 
-  // ATUALIZAÇÃO 3: Cores para o gráfico de cultura
-  const coresCulturaDonut: Record<string, string> = {
-      "Soja": "url(#gradAmarelo)",
-      "Milho": "url(#gradVerde)",
-      "Algodão": "url(#gradAzulClaro)",
-      "Feijão": "url(#gradLaranja)", // Laranja já existia
+  // ATUALIZAÇÃO 20: Total calculado para o Tooltip
+  const totalAreaBloco = useMemo(() => {
+      return dadosGraficoBloco.reduce((acc, entry) => acc + entry.value, 0);
+  }, [dadosGraficoBloco]);
+
+  // ATUALIZAÇÃO 20: Mapa de cores de TEXTO para o Tooltip
+  const coresBlocoTexto: Record<string, string> = {
+      "BLOCO A": "#EAB308",
+      "BLOCO B": "#5FB246",
+      "BLOCO C": "#38BDF8",
+      "BLOCO D": "#F58220",
+      "N/A": "#888888",
+  };
+
+  // ATUALIZAÇÃO 20: Cores para o gráfico de Bloco (Chaves em MAIÚSCULAS)
+  const coresBlocoDonut: Record<string, string> = {
+      "BLOCO A": "url(#gradAmarelo)",
+      "BLOCO B": "url(#gradVerde)",
+      "BLOCO C": "url(#gradAzulClaro)",
+      "BLOCO D": "url(#gradLaranja)",
       "N/A": "url(#gradCinza)",
   };
-  const DEFAULT_COR_CULTURA = "url(#gradCinza)"; // Fallback
+  const DEFAULT_COR_BLOCO = "url(#gradCinza)"; // Fallback
 
 
   // --- LÓGICA DE TEMA (Layout 1) ---
@@ -331,15 +382,9 @@ export default function GestaoPivoPage() {
       }
     } catch (error) {
       console.error("Erro ao buscar pivôs/talhões:", error);
-      message.error("Não foi possível carregar os pivôs/talhões. Usando dados de exemplo.");
-      // --- DADOS MOCKADOS DE FALLBACK (para preview) ---
-      data = [
-            { id: 6, filial: "0402", safra: "2025/26", nome: "Talhão 07", bloco: "Bloco B", ha: 18.75, kml: null, gid_telemetria: "GID-107", cultura: "Soja", variedade: "TMG 7062 IPRO", dt_inclusao: "2025-11-09T18:14:29.000Z", dt_alteracao: null, id_cultura: 2, id_variedade: 205, status: 'A' },
-            { id: 7, filial: "0401", safra: "2024/25", nome: "Pivô 02", bloco: "Bloco A", ha: 63.1, kml: "<kml></kml>", gid_telemetria: null, cultura: "Algodão", variedade: null, dt_inclusao: "2025-11-09T18:14:29.000Z", dt_alteracao: null, id_cultura: 3, id_variedade: null, status: 'I' },
-            { id: 8, filial: "0401", safra: "2024/25", nome: "Talhão 03", bloco: "Bloco C", ha: 45.0, kml: null, gid_telemetria: null, cultura: "Milho", variedade: null, dt_inclusao: "2025-11-10T10:00:00.000Z", dt_alteracao: null, id_cultura: 4, id_variedade: null, status: 'A' },
-            { id: 9, filial: "0401", safra: "2024/25", nome: "Talhão 04", bloco: "Bloco C", ha: 30.0, kml: null, gid_telemetria: null, cultura: "Feijão", variedade: null, dt_inclusao: "2025-11-10T11:00:00.000Z", dt_alteracao: null, id_cultura: 5, id_variedade: null, status: 'I' },
-            { id: 10, filial: "0402", safra: "2025/26", nome: "Talhão 08", bloco: "Bloco B", ha: 22.5, kml: null, gid_telemetria: "GID-108", cultura: "Soja", variedade: "TMG 7062 IPRO", dt_inclusao: "2025-11-10T12:00:00.000Z", dt_alteracao: null, id_cultura: 2, id_variedade: 205, status: 'A' },
-      ];
+      // 8. CORREÇÃO CRÍTICA: Não usar mock. Apenas mostrar erro.
+      message.error(`Não foi possível carregar os pivôs/talhões: ${error instanceof Error ? error.message : String(error)}`);
+      data = []; // Garante que a lista fique vazia em caso de falha
     } finally {
       // ATUALIZAÇÃO 1: Mapeamento de status corrigido
       const statusMap: Record<string, string> = { 'A': 'Aberto' };
@@ -348,6 +393,9 @@ export default function GestaoPivoPage() {
         key: item.id?.toString() ?? `key-${index}`,
         nome: item.nome || 'N/A',
         safra: item.safra || 'N/A',
+        filial: item.filial || 'N/A', // 10. CAMPO ADICIONADO
+        gid_telemetria: item.gid_telemetria || null, // 19. CAMPO ADICIONADO
+        kml: item.kml || null, // 19. CAMPO ADICIONADO
         status: statusMap[item.status] || 'Inativo', // A = Aberto, tudo mais = Inativo
         status_original: item.status || 'I', // Default para Inativo se status não vier
       })));
@@ -374,12 +422,12 @@ export default function GestaoPivoPage() {
     // 2. Filtrar por busca (Input)
     const termo = buscaDebounced.toLowerCase().trim();
     if (termo) {
+        // ATUALIZAÇÃO 20: Removido 'safra' e 'cultura' da busca
         dadosFiltrados = dadosFiltrados.filter(c =>
             c.nome.toLowerCase().includes(termo) ||
-            c.safra.toLowerCase().includes(termo) ||
+            c.filial.toLowerCase().includes(termo) ||
             c.id.toString().includes(termo) ||
-            (c.bloco && c.bloco.toLowerCase().includes(termo)) ||
-            (c.cultura && c.cultura.toLowerCase().includes(termo))
+            (c.bloco && c.bloco.toLowerCase().includes(termo))
         );
     }
 
@@ -430,7 +478,7 @@ export default function GestaoPivoPage() {
   };
   const handleCloseDetalheModal = () => setIsDetalheModalOpen(false);
   
-  // ATUALIZAÇÃO 5: Handler de Salvar (para o ModalPivo) com API REAL
+  // Handler de Salvar (para o ModalPivo)
   const handleSavePivo = async (data: any, mode: 'add' | 'edit' | 'delete') => {
     if (!session?.user?.email) {
       setNotification({ visible: true, type: 'error', message: 'Sessão expirada. Faça login novamente.' });
@@ -445,17 +493,16 @@ export default function GestaoPivoPage() {
     try {
       const now = new Date().toISOString();
 
+      // Mapeia o status de 'Aberto'/'Inativo' para 'A'/'I'
+      const statusApi = data.status === 'Aberto' ? 'A' : 'I';
+
       if (mode === 'add') {
         endpoint = '/api/gestao-agricola/pivo/inclui';
-        // Garante que o status 'A' ou 'I' seja enviado, não 'Aberto'
-        const statusApi = data.status === 'Aberto' ? 'A' : 'I';
         body.registro = { ...data, status: statusApi, dt_inclusao: now, dt_alteracao: now };
         action = 'incluir';
         successMessage = 'Item cadastrado com sucesso!';
       } else if (mode === 'edit') {
         endpoint = '/api/gestao-agricola/pivo/altera';
-         // Garante que o status 'A' ou 'I' seja enviado
-        const statusApi = data.status === 'Aberto' ? 'A' : 'I';
         body.registro = { ...data, status: statusApi, dt_alteracao: now };
         action = 'alterar';
         successMessage = 'Item alterado com sucesso!';
@@ -499,7 +546,6 @@ export default function GestaoPivoPage() {
         throw new Error(firstResult?.message || `Falha ao ${action} o item.`);
       }
       // --- FIM DO CÓDIGO REAL ---
-      
 
       setNotification({ visible: true, type: 'success', message: successMessage });
       handleCloseCrudModal();
@@ -539,28 +585,80 @@ export default function GestaoPivoPage() {
   };
 
   // --- Gráfico (Layout 1) ---
-  const renderActiveShape = (props: any) => {
-    const RADIAN = Math.PI / 180;
-    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
-    const sin = Math.sin(-RADIAN * midAngle); const cos = Math.cos(-RADIAN * midAngle);
-    const sx = cx + (outerRadius + 2) * cos; const sy = cy + (outerRadius + 2) * sin;
-    const mx = cx + (outerRadius + 15) * cos; const my = cy + (outerRadius + 15) * sin;
-    const ex = mx + (cos >= 0 ? 1 : -1) * 15; const ey = my;
-    const textAnchor = cos >= 0 ? 'start' : 'end';
-    const labelFillColor = theme === 'dark' ? '#F1F5F9' : '#333';
-    const percentFillColor = theme === 'dark' ? '#94A3B8' : '#999';
 
+  // ATUALIZAÇÃO 17: Tooltip Customizado (Glassmorphism)
+  const CustomTooltip = ({ active, payload }: any) => {
+      if (active && payload && payload.length) {
+          const value = payload[0].value;
+          const name = payload[0].name;
+          
+          // --- CORREÇÃO 17: Cálculo manual do percentual ---
+          const percent = (totalAreaBloco > 0) 
+              ? ((value / totalAreaBloco) * 100).toFixed(1) 
+              : '0.0';
+
+          const isDark = theme === 'dark';
+
+          const glassStyle: React.CSSProperties = {
+              borderRadius: '8px',
+              padding: '10px 12px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              zIndex: 999, // Garante que fique acima de tudo
+              // --- Glassmorphism ---
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              // --- Cores ---
+              background: isDark ? 'rgba(25, 39, 53, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+              border: isDark ? '1px solid var(--gcs-dark-border)' : '1px solid var(--gcs-border-color)',
+              overflow: 'hidden',
+          };
+          
+          const titleStyle: React.CSSProperties = {
+              color: coresBlocoTexto[name] || '#888888', // Cor da fatia
+              fontSize: '14px',
+              fontWeight: 'bold',
+              margin: 0,
+              lineHeight: 1.3,
+          };
+          
+          const valueStyle: React.CSSProperties = {
+              color: isDark ? 'var(--gcs-dark-text-primary)' : 'var(--gcs-dark-text)',
+              fontSize: '13px',
+              margin: '4px 0 0 0',
+              lineHeight: 1.2,
+          };
+          
+          const percentStyle: React.CSSProperties = {
+              color: isDark ? 'var(--gcs-dark-text-secondary)' : 'var(--gcs-gray-dark)',
+              fontSize: '12px',
+              margin: '2px 0 0 0',
+              lineHeight: 1.2,
+          };
+
+          return (
+              <div style={glassStyle}>
+                  <p style={titleStyle}>{name}</p>
+                  <p style={valueStyle}>
+                      {`${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`}
+                  </p>
+                  <p style={percentStyle}>
+                      {`(${percent}%)`}
+                  </p>
+              </div>
+          );
+      }
+      return null;
+  };
+
+  // ATUALIZAÇÃO 12: renderActiveShape simplificado (apenas destaca a fatia)
+  const renderActiveShape = (props: any) => {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
     return (
       <g>
+        {/* Fatias (setores) */}
         <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+        {/* Destaque (borda externa) */}
         <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 4} outerRadius={outerRadius + 8} fill={fill} />
-        <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
-        <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill={labelFillColor} style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
-        {/* ATUALIZAÇÃO 2: Label do gráfico corrigido para mostrar 'ha' */}
-        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill={percentFillColor} style={{ fontSize: '12px' }}>
-            {`${value.toLocaleString('pt-BR')} ha (${(percent * 100).toFixed(1)}%)`}
-        </text>
       </g>
     );
   };
@@ -620,6 +718,15 @@ export default function GestaoPivoPage() {
             --gcs-dark-text-secondary: #CBD5E1;
             --gcs-dark-border: rgba(125, 173, 222, 0.2);
             --gcs-dark-border-hover: rgba(125, 173, 222, 0.4);
+            
+            /* Cores dos Modais (baseado no ModalSafra_exemplo.tsx) */
+            --gcs-blue-light: #1b4c89;
+            --gcs-green-dark: #28a745;
+            --gcs-brand-red: #d9534f;
+            --gcs-dark-text: #333;
+            --gcs-dark-bg-transparent: rgba(25, 39, 53, 0.5);
+            --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
+            --gcs-dark-text-tertiary: #94A3B8;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
@@ -812,22 +919,28 @@ export default function GestaoPivoPage() {
       {/* --- CABEÇALHO (Layout 1) --- */}
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
         
-        {/* ATUALIZAÇÃO 2: Gráfico alterado para Área por Cultura */}
+        {/* ATUALIZAÇÃO 20: Gráfico alterado para Área por Bloco */}
         <div className="chart-card" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minWidth: '280px', paddingTop: '1rem', paddingBottom: '1rem' }}>
-            <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem' }}>Área por Cultura (ha)</h4>
+            <h4 className="kpi-title" style={{ margin: 0, fontWeight: 500, fontSize: '1rem' }}>Área por Bloco (ha)</h4>
             <div style={{ width: 280, height: 220 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
+                        {/* --- ATUALIZAÇÃO 12: Tooltip customizado adicionado --- */}
+                        <RechartsTooltip 
+                            content={<CustomTooltip />} 
+                            cursor={{ fill: 'transparent' }} // Esconde o cursor padrão
+                        />
                         <Pie
-                            data={dadosGraficoCultura} dataKey="value" nameKey="name"
+                            data={dadosGraficoBloco} dataKey="value" nameKey="name"
                             cx="50%" cy="45%" innerRadius={50} outerRadius={80}
                             cornerRadius={8} paddingAngle={3}
-                            activeIndex={activeIndex} activeShape={renderActiveShape}
+                            activeIndex={activeIndex} 
+                            activeShape={renderActiveShape} // Shape simplificado
                             onMouseEnter={(_, index) => setActiveIndex(index)}
                             onMouseLeave={() => setActiveIndex(null)}
                         >
-                            {dadosGraficoCultura.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={coresCulturaDonut[entry.name] || DEFAULT_COR_CULTURA} />
+                            {dadosGraficoBloco.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={coresBlocoDonut[entry.name] || DEFAULT_COR_BLOCO} />
                             ))}
                         </Pie>
                         <Legend
@@ -850,7 +963,8 @@ export default function GestaoPivoPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <Input
                     type="text"
-                    placeholder="Buscar por nome, safra, ID, bloco ou cultura..."
+                    // ATUALIZAÇÃO 20: Placeholder atualizado
+                    placeholder="Buscar por nome, ID, filial ou bloco..."
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
                     className="search-input"
@@ -912,7 +1026,7 @@ export default function GestaoPivoPage() {
         {loading ? (
             <LoadingSpinner text="Carregando pivôs e talhões..." />
         ) : pivosFiltrados.length === 0 ? (
-            // --- *** CORREÇÃO 1 APLICADA AQUI (classe) ---
+            // --- *** CORREÇÃO 1 APLICADA AQUI (classe) *** ---
             <div className="empty-table-message">
               {buscaDebounced
                 ? "Nenhum item encontrado para sua busca."
@@ -925,49 +1039,42 @@ export default function GestaoPivoPage() {
               <table className="responsive-table">
                 <thead>
                   <tr>
-                    {/* --- COLUNA 1: STATUS --- */}
+                    {/* --- ATUALIZAÇÃO 18: Ordem Trocada --- */}
                     <th style={{ padding: "16px 12px", textAlign: 'center' }}>
                       <div onClick={() => requestSort('status')} className="th-sortable" style={{justifyContent: 'center'}}>
                         <BadgeCheck size={16} style={{marginRight: '8px'}} /> Status <SortIcon columnKey="status" />
                       </div>
                     </th>
-                    {/* --- COLUNA 2: ID --- */}
+                    <th style={{ padding: "16px 12px" }}>
+                      <div onClick={() => requestSort('filial')} className="th-sortable">
+                        <Landmark size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" />
+                      </div>
+                    </th>
+                    {/* --- Fim da Troca --- */}
+
                     <th style={{ padding: "16px 12px" }}>
                       <div onClick={() => requestSort('id')} className="th-sortable">
                         <Hash size={16} style={{marginRight: '8px'}} /> ID <SortIcon columnKey="id" />
                       </div>
                     </th>
-                    {/* --- COLUNA 3: NOME --- */}
                     <th style={{ padding: "16px 12px" }}>
                       <div onClick={() => requestSort('nome')} className="th-sortable">
                         <MapPin size={16} style={{marginRight: '8px'}}/> Nome do Item <SortIcon columnKey="nome" />
                       </div>
                     </th>
-                    {/* --- COLUNA 4: SAFRA --- */}
-                    <th style={{ padding: "16px 12px" }}>
-                      <div onClick={() => requestSort('safra')} className="th-sortable">
-                        <Calendar size={16} style={{marginRight: '8px'}} /> Safra <SortIcon columnKey="safra" />
-                      </div>
-                    </th>
-                    {/* --- COLUNA 5: BLOCO --- */}
+                    
+                    {/* --- ATUALIZAÇÃO 20: Colunas 'Safra' e 'Cultura' removidas --- */}
+
                     <th style={{ padding: "16px 12px" }}>
                       <div onClick={() => requestSort('bloco')} className="th-sortable">
                         <FileBadge size={16} style={{marginRight: '8px'}} /> Bloco <SortIcon columnKey="bloco" />
                       </div>
                     </th>
-                    {/* --- COLUNA 6: CULTURA --- */}
-                    <th style={{ padding: "16px 12px" }}>
-                      <div onClick={() => requestSort('cultura')} className="th-sortable">
-                        <Trees size={16} style={{marginRight: '8px'}} /> Cultura <SortIcon columnKey="cultura" />
-                      </div>
-                    </th>
-                    {/* --- COLUNA 7: ÁREA (ha) --- */}
                     <th style={{ padding: "16px 12px", textAlign: 'center' }}>
                       <div onClick={() => requestSort('ha')} className="th-sortable" style={{justifyContent: 'center'}}>
                         <AreaChart size={16} style={{marginRight: '8px'}} /> Área (ha) <SortIcon columnKey="ha" />
                       </div>
                     </th>
-                    {/* --- COLUNA 8: AÇÕES --- */}
                     <th style={{ padding: "16px 12px", textAlign: 'center' }}>
                       <div className="th-sortable" style={{justifyContent: 'center'}}>
                         <Settings2 size={16} style={{marginRight: '8px'}} /> Ações
@@ -985,8 +1092,8 @@ export default function GestaoPivoPage() {
 
                     return (
                       <tr key={item.key} className="data-row">
+                        {/* --- ATUALIZAÇÃO 18: Ordem Trocada --- */}
                         <td data-label="Status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
-                          {/* ATUALIZAÇÃO 1: Lógica do badge corrigida */}
                           <span
                             className="status-badge"
                             style={{
@@ -998,14 +1105,16 @@ export default function GestaoPivoPage() {
                             {item.status}
                           </span>
                         </td>
+                        <td data-label="Filial" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{item.filial}</td>
+                        {/* --- Fim da Troca --- */}
+                        
                         <td data-label="ID" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{item.id}</td>
                         <td data-label="Nome do Item" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{item.nome}</td>
-                        <td data-label="Safra" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{item.safra}</td>
+                        
+                        {/* --- ATUALIZAÇÃO 20: 'Safra' e 'Cultura' removidas --- */}
+                        
                         <td data-label="Bloco" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
                           {item.bloco || '—'}
-                        </td>
-                        <td data-label="Cultura" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
-                          {item.cultura || '—'}
                         </td>
                         <td data-label="Área (ha)" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           {item.ha ? item.ha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
@@ -1044,7 +1153,7 @@ export default function GestaoPivoPage() {
       </div>
     </div>
 
-    {/* --- MODAIS --- */}
+    {/* --- MODAIS (Componentes locais) --- */}
     
     <ModalPivo
       visible={isCrudModalOpen}
@@ -1053,16 +1162,15 @@ export default function GestaoPivoPage() {
       onClose={handleCloseCrudModal}
       onSave={handleSavePivo}
       isSaving={isSaving}
+      onOpenKmlModal={() => { console.log("Abrir modal KML")}} // Placeholder
     />
     
-
     <ModalPivoDetalhes
       visible={isDetalheModalOpen}
       onClose={handleCloseDetalheModal}
       item={currentItem}
     />
     
-
     <NotificationModal
         visible={notification.visible}
         type={notification.type}

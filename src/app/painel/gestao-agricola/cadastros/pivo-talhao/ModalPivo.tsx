@@ -1,51 +1,135 @@
-/*
- * =========================================================================
- * MODAL DE CRUD (ADICIONAR / EDITAR / EXCLUIR)
- * =========================================================================
- * - ATUALIZADO: Agora usa o layout de Glasmorfismo do seu exemplo.
- * - ATUALIZADO: Implementada a lógica de arrastar (drag).
- * - ATUALIZADO: Botões e estilos (light/dark) baseados no seu CSS.
- * - CORREÇÃO (Modo Escuro): Fundo do formulário e alertas agora
- * usam o glasmorfismo e não são mais brancos.
- * - ATUALIZAÇÃO (Validação): Adicionada regra de negócio para o campo NOME
- * (Uppercase, PIVO XXX, TALHAO AXX).
- * - ATUALIZAÇÃO (Padronização): Todos os campos de texto agora são
- * convertidos para MAIÚSCULAS automaticamente.
- * =========================================================================
- */
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Form, Input, InputNumber, Select, Button, Spin, Alert } from 'antd';
-import { AlertTriangle, Edit, Plus, Trash2 } from 'lucide-react';
+// ATUALIZAÇÃO: Importado 'Modal as AntModal' para o aviso de "Descartar"
+import { Form, Input, Select, Button, Spin, InputNumber, Alert, Upload, message, Modal as AntModal } from 'antd';
+import { AlertTriangle, Edit, Plus, Trash2, Paperclip, Check, Loader2, X as IconX, Ban } from 'lucide-react';
 
 const { Option } = Select;
 
-// Interface dos dados
-interface PivoTalhaoData {
-  id?: number;
-  nome?: string;
-  safra?: string;
-  bloco?: string | null;
-  ha?: number | null;
-  cultura?: string | null;
-  variedade?: string | null;
-  status?: string; // "Aberto" ou "Inativo"
+// --- ATUALIZAÇÃO: Opções de Cultura Definidas ---
+const CULTURAS_OPTIONS = [
+  { id: 1, nome: "ALGODAO" },
+  { id: 2, nome: "SOJA" },
+  { id: 3, nome: "MILHO" },
+  { id: 4, nome: "FEIJAO" },
+  { id: 5, nome: "MILHETO" },
+  { id: 6, nome: "CAFE" },
+];
+
+// Interface do Pivo/Talhão (campos removidos)
+interface PivoTalhao {
+  id: number;
+  key: string;
+  nome: string;
+  // safra: string; // REMOVIDO
+  filial: string; 
+  bloco: string | null;
+  ha: number | null;
+  // cultura: string | null; // REMOVIDO
+  // id_cultura: number | null; // REMOVIDO
+  // variedade: string | null; // REMOVIDO
+  gid_telemetria: string | null; 
+  kml: string | null; 
+  status: string; // "Aberto" ou "Inativo"
+  status_original: 'A' | 'I';
+  dt_inclusao: string;
+  dt_alteracao: string | null;
+  [key: string]: any;
 }
 
 interface ModalPivoProps {
   visible: boolean;
   mode: 'add' | 'edit' | 'delete';
-  initialData: Partial<PivoTalhaoData> | null;
+  initialData: Partial<PivoTalhao> | null;
   onClose: () => void;
   onSave: (data: any, mode: 'add' | 'edit' | 'delete') => Promise<void>;
   isSaving: boolean;
+  // --- Adicionado para o KML ---
+  onOpenKmlModal: () => void; // Prop para abrir o modal de upload KML
 }
 
-const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClose, onSave, isSaving }) => {
+// =========================================================================
+// --- FUNÇÕES DE NORMALIZAÇÃO E VALIDAÇÃO ---
+// =========================================================================
+
+// Normalizador: Converte o texto para maiúsculas
+const normalizeUppercase = (value: string) => (value || '').toUpperCase();
+
+/**
+ * Validador customizado para o nome do PIVÔ ou TALHÃO.
+ * Regras:
+ * 1. Deve ter pelo menos 2 palavras.
+ * 2. A segunda parte deve conter pelo menos 1 número.
+ * 3. Se a primeira palavra for "PIVO", a segunda parte deve ter exatamente 3 números.
+ */
+const validateNomePivoTalhao = (_: any, value: string) => {
+    if (!value) {
+        return Promise.reject(new Error('Por favor, insira o nome.'));
+    }
+
+    const parts = value.split(' ');
+    if (parts.length < 2) {
+        return Promise.reject(new Error('O nome deve conter pelo menos 2 palavras (ex: PIVO 001).'));
+    }
+
+    const [tipo, ...codigoParts] = parts;
+    const codigo = codigoParts.join(' '); // Caso o código tenha espaços (ex: TALHAO A 21)
+
+    // 2. Verifica se a segunda parte contém números
+    if (!/\d/.test(codigo)) {
+        return Promise.reject(new Error('A segunda parte do nome deve conter pelo menos 1 número.'));
+    }
+
+    // 3. Regra específica para "PIVO"
+    if (tipo.toUpperCase() === 'PIVO') {
+        // Remove não-números e verifica o comprimento
+        const numeros = codigo.replace(/\D/g, '');
+        if (numeros.length !== 3) {
+            return Promise.reject(new Error('Se for PIVO, o código deve ter exatamente 3 números (ex: 035).'));
+        }
+    }
+    
+    // Se for "TALHAO" ou outro, a regra de "conter número" já foi validada.
+    return Promise.resolve();
+};
+
+/**
+ * Parser para o InputNumber
+ * Remove todos os caracteres que NÃO são dígitos ou a PRIMEIRO separador (vírgula).
+ */
+const numberParser = (value: string | undefined): string => {
+    if (!value) return '';
+    
+    // 1. Substitui ponto por vírgula (para consistência no Brasil)
+    const valueWithComma = value.replace('.', ',');
+    
+    // 2. Remove todos os caracteres que NÃO são dígitos ou vírgula
+    const onlyNumbersAndComma = valueWithComma.replace(/[^0-9,]/g, '');
+    
+    // 3. Garante que haja apenas UMA vírgula
+    const parts = onlyNumbersAndComma.split(',');
+    if (parts.length <= 1) {
+        return onlyNumbersAndComma; // '123'
+    }
+    
+    // '123,45,67' -> ['123', '45', '67'] -> '123,4567'
+    return `${parts[0]},${parts.slice(1).join('')}`;
+};
+
+
+// =========================================================================
+// --- COMPONENTE DO MODAL ---
+// =========================================================================
+
+const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClose, onSave, isSaving, onOpenKmlModal }) => {
   const [form] = Form.useForm();
   
-  // --- Hooks de Arrastar (do seu exemplo) ---
+  // --- Estado do KML (do exemplo) ---
+  const [kmlFile, setKmlFile] = useState<File | null>(null);
+  const [kmlStatus, setKmlStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  
+  // --- Hooks de Arrastar (do ModalSafra_exemplo.tsx) ---
   const modalRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -54,43 +138,44 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
   // Popula o formulário
   useEffect(() => {
     if (visible) {
-      if (mode === 'add') {
-        form.resetFields();
-        form.setFieldsValue({ status: 'Aberto' });
-      } else if (initialData) {
-        form.setFieldsValue({
-          ...initialData,
-          status: initialData.status || 'Inativo',
-        });
-      }
+        if (mode === 'edit' || mode === 'delete') {
+            form.setFieldsValue({
+                ...initialData,
+                status: initialData?.status || 'Inativo',
+            });
+            // Define o status do KML
+            if (initialData?.kml) {
+                setKmlStatus('success');
+            } else {
+                setKmlStatus('idle');
+            }
+            setKmlFile(null); // Reseta o input de arquivo
+
+        } else if (mode === 'add') {
+            form.resetFields();
+            form.setFieldsValue({ status: 'Aberto' });
+            setKmlStatus('idle'); // Reseta KML
+            setKmlFile(null);
+        }
     }
-  }, [visible, initialData, mode, form]);
+  }, [visible, mode, initialData, form]);
 
   // Efeito para centralizar o modal ao abrir
   useEffect(() => {
     if (visible && modalRef.current) {
         const modal = modalRef.current;
-        // Garante que o modal de formulário seja um pouco maior
-        const modalWidth = 600; 
-        const initialX = (window.innerWidth - modalWidth) / 2;
-        const initialY = 40; 
+        const initialX = (window.innerWidth - modal.offsetWidth) / 2;
+        const initialY = 40; // Um pouco abaixo do topo
         setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
-        
-        // Foca no primeiro campo de input quando é 'add' ou 'edit'
-        if (mode === 'add' || mode === 'edit') {
-            const firstInput = modal.querySelector('input');
-            firstInput?.focus();
-        }
     }
-  }, [visible, mode]);
+  }, [visible]);
 
-
-  // --- Lógica de Arrastar (do seu exemplo) ---
+  // --- Lógica de Arrastar (do ModalSafra_exemplo.tsx) ---
   const handleMouseDown = (e: React.MouseEvent) => {
       if (modalRef.current) {
           const target = e.target as HTMLElement;
-          // Impede o "arrastar" ao clicar em inputs, selects ou botões
-          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.closest('button') || target.closest('.ant-select-selector')) {
+          // Impede o arraste se clicar em campos de formulário ou botões
+          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.closest('button') || target.closest('.ant-select-selector') || target.closest('.ant-input-number')) {
               return;
           }
           setIsDragging(true);
@@ -123,14 +208,185 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
   }, [isDragging, handleMouseMove, handleMouseUp]);
   // --- Fim da Lógica de Arrastar ---
 
+
+  // --- ATUALIZAÇÃO: Handler para fechar com confirmação ---
+  const handleTryClose = () => {
+    if (isSaving) return; // Não faz nada se estiver salvando
+
+    // ATUALIZAÇÃO: Detecta o tema
+    const isDark = document.body.classList.contains('dark');
+
+    // Verifica se o formulário foi alterado (apenas nos modos de edição)
+    if (mode !== 'delete' && form.isFieldsTouched()) {
+        AntModal.confirm({
+            title: 'Descartar alterações?',
+            content: 'Você tem alterações não salvas. Se fechar, perderá essas informações.',
+            icon: <AlertTriangle size={24} style={{ color: 'var(--gcs-orange)' }} />,
+            okText: 'Sim, Descartar',
+            // --- CORREÇÃO: Força o botão OK a ser 'danger' ---
+            okButtonProps: { 
+                danger: true, 
+                style: { backgroundColor: 'var(--gcs-brand-red)', borderColor: 'var(--gcs-brand-red)' } 
+            },
+            cancelText: 'Não, Continuar',
+            // --- CORREÇÃO: Força o botão Cancel a ser 'primary' (verde) ---
+            cancelButtonProps: { 
+                type: 'primary',
+                style: { backgroundColor: 'var(--gcs-green-dark)', borderColor: 'var(--gcs-green-dark)' }
+            },
+            onOk: onClose,
+            zIndex: 2147483648, // Maior que o modal principal (..47)
+            // ATUALIZAÇÃO: Aplica classe dark se o tema for dark
+            className: isDark ? 'ant-modal-dark' : '',
+        });
+    } else {
+        // Se não tiver alterações ou estiver no modo 'delete', fecha direto
+        onClose();
+    }
+  };
+
+
+  // --- LÓGICA DE UPLOAD KML (do exemplo) ---
+  const handleKmlFileChange = (info: any) => {
+      const file = info.file.originFileObj;
+      if (file) {
+          const isKml = file.name.toLowerCase().endsWith('.kml') || file.name.toLowerCase().endsWith('.kmz');
+          if (!isKml) {
+              message.error('Formato inválido. Use apenas .kml ou .kmz');
+              setKmlStatus('error');
+              return;
+          }
+          setKmlFile(file);
+          setKmlStatus('idle'); // Pronto para enviar
+      }
+  };
+
+  // Lógica de "deixe a implementar"
+  const handleKmlUpload = () => {
+      if (!kmlFile) return;
+      setKmlStatus('loading');
+      // SIMULAÇÃO DE UPLOAD
+      setTimeout(() => {
+          console.log("Simulando upload do KML:", kmlFile.name);
+          // Aqui viria a lógica real de fetch/axios para a API de upload
+          // Por ex: await fetch('/api/upload-kml', { ... });
+
+          // Em caso de sucesso:
+          setKmlStatus('success');
+          // Em caso de erro:
+          // setKmlStatus('error');
+          // message.error('Falha no upload.');
+      }, 2000);
+  };
+  
+  const handleRemoveKml = () => {
+      setKmlFile(null);
+      setKmlStatus('idle');
+      // Aqui também viria a lógica para notificar a API
+      // que o KML foi removido, caso já esteja salvo.
+  };
+
+  // Componente de UI para o KML (do exemplo)
+  const KMLUploadSection: React.FC = () => {
+      let statusText = "Nenhum arquivo KML carregado.";
+      let statusColor = "var(--gcs-gray-text, #6c757d)";
+      let showUpload = true;
+      let showRemove = false;
+      let statusData = "idle";
+
+      if (kmlStatus === 'loading') {
+          statusText = "Enviando arquivo...";
+          statusColor = "var(--gcs-blue-light, #1b4c89)";
+          showUpload = false;
+          statusData = "loading";
+      } else if (kmlStatus === 'success' && !kmlFile) {
+          statusText = `KML anexado ao Pivô.`;
+          statusColor = "var(--gcs-green-dark, #28a745)";
+          showUpload = false;
+          showRemove = true;
+          statusData = "success";
+      } else if (kmlFile) {
+          statusText = `Arquivo selecionado: ${kmlFile.name}`;
+          statusColor = "var(--gcs-dark-text, #333)";
+          showUpload = true;
+          showRemove = true;
+      } else if (initialData?.kml) {
+           statusText = `KML já anexado.`;
+           statusColor = "var(--gcs-green-dark, #28a745)";
+           showUpload = false;
+           showRemove = true;
+           statusData = "success";
+      }
+
+      return (
+          <div className="kml-upload-container">
+              <div className="kml-status-text" data-status={statusData} style={{ color: statusColor }}>
+                  {kmlStatus === 'loading' ? <Loader2 size={16} className="animate-spin" /> :
+                   (kmlStatus === 'success' || initialData?.kml) ? <Check size={16} /> :
+                   <Paperclip size={16} />}
+                  <span>{statusText}</span>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                  {showRemove && (
+                      <button 
+                          type="button" 
+                          className="btn-kml-remove" 
+                          onClick={handleRemoveKml}
+                          disabled={kmlStatus === 'loading' || isSaving}
+                      >
+                          <IconX size={16} /> Remover
+                      </button>
+                  )}
+                  {showUpload && (
+                      <Upload 
+                          beforeUpload={() => false} // Impede o upload automático
+                          onChange={handleKmlFileChange}
+                          showUploadList={false}
+                          accept=".kml,.kmz"
+                          disabled={kmlStatus === 'loading' || isSaving}
+                      >
+                          <button 
+                              type="button" 
+                              className="btn-kml-upload"
+                              disabled={kmlStatus === 'loading' || isSaving}
+                          >
+                              {kmlFile ? 'Trocar' : 'Procurar...'}
+                          </button>
+                      </Upload>
+                  )}
+                  {kmlFile && kmlStatus !== 'loading' && (
+                       <button 
+                          type="button" 
+                          className="btn-kml-upload-go"
+                          onClick={handleKmlUpload}
+                          disabled={isSaving}
+                       >
+                          Enviar
+                       </button>
+                  )}
+              </div>
+          </div>
+      );
+  };
+
+
   // Handler para submeter o formulário (Add/Edit)
   const handleSubmit = () => {
     form.validateFields()
       .then(values => {
-        const dataToSave = {
-          ...initialData,
-          ...values,
+        
+        const dataToSave: Partial<PivoTalhao> = {
+          ...initialData, // Mantém IDs e outros campos não-editáveis
+          ...values,     // Sobrescreve com os valores do formulário
         };
+        
+        // --- ATUALIZAÇÃO: Remove campos que não devem ser enviados ---
+        delete dataToSave.safra;
+        delete dataToSave.cultura;
+        delete dataToSave.id_cultura;
+        delete dataToSave.variedade;
+
         onSave(dataToSave, mode);
       })
       .catch(info => {
@@ -145,91 +401,55 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
     }
   };
 
-  // --- ATUALIZAÇÃO: Validador Customizado para o Nome ---
-  const validateNome = (_, value: string) => {
-    if (!value) {
-      return Promise.reject(new Error('Por favor, insira o nome.'));
-    }
-    
-    // A normalização já faz o uppercase, mas garantimos o trim
-    const upperValue = value.trim(); 
-    const parts = upperValue.split(' ').filter(p => p.length > 0); // Split e remove espaços extras
-
-    if (parts.length < 2) {
-      return Promise.reject(new Error('O nome deve ter pelo menos duas palavras (ex: PIVO 001, TALHAO A21).'));
-    }
-
-    const primeiraPalavra = parts[0];
-    const resto = parts.slice(1).join(' ');
-
-    // Regra 1: O resto deve conter um número
-    if (!/\d/.test(resto)) {
-      return Promise.reject(new Error('A segunda parte do nome deve conter pelo menos um número.'));
-    }
-
-    // Regra 2: Regra específica para PIVO
-    if (primeiraPalavra === 'PIVO' && !/^\d{3}$/.test(resto)) {
-      return Promise.reject(new Error('Para "PIVO", a segunda parte deve ser exatamente 3 números (ex: PIVO 035).'));
-    }
-    
-    // Se for TALHAO ou outro, a regra 1 (conter um número) é suficiente.
-    return Promise.resolve();
-  };
-
   // --- Títulos e Ícones Dinâmicos ---
-  let title = '';
-  let Icon = Plus;
-  let okText = 'Salvar';
-  let okColor = 'var(--gcs-green-dark)'; // Verde Padrão
-
-  if (mode === 'add') {
-    title = 'Cadastrar Novo Pivô/Talhão';
-    Icon = Plus;
-    okText = 'Cadastrar';
-  } else if (mode === 'edit') {
-    title = 'Alterar Pivô/Talhão';
-    Icon = Edit;
-    okText = 'Salvar Alterações';
-  } else if (mode === 'delete') {
-    title = 'Excluir Pivô/Talhão';
-    Icon = AlertTriangle;
-    okText = 'Excluir';
-    okColor = 'var(--gcs-brand-red)'; // Vermelho para Excluir
-  }
+  const config = {
+    add: {
+      title: 'Cadastrar Novo Pivô/Talhão',
+      icon: <Plus size={20} color="var(--gcs-green, #5FB246)" />,
+      okText: 'Salvar',
+      okColor: 'var(--gcs-green-dark, #28a745)',
+    },
+    edit: {
+      title: 'Alterar Pivô/Talhão',
+      icon: <Edit size={20} color="var(--gcs-blue, #00314A)" />,
+      okText: 'Salvar Alterações',
+      okColor: 'var(--gcs-green-dark, #28a745)',
+    },
+    delete: {
+      title: 'Excluir Pivô/Talhão',
+      icon: <AlertTriangle size={20} color="var(--gcs-brand-red, #d9534f)" />,
+      okText: 'Excluir',
+      okColor: 'var(--gcs-brand-red, #d9534f)',
+    },
+  };
+  const currentConfig = config[mode];
 
   const modalTitle = (
     <div className="modal-pivo-crud-title">
-      <Icon size={20} color={mode === 'delete' ? okColor : 'var(--gcs-blue)'} />
-      <span>{title}</span>
+      {/* O Ícone no modo escuro precisa ter a cor do texto */}
+      <span className="modal-pivo-crud-icon-wrapper">{currentConfig.icon}</span>
+      <span>{currentConfig.title}</span>
     </div>
   );
 
   if (!visible) return null;
 
-  // ATUALIZAÇÃO: Helper para normalização
-  const normalizeUpper = (value: string) => (value ? value.toUpperCase() : '');
-
   return (
     <>
       {/* --- ESTILOS DO ModalSafra_exemplo.tsx --- */}
-      {/* Classes renomeadas para '.modal-pivo-crud-' */}
+      {/* (Classes prefixadas com '.modal-pivo-crud-') */}
       <style>{`
+        /* --- Variáveis --- */
         :root {
             --gcs-blue: #00314A;
             --gcs-blue-light: #1b4c89;
-            --gcs-blue-lighter: #a3b8d1;
-            --gcs-blue-sky: #7DD3FC;
+            --gcs-orange: #F58220;
             --gcs-green: #5FB246;
             --gcs-green-dark: #28a745;
-            --gcs-orange: #F58220;
-            --gcs-gray-light: #f1f5fb;
-            --gcs-gray-border: #d0d7e2;
-            --gcs-gray-text: #6c757d;
-            --gcs-dark-text: #333;
             --gcs-brand-red: #d9534f;
-            --gcs-red-light: #fff0f0;
-            --gcs-red-border: #f5c2c7;
-            --gcs-red-text: #721c24;
+            --gcs-gray-light: #f1f5fb;
+            --gcs-dark-text: #333;
+            --gcs-gray-text: #6c757d; /* Adicionado */
             --gcs-dark-bg-transparent: rgba(25, 39, 53, 0.5);
             --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
             --gcs-dark-border: rgba(125, 173, 222, 0.2);
@@ -300,8 +520,11 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
             gap: 10px;
         }
         body.light .modal-pivo-crud-title { color: var(--gcs-blue); }
-        body.dark .modal-pivo-crud-title { color: var(--gcs-dark-text-primary); }
-        body.dark .modal-pivo-crud-title svg { color: var(--gcs-dark-text-primary) !important; }
+        /* Correção para o ícone do header no modo escuro */
+        body.dark .modal-pivo-crud-title,
+        body.dark .modal-pivo-crud-icon-wrapper svg { 
+            color: var(--gcs-dark-text-primary) !important; 
+        }
         
         .modal-pivo-crud-close-btn {
             background: none;
@@ -327,14 +550,12 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
             overflow-y: auto;
             padding: 1.5rem;
         }
-        
-        /* CORREÇÃO MODO ESCURO */
-        body.dark .modal-pivo-crud-content-wrapper .ant-spin-container,
-        body.dark .modal-pivo-crud-content-wrapper .ant-spin-blur {
+        /* Correção para o Fundo Branco do Ant Spin no modo escuro */
+        body.dark .ant-spin-container,
+        body.dark .ant-alert {
             background: transparent !important;
         }
-        /* FIM CORREÇÃO */
-
+        
         /* --- Modal Footer --- */
         .modal-pivo-crud-footer {
             padding: 1rem 1.5rem;
@@ -357,11 +578,12 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
             border-top-color: var(--gcs-dark-border);
         }
 
-        /* --- Botões AntD (Estilos globais) --- */
+        /* --- Botões AntD (Estilos globais, não precisam de prefixo) --- */
         .btn-cancelar-laranja {
             background-color: var(--gcs-orange) !important;
             border-color: var(--gcs-orange) !important;
             color: white !important;
+            font-weight: 600;
         }
         .btn-cancelar-laranja:hover:not(:disabled) {
             background-color: #d17814 !important; /* Laranja mais escuro */
@@ -384,13 +606,12 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
              background-color: #b01725;
         }
 
+
         /* --- ESTILOS PARA Antd Form (Globais) --- */
         body.dark .ant-form-item-label > label {
             color: var(--gcs-dark-text-primary);
         }
         body.dark .ant-input,
-        body.dark .ant-input-number-input,
-        body.dark .ant-input-number,
         body.dark .ant-select-selector {
             background: var(--gcs-dark-bg-transparent) !important;
             border: 1px solid var(--gcs-dark-border) !important;
@@ -398,18 +619,55 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
         }
         body.dark .ant-input:focus,
         body.dark .ant-input-focused,
-        body.dark .ant-input-number-focused,
         body.dark .ant-select-focused .ant-select-selector {
             border-color: var(--gcs-dark-border-hover) !important;
             box-shadow: none !important;
         }
-        body.dark .ant-input::placeholder,
-        body.dark .ant-input-number-input::placeholder {
+        body.dark .ant-input::placeholder {
             color: var(--gcs-dark-text-tertiary);
         }
         body.dark .ant-select-arrow {
             color: var(--gcs-dark-text-tertiary) !important;
         }
+        
+        /* --- Correção Placeholders Escuros --- */
+        body.dark .ant-select-selection-placeholder {
+            color: var(--gcs-dark-text-tertiary) !important;
+        }
+        body.dark .ant-input-number-input::placeholder {
+            color: var(--gcs-dark-text-tertiary) !important;
+        }
+        /* --- Fim Correção Placeholders --- */
+
+        /* --- InputNumber (CORREÇÃO 10) --- */
+        body.dark .ant-input-number {
+             background: var(--gcs-dark-bg-transparent) !important;
+             border: 1px solid var(--gcs-dark-border) !important;
+             color: var(--gcs-dark-text-primary) !important;
+        }
+        /* Corrigir o texto do input (preto no escuro) */
+        body.dark .ant-input-number-input {
+             color: var(--gcs-dark-text-primary) !important;
+        }
+        body.dark .ant-input-number::placeholder {
+             color: var(--gcs-dark-text-tertiary);
+        }
+        body.dark .ant-input-number:focus-within,
+        body.dark .ant-input-number-focused {
+            border-color: var(--gcs-dark-border-hover) !important;
+            box-shadow: none !important;
+        }
+        /* Corrigir os botões de seta */
+        body.dark .ant-input-number-handler {
+             background: var(--gcs-dark-bg-transparent) !important;
+             color: var(--gcs-dark-text-tertiary) !important;
+             border-left-color: var(--gcs-dark-border) !important;
+        }
+         body.dark .ant-input-number-handler-up:hover,
+         body.dark .ant-input-number-handler-down:hover {
+            background: var(--gcs-dark-border-hover) !important;
+         }
+
         /* Dropdown do Select */
         body.dark .ant-select-dropdown {
             background: var(--gcs-dark-bg-heavy) !important;
@@ -425,27 +683,130 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
             background: var(--gcs-blue-light) !important;
             color: white !important;
         }
+        /* --- Fim dos estilos Antd --- */
+
+        /* --- Estilos KML (do exemplo) --- */
+        .kml-upload-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #d0d7e2; /* --gcs-gray-border */
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+        body.dark .kml-upload-container {
+            border-color: var(--gcs-dark-border);
+        }
         
-        /* CORREÇÃO MODO ESCURO */
+        .kml-status-text {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        body.light .kml-status-text { color: var(--gcs-gray-text); }
+        body.dark .kml-status-text { color: var(--gcs-dark-text-secondary); }
+        body.dark .kml-status-text[data-status="success"] { color: var(--gcs-green-dark); }
+        body.light .kml-status-text[data-status="success"] { color: var(--gcs-green-dark); }
+        body.dark .kml-status-text[data-status="loading"] { color: var(--gcs-blue-sky); }
+        body.light .kml-status-text[data-status="loading"] { color: var(--gcs-blue-light); }
+
+        .btn-kml-upload, .btn-kml-remove, .btn-kml-upload-go {
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid #d0d7e2; /* --gcs-gray-border */
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-kml-upload { background: #fff; color: var(--gcs-blue-light); }
+        .btn-kml-upload-go { background: var(--gcs-green-dark); color: white; border-color: var(--gcs-green-dark); }
+        .btn-kml-remove { background: #fff; color: var(--gcs-brand-red); border-color: transparent; }
+        .btn-kml-upload:hover:not(:disabled) { background: #f8f9fa; }
+        .btn-kml-remove:hover:not(:disabled) { background: #fff5f5; border-color: #ffc9c9; }
+        .btn-kml-upload-go:hover:not(:disabled) { background: #218838; }
+
+        body.dark .btn-kml-upload, body.dark .btn-kml-remove {
+            background: var(--gcs-dark-bg-transparent);
+            border-color: var(--gcs-dark-border-hover);
+            color: var(--gcs-dark-text-secondary);
+        }
+        body.dark .btn-kml-upload:hover:not(:disabled) { background: rgba(125, 173, 222, 0.2); }
+        body.dark .btn-kml-remove { color: #F87171; }
+        body.dark .btn-kml-remove:hover:not(:disabled) { background: rgba(248, 113, 113, 0.1); }
+        body.dark .btn-kml-upload-go { background: var(--gcs-green-dark); border-color: var(--gcs-green-dark); color: white; }
+        body.dark .btn-kml-upload-go:hover:not(:disabled) { background: #2f9e44; }
+        
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* --- Fim Estilos KML --- */
+
+
+        /* --- Estilos Modo Excluir (Prefixados) --- */
+        .delete-confirmation-box {
+            padding: 1rem 0;
+        }
         body.dark .ant-alert-error {
-            background-color: rgba(217, 83, 79, 0.1) !important;
-            border: 1px solid rgba(217, 83, 79, 0.3) !important;
+             background-color: rgba(217, 83, 79, 0.1);
+             border-color: rgba(217, 83, 79, 0.3);
         }
         body.dark .ant-alert-error .ant-alert-message {
-            color: #F87171 !important;
+             color: #F87171; /* Vermelho claro */
         }
-        body.dark .ant-alert-error .ant-alert-description p {
-             color: var(--gcs-dark-text-secondary);
-        }
+        body.dark .ant-alert-error .ant-alert-description p,
         body.dark .ant-alert-error .ant-alert-description strong {
-             color: var(--gcs-dark-text-primary);
+            color: var(--gcs-dark-text-secondary);
         }
-        /* FIM CORREÇÃO */
+        
+        /* --- ATUALIZAÇÃO: Estilos do Modal de Confirmação (Dark Mode) --- */
+        .ant-modal-dark .ant-modal-content {
+            background: var(--gcs-dark-bg-heavy) !important;
+        }
+        .ant-modal-dark .ant-modal-header {
+            background: rgba(25, 39, 53, 0.5) !important;
+            border-bottom-color: var(--gcs-dark-border) !important;
+        }
+        /* CORREÇÃO: Alvo específico para o título e conteúdo do 'confirm' */
+        .ant-modal-dark .ant-modal-confirm-title {
+            color: var(--gcs-dark-text-primary) !important;
+        }
+        .ant-modal-dark .ant-modal-confirm-content {
+             color: var(--gcs-dark-text-secondary) !important;
+        }
+        .ant-modal-dark .ant-modal-confirm-btns { /* Target dos botões */
+            border-top-color: var(--gcs-dark-border) !important;
+            padding-top: 12px !important; /* Ajuste do AntD */
+        }
+
+        /* --- CORREÇÃO: Força a cor dos botões do modal de confirmação --- */
+        .ant-modal-confirm-btns .ant-btn-primary:not(.ant-btn-dangerous) {
+             background-color: var(--gcs-green-dark) !important;
+             border-color: var(--gcs-green-dark) !important;
+        }
+        .ant-modal-confirm-btns .ant-btn-primary:not(.ant-btn-dangerous):hover {
+             background-color: #1e7e34 !important;
+             border-color: #1e7e34 !important;
+        }
+        .ant-modal-confirm-btns .ant-btn-dangerous {
+            background-color: var(--gcs-brand-red) !important;
+            border-color: var(--gcs-brand-red) !important;
+        }
+        .ant-modal-confirm-btns .ant-btn-dangerous:hover {
+            background-color: #b01725 !important;
+            border-color: #b01725 !important;
+        }
+        /* --- Fim da Correção --- */
       `}</style>
 
+      {/* ATUALIZAÇÃO: backdrop agora chama handleTryClose */}
       <div 
         className="modal-pivo-crud-backdrop"
-        onClick={onClose}
+        onClick={handleTryClose}
       ></div>
       
       <div
@@ -461,18 +822,20 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
             className="modal-pivo-crud-header"
           >
             {modalTitle}
-            <button onClick={onClose} className="modal-pivo-crud-close-btn" aria-label="Fechar">×</button>
+            {/* ATUALIZAÇÃO: "X" agora chama handleTryClose e é desabilitado */}
+            <button onClick={handleTryClose} className="modal-pivo-crud-close-btn" disabled={isSaving}>×</button>
           </div>
 
+          {/* ATUALIZAÇÃO: Removido o <Spin> wrapper */}
           <div className="modal-pivo-crud-content-wrapper">
-              <Spin spinning={isSaving} tip="Processando...">
-                  <div className="modal-pivo-crud-content-scrollable">
+              <div className="modal-pivo-crud-content-scrollable">
 
-                    {/* --- Conteúdo do Modal --- */}
-                    
-                    {mode === 'delete' ? (
-                      // --- MODO EXCLUIR ---
-                      <Alert
+                {/* --- Conteúdo do Modal --- */}
+                
+                {mode === 'delete' ? (
+                  // --- MODO EXCLUIR ---
+                  <div className="delete-confirmation-box">
+                    <Alert
                         message="Confirmação de Exclusão"
                         description={
                           <p>
@@ -485,103 +848,117 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
                         type="error"
                         showIcon
                         icon={<AlertTriangle size={24} />}
-                      />
-                    ) : (
-                      // --- MODO ADICIONAR / EDITAR ---
-                      <Form form={form} layout="vertical" name="form_in_modal">
-                        
-                        <Form.Item
-                          name="nome"
-                          label="Nome do Pivô/Talhão"
-                          // ATUALIZAÇÃO: Adiciona normalize (uppercase) e validador customizado
-                          normalize={normalizeUpper}
-                          rules={[{ validator: validateNome }]}
-                        >
-                          <Input placeholder="Ex: PIVO 001" />
-                        </Form.Item>
-                        
-                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-                          <Form.Item
-                            name="safra"
-                            label="Safra"
-                            rules={[{ required: true, message: 'Por favor, insira a safra.' }]}
-                            normalize={normalizeUpper} // <-- ATUALIZAÇÃO
-                          >
-                            <Input placeholder="Ex: 2024/25" />
-                          </Form.Item>
-
-                          <Form.Item
-                            name="status"
-                            label="Status"
-                            rules={[{ required: true, message: 'Por favor, selecione o status.' }]}
-                          >
-                            <Select>
-                              <Option value="Aberto">Aberto</Option>
-                              <Option value="Inativo">Inativo</Option>
-                            </Select>
-                          </Form.Item>
-                        </div>
-                        
-                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-                            <Form.Item
-                                name="bloco"
-                                label="Bloco"
-                                normalize={normalizeUpper} // <-- ATUALIZAÇÃO
-                            >
-                                <Input placeholder="Ex: Bloco A" />
-                            </Form.Item>
-
-                            <Form.Item
-                                name="ha"
-                                label="Área (ha)"
-                                rules={[{ type: 'number', message: 'Deve ser um número.' }]}
-                            >
-                                <InputNumber min={0} style={{ width: '100%' }} placeholder="Ex: 63.10" decimalSeparator="," />
-                            </Form.Item>
-                        </div>
-
-                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-                            <Form.Item
-                                name="cultura"
-                                label="Cultura"
-                                normalize={normalizeUpper} // <-- ATUALIZAÇÃO
-                            >
-                                <Input placeholder="Ex: Soja" />
-                            </Form.Item>
-
-                            <Form.Item
-                                name="variedade"
-                                label="Variedade"
-                                normalize={normalizeUpper} // <-- ATUALIZAÇÃO
-                            >
-                                <Input placeholder="Ex: TMG 7062 IPRO" />
-                            </Form.Item>
-                        </div>
-                      </Form>
-                    )}
-
+                    />
                   </div>
-              </Spin>
+                ) : (
+                  // --- MODO ADICIONAR / EDITAR ---
+                  // ATUALIZAÇÃO: Formulário é desabilitado se 'isSaving' for true
+                  <Form form={form} layout="vertical" name="form_in_modal" disabled={isSaving}>
+                    
+                    <Form.Item
+                      name="nome"
+                      label="Nome do Pivô/Talhão"
+                      rules={[{ validator: validateNomePivoTalhao }]} // Validador customizado
+                      normalize={normalizeUppercase} // Sempre maiúsculo
+                      validateTrigger="onBlur" // Valida ao sair do campo
+                    >
+                      <Input placeholder="Ex: PIVO 001 ou TALHAO A21" />
+                    </Form.Item>
+                    
+                    {/* --- ATUALIZAÇÃO: Linha 2 - Apenas Filial --- */}
+                    <Form.Item
+                      name="filial"
+                      label="Filial"
+                      rules={[{ required: true, message: 'Selecione a filial.' }]}
+                    >
+                      <Select 
+                        placeholder="Ex: 0401"
+                        // ATUALIZAÇÃO: Força o z-index
+                        dropdownStyle={{ zIndex: 2147483648 }}
+                      >
+                        <Option value="0401">0401</Option>
+                        <Option value="0402">0402</Option>
+                      </Select>
+                    </Form.Item>
+
+                    {/* --- LINHA 3: BLOCO, ÁREA, GID --- */}
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px'}}>
+                      <Form.Item
+                        name="bloco"
+                        label="Bloco"
+                        normalize={normalizeUppercase}
+                      >
+                        <Input placeholder="Ex: BLOCO A" />
+                      </Form.Item>
+
+                      <Form.Item
+                        name="ha"
+                        label="Área (ha)"
+                        rules={[{ type: 'number', message: 'Deve ser um número.' }]}
+                      >
+                        <InputNumber
+                            min={0}
+                            style={{ width: '100%' }}
+                            placeholder="Ex: 63,10"
+                            decimalSeparator="," // Aceita vírgula
+                            step="0.01" // Permite incrementos decimais
+                            parser={numberParser} // Aplica o parser para limpar letras
+                         />
+                      </Form.Item>
+                      
+                      <Form.Item
+                        name="gid_telemetria"
+                        label="GID Telemetria"
+                        normalize={normalizeUppercase}
+                      >
+                        <Input placeholder="Ex: GID-001" />
+                      </Form.Item>
+                    </div>
+
+                    {/* --- LINHA 4: KML --- */}
+                    <Form.Item label="Arquivo KML">
+                       <KMLUploadSection />
+                    </Form.Item>
+                    
+                    {/* --- ATUALIZAÇÃO: LINHA 5: Status (movido) --- */}
+                    <Form.Item
+                      name="status"
+                      label="Status"
+                      rules={[{ required: true, message: 'Por favor, selecione o status.' }]}
+                    >
+                      {/* ATUALIZAÇÃO: Força o z-index */}
+                      <Select dropdownStyle={{ zIndex: 2147483648 }}>
+                        <Option value="Aberto">Aberto</Option>
+                        <Option value="Inativo">Inativo</Option>
+                      </Select>
+                    </Form.Item>
+
+                  </Form>
+                )}
+
+              </div>
           </div>
           
           <div className="modal-pivo-crud-footer">
+            {/* ATUALIZAÇÃO: "Cancelar" agora chama handleTryClose e é desabilitado */}
             <Button 
                 key="back" 
-                onClick={onClose} 
+                onClick={handleTryClose} 
                 disabled={isSaving}
-                className="btn-cancelar-laranja" // Botão Laranja
+                className="btn-cancelar-laranja"
             >
               Cancelar
             </Button>
+            {/* ATUALIZAÇÃO: Botão de "OK" agora tem o loading embutido */}
             <Button
               key="submit"
               type="primary"
               loading={isSaving} // Spinner embutido
               disabled={isSaving} // Desativa o botão
               onClick={mode === 'delete' ? handleDelete : handleSubmit}
-              style={{ backgroundColor: okColor, borderColor: okColor }}
+              style={{ backgroundColor: currentConfig.okColor, borderColor: currentConfig.okColor }}
             >
-              {okText}
+              {currentConfig.okText}
             </Button>
           </div>
       </div>
