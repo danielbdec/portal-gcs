@@ -252,26 +252,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
     // --- FIM DO MÓDULO ---
 
-    // === MÓDULO: GESTÃO DE PESSOAL (NOVO) ===
-    const gestaoPessoalSubItems: any[] = [];
-    if (isAdmin || user.funcoes?.includes("gestao.funcionario")) {
-      gestaoPessoalSubItems.push({
-        key: "gestaoFuncionarios",
-        icon: <Users size={18} color="white" />,
-        label: "Funcionários",
-        onClick: () => router.push("/painel/pessoas/gestao-funcionarios"),
-      });
-    }
-    if (gestaoPessoalSubItems.length > 0) {
-      menuItems.push({
-        key: "gestaopessoal",
-        icon: <Users size={iconSize} color="white" />,
-        label: "Gestão de Pessoas",
-        children: gestaoPessoalSubItems,
-      });
-    }
-    // === FIM DO MÓDULO DE PESSOAL ===
-
     // Sub-itens do menu Agrogestor
     const agrogestorSubItems: any[] = [];
     
@@ -340,10 +320,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (pathname.startsWith("/painel/gestao-agricola/caderno-agricola")) return "cadernoAgricola";
       if (pathname.startsWith("/painel/gestao-agricola/cadastros/pivo-talhao")) return "pivoTalhao";
       // --- FIM DA ATUALIZAÇÃO ---
-
-      // --- ATUALIZAÇÃO GETSELECTEDKEY (Pessoal) ---
-      if (pathname.startsWith("/painel/pessoas/gestao-funcionarios")) return "gestaoFuncionarios";
-      // --- FIM (Pessoal) ---
 
       // Agrogestor
       if (pathname.startsWith("/painel/agrogestor/empreendimento")) return "agrogestorEmpreendimentos";

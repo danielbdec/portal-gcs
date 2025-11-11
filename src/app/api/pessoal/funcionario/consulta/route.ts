@@ -1,0 +1,49 @@
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth"; // Ajuste este caminho se a sua lib de auth estiver em outro local
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(request: NextRequest) {
+  try {
+    // 1. Valida a sessão do usuário no servidor
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ message: "Usuário não autenticado" }, { status: 401 });
+    }
+
+    // 2. Define o endpoint do webhook do n8n (baseado no 'path' do seu fluxo)
+    const webhookUrl = "http://localhost:5678/webhook/pessoal-funcionario-consulta";
+
+    // 3. Chama o webhook
+    const webhookResponse = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        // Envia o e-mail do usuário (mantendo o padrão, caso o webhook precise)
+        email: session.user.email,
+      }),
+      cache: "no-store", // Garante que os dados sejam sempre frescos
+    });
+
+    // 4. Trata erros vindos do n8n
+    if (!webhookResponse.ok) {
+      const errorText = await webhookResponse.text();
+      console.error("A chamada ao webhook de consulta de funcionário falhou:", errorText);
+      return new NextResponse(errorText || "O serviço de consulta de funcionário retornou um erro.", { status: webhookResponse.status });
+    }
+
+    // 5. O n8n está configurado para "respondWith": "json", então lemos a resposta como JSON
+    const jsonResponse = await webhookResponse.json();
+
+    // 6. Retorna o JSON (array de dados) para o cliente
+    return new NextResponse(JSON.stringify(jsonResponse), {
+        status: 200,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+  } catch (e) {
+    console.error("Erro no handler da rota (pessoal-funcionario-consulta):", e);
+    return NextResponse.json({ message: "Erro inesperado no servidor" }, { status: 500 });
+  }
+}
