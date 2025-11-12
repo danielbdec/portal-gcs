@@ -18,11 +18,10 @@ import {
   FolderArchive,
   Banknote,
   Send,
-  ChevronUp,
-  ChevronDown,
+  ChevronUp, 
+  ChevronDown, 
   FileText, // Ícone principal de Gestão Agrícola
-  MapPin,   // ÍCONE ADICIONADO PARA PIVÔ
-  Leaf,     // <<< 📌 ÍCONE ADICIONADO AQUI
+  MapPin,   // <<< ÍCONE ADICIONADO PARA PIVÔ
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
 import Image from "next/image";
@@ -69,7 +68,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       setIsOverflowing(hasOverflow);
     };
 
-    checkOverflow();
+    checkOverflow(); 
 
     const resizeObserver = new ResizeObserver(checkOverflow);
     resizeObserver.observe(container);
@@ -101,7 +100,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           menuContainerRef.current.scrollTop += scrollAmount;
         }
       }
-    }, 25);
+    }, 25); 
   };
 
   const stopScroll = () => {
@@ -242,22 +241,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/gestao-agricola/cadastros/pivo-talhao"),
       });
     }
-
-    // ==================================================================
-    // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
-    // ==================================================================
-    // --- ITEM 3: VARIEDADES (NOVO) ---
-    if (isAdmin || user.funcoes?.includes("gestao.agricola.cultivar")) {
-      gestaoAgricolaSubItems.push({
-        key: "variedades",
-        icon: <Leaf size={18} color="white" />, // <<< ÍCONE TROCADO
-        label: "Variedades",
-        onClick: () => router.push("/painel/gestao-agricola/cadastros/variedades"),
-      });
-    }
-    // ==================================================================
-    // ===                       FIM DA ALTERAÇÃO                     ===
-    // ==================================================================
     
     if (gestaoAgricolaSubItems.length > 0) {
       menuItems.push({
@@ -303,8 +286,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       });
     }
     if (isAdmin || user.funcoes?.includes("agrogestor.condicionantes")) {
-      agrogestorSubItems.push({
-        key: "agrogestorCondicionantes",
+      agrogestorSubItems.push({ 
+        key: "agrogestorCondicionantes", 
         icon: <Newspaper size={18} color="white" />,
         label: "Condicionantes",
         onClick: () => router.push("/painel/agrogestor/condicionantes"),
@@ -356,7 +339,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       // --- ATUALIZAÇÃO DO GETSELECTEDKEY (Gestão Agrícola) ---
       if (pathname.startsWith("/painel/gestao-agricola/caderno-agricola")) return "cadernoAgricola";
       if (pathname.startsWith("/painel/gestao-agricola/cadastros/pivo-talhao")) return "pivoTalhao";
-      if (pathname.startsWith("/painel/gestao-agricola/cadastros/variedades")) return "variedades";
       // --- FIM DA ATUALIZAÇÃO ---
 
       // --- ATUALIZAÇÃO GETSELECTEDKEY (Pessoal) ---
@@ -397,7 +379,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     return (
       <div style={{ display: "flex", height: "100vh" }}>
         {/* ================================================================== */}
-        {/* INÍCIO DA SIDEBAR                                                */}
+        {/* INÍCIO DA SIDEBAR                                                  */}
         {/* ================================================================== */}
         <div
           onMouseEnter={() => setCollapsed(false)}
@@ -421,7 +403,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               padding: "1rem",
               paddingLeft: collapsed ? "0.5rem" : "1.5rem",
               paddingRight: collapsed ? "0.5rem" : "1.5rem",
-              flexShrink: 0,
+              flexShrink: 0, 
             }}
           >
             <Image
@@ -436,9 +418,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           {/* 2. SEÇÃO DO MENU (CENTRO, COM SCROLL) */}
           <div
             style={{
-              flex: 1,
-              position: "relative",
-              overflow: "hidden",
+              flex: 1, 
+              position: "relative", 
+              overflow: "hidden", 
             }}
           >
             {/* --- SETA PARA CIMA --- */}
@@ -462,24 +444,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
             {/* --- CONTAINER DE SCROLL REAL --- */}
             <div
-              ref={menuContainerRef}
+              ref={menuContainerRef} 
               style={{
-                height: "100%",
-                overflowY: "auto",
-                overflowX: "hidden",
-                padding: "0 0.5rem",
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
+                height: "100%", 
+                overflowY: "auto", 
+                overflowX: "hidden", 
+                padding: "0 0.5rem", 
+                scrollbarWidth: "none", 
+                msOverflowStyle: "none",  
               }}
-              className="custom-scrollbar-hidden"
+              className="custom-scrollbar-hidden" 
             >
               <Menu
                 mode="inline"
                 inlineCollapsed={collapsed}
                 selectedKeys={getSelectedKey() ? [getSelectedKey() as string] : []}
-                style={{
-                  background: "transparent",
-                  borderRight: 0,
+                style={{ 
+                  background: "transparent", 
+                  borderRight: 0, 
                   marginTop: "1rem",
                   paddingTop: isOverflowing ? "24px" : 0,
                   paddingBottom: isOverflowing ? "24px" : 0,
@@ -528,7 +510,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               padding: "1rem",
               paddingLeft: collapsed ? "0.5rem" : "1.5rem",
               paddingRight: collapsed ? "0.5rem" : "1.5rem",
-    
+      
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
@@ -545,7 +527,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
         {/* ================================================================== */}
-        {/* FIM DA SIDEBAR                                                   */}
+        {/* FIM DA SIDEBAR                                                     */}
         {/* ================================================================== */}
 
         <main style={{ flex: 1, overflow: "auto", padding: "1rem", position: "relative" }}>
