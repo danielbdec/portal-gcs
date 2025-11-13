@@ -2,20 +2,19 @@
  * =========================================================================
  * MODAL DE CRUD (ADICIONAR/EDITAR/EXCLUIR) PARA VARIEDADES
  * =========================================================================
- * CRIADO AGORA.
- * - Baseado no layout e estilo (Glassmorfismo, Drag, Fechar) do ModalPivo.tsx.
- * - Campos do formulário adaptados para Variedade:
- * - Nome (Input)
- * - Cultura (Select)
- * - Status (Select)
- * - Lógica de validação e normalização simplificada.
+ * ATUALIZAÇÃO:
+ * - Campos do formulário reordenados (Cultura primeiro).
+ * - Adicionados campos 'nome_comercial', 'obtentor', 'ciclo_maturacao_dias'.
+ * - Adicionado 'InputNumber' para o campo de ciclo.
+ * - CORREÇÃO: Label "Ciclo Dias)" -> "Ciclo (Dias)".
+ * - CORREÇÃO: Adicionado CSS para o placeholder do InputNumber no dark mode.
  * =========================================================================
  */
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-// Importa componentes do AntD, incluindo o 'Modal as AntModal' para confirmação
-import { Form, Input, Select, Button, Spin, Alert, Modal as AntModal } from 'antd';
+// Adicionado InputNumber
+import { Form, Input, Select, Button, Spin, Alert, Modal as AntModal, InputNumber } from 'antd';
 import { AlertTriangle, Edit, Plus, Trash2, Leaf } from 'lucide-react';
 
 const { Option } = Select;
@@ -30,12 +29,13 @@ const CULTURAS_OPTIONS = [
   { id: 6, nome: "CAFE" },
 ];
 
-// --- INTERFACE DA VARIEDADE ---
-// Esta interface é usada internamente pelo modal
+// --- INTERFACE DA VARIEDADE (Reflete API) ---
 interface Variedade {
   id: number;
-  nome: string;
-  id_cultura: number; // O formulário precisa do ID
+  nome_comercial: string;
+  id_cultura: number;
+  obtentor: string;
+  ciclo_maturacao_dias: number;
   status: 'Aberto' | 'Inativo';
   [key: string]: any;
 }
@@ -45,16 +45,25 @@ interface ModalVariedadeProps {
   mode: 'add' | 'edit' | 'delete';
   initialData: Partial<Variedade> | null;
   onClose: () => void;
-  // Funções esperadas pelo page.tsx
   onSave: (data: any) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   isSaving: boolean;
 }
 
 // =========================================================================
-// --- FUNÇÕES DE NORMALIZAÇÃO ---
+// --- FUNÇÕES DE NORMALIZAÇÃO E VALIDAÇÃO ---
 // =========================================================================
 const normalizeUppercase = (value: string) => (value || '').toUpperCase();
+
+// Parser para o InputNumber (copiado do ModalPivo)
+const numberParser = (value: string | undefined): string => {
+    if (!value) return '';
+    const valueWithComma = value.replace('.', ',');
+    const onlyNumbersAndComma = valueWithComma.replace(/[^0-9,]/g, '');
+    const parts = onlyNumbersAndComma.split(',');
+    if (parts.length <= 1) { return onlyNumbersAndComma; }
+    return `${parts[0]},${parts.slice(1).join('')}`;
+};
 
 
 // =========================================================================
@@ -64,7 +73,6 @@ const normalizeUppercase = (value: string) => (value || '').toUpperCase();
 const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialData, onClose, onSave, onDelete, isSaving }) => {
   const [form] = Form.useForm();
   
-  // --- Hooks de Arraste (do gabarito ModalPivo) ---
   const modalRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -74,13 +82,17 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
   useEffect(() => {
     if (visible) {
         if (mode === 'edit' || mode === 'delete') {
-            // Nota: A API de lista não fornece 'id_cultura',
-            // então 'initialData.id_cultura' pode estar undefined no modo 'edit'.
-            // O formulário funcionará, mas o select 'Cultura' pode não vir pré-selecionado.
-            form.setFieldsValue({
+            
+            const formData = {
                 ...initialData,
+                nome_comercial: initialData?.nome, 
+            };
+
+            form.setFieldsValue({
+                ...formData,
                 status: initialData?.status || 'Inativo',
             });
+
         } else if (mode === 'add') {
             form.resetFields();
             form.setFieldsValue({ status: 'Aberto' }); // Padrão
@@ -98,7 +110,7 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
     }
   }, [visible]);
 
-  // --- Lógica de Arrastar (do gabarito ModalPivo) ---
+  // --- Lógica de Arrastar ---
   const handleMouseDown = (e: React.MouseEvent) => {
       if (modalRef.current) {
           const target = e.target as HTMLElement;
@@ -136,7 +148,7 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
   // --- Fim da Lógica de Arrastar ---
 
 
-  // --- Handler para fechar com confirmação (do gabarito ModalPivo) ---
+  // --- Handler para fechar com confirmação ---
   const handleTryClose = () => {
     if (isSaving) return; 
     const isDark = document.body.classList.contains('dark');
@@ -173,7 +185,6 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
           ...initialData,
           ...values,
         };
-        // 'onSave' é a função do page.tsx, que espera 'dataToSave'
         onSave(dataToSave); 
       })
       .catch(info => {
@@ -184,7 +195,6 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
   // Handler para confirmar a exclusão
   const handleDelete = () => {
     if (initialData?.id) {
-      // 'onDelete' é a função do page.tsx, que espera o 'id'
       onDelete(initialData.id); 
     }
   };
@@ -229,7 +239,7 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
         :root {
             --gcs-blue: #00314A;
             --gcs-blue-light: #1b4c89;
-            --gcs-orange: #F58220; /* Laranja do Pivô */
+            --gcs-orange: #F58220;
             --gcs-green: #5FB246;
             --gcs-green-dark: #28a745;
             --gcs-brand-red: #d9534f;
@@ -364,7 +374,6 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
 
         /* --- Botões AntD --- */
         .btn-cancelar-laranja {
-            /* Usa o laranja do gabarito Pivo */
             background-color: var(--gcs-orange) !important;
             border-color: var(--gcs-orange) !important;
             color: white !important;
@@ -417,6 +426,44 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
             color: var(--gcs-dark-text-tertiary) !important;
         }
         
+        /* InputNumber */
+        body.dark .ant-input-number {
+             background: var(--gcs-dark-bg-transparent) !important;
+             border: 1px solid var(--gcs-dark-border) !important;
+             color: var(--gcs-dark-text-primary) !important;
+        }
+        body.dark .ant-input-number-input {
+             color: var(--gcs-dark-text-primary) !important;
+        }
+        
+        /* ================================================================== */
+        /* ===          📌 CORREÇÃO CSS ADICIONADA (DO GABARITO PIVÔ)     === */
+        /* ================================================================== */
+        body.dark .ant-input-number::placeholder {
+             color: var(--gcs-dark-text-tertiary) !important;
+        }
+        body.dark .ant-input-number-input::placeholder {
+             color: var(--gcs-dark-text-tertiary) !important;
+        }
+        /* ================================================================== */
+        /* ===                       FIM DA CORREÇÃO                    === */
+        /* ================================================================== */
+
+        body.dark .ant-input-number:focus-within,
+        body.dark .ant-input-number-focused {
+            border-color: var(--gcs-dark-border-hover) !important;
+            box-shadow: none !important;
+        }
+        body.dark .ant-input-number-handler {
+             background: var(--gcs-dark-bg-transparent) !important;
+             color: var(--gcs-dark-text-tertiary) !important;
+             border-left-color: var(--gcs-dark-border) !important;
+        }
+         body.dark .ant-input-number-handler-up:hover,
+         body.dark .ant-input-number-handler-down:hover {
+            background: var(--gcs-dark-border-hover) !important;
+         }
+
         /* Dropdown do Select */
         body.dark .ant-select-dropdown {
             background: var(--gcs-dark-bg-heavy) !important;
@@ -531,43 +578,74 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
                   // --- MODO ADICIONAR / EDITAR ---
                   <Form form={form} layout="vertical" name="form_in_modal" disabled={isSaving}>
                     
+                    {/* 1. CULTURA (PRIMEIRO CAMPO) */}
                     <Form.Item
-                      name="nome"
-                      label="Nome da Variedade"
+                      name="id_cultura"
+                      label="Cultura Associada"
+                      rules={[{ required: true, message: 'Selecione a cultura.' }]}
+                    >
+                      <Select 
+                        placeholder="Selecione a cultura"
+                        dropdownStyle={{ zIndex: 2147483648 }}
+                      >
+                        {CULTURAS_OPTIONS.map(cultura => (
+                            <Option key={cultura.id} value={cultura.id}>{cultura.nome}</Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+
+                    {/* 2. NOME COMERCIAL */}
+                    <Form.Item
+                      name="nome_comercial"
+                      label="Nome da Variedade (Comercial)"
                       rules={[{ required: true, message: 'Por favor, insira o nome.' }]}
                       normalize={normalizeUppercase}
                     >
                       <Input placeholder="Ex: TMG 7062 IPRO" />
                     </Form.Item>
-                    
-                    {/* --- Campos de Cultura e Status --- */}
+
+                    {/* 3. OBTENTOR E CICLO */}
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
                         <Form.Item
-                          name="id_cultura"
-                          label="Cultura Associada"
-                          rules={[{ required: true, message: 'Selecione a cultura.' }]}
+                          name="obtentor"
+                          label="Obtentor"
+                          rules={[{ required: true, message: 'Insira o obtentor.' }]}
+                          normalize={normalizeUppercase}
                         >
-                          <Select 
-                            placeholder="Selecione a cultura"
-                            dropdownStyle={{ zIndex: 2147483648 }}
-                          >
-                            {CULTURAS_OPTIONS.map(cultura => (
-                                <Option key={cultura.id} value={cultura.id}>{cultura.nome}</Option>
-                            ))}
-                          </Select>
+                          <Input placeholder="Ex: TMG" />
                         </Form.Item>
 
+                        {/* ================================================================== */}
+                        {/* ===               📌 CORREÇÃO LABEL (Dias) AQUI             === */}
+                        {/* ================================================================== */}
                         <Form.Item
-                          name="status"
-                          label="Status"
-                          rules={[{ required: true, message: 'Selecione o status.' }]}
+                          name="ciclo_maturacao_dias"
+                          label="Ciclo (Dias)"
+                          rules={[{ required: true, message: 'Insira o ciclo.' }]}
                         >
-                          <Select dropdownStyle={{ zIndex: 2147483648 }}>
-                            <Option value="Aberto">Aberto</Option>
-                            <Option value="Inativo">Inativo</Option>
-                          </Select>
+                        {/* ================================================================== */}
+                        {/* ===                       FIM DA CORREÇÃO                    === */}
+                        {/* ================================================================== */}
+                          <InputNumber
+                              min={0}
+                              style={{ width: '100%' }}
+                              placeholder="Ex: 125"
+                              parser={numberParser} // Limpa letras
+                           />
                         </Form.Item>
                     </div>
+
+                    {/* 4. STATUS */}
+                    <Form.Item
+                      name="status"
+                      label="Status"
+                      rules={[{ required: true, message: 'Selecione o status.' }]}
+                    >
+                      <Select dropdownStyle={{ zIndex: 2147483648 }}>
+                        <Option value="Aberto">Aberto</Option>
+                        <Option value="Inativo">Inativo</Option>
+                      </Select>
+                    </Form.Item>
 
                   </Form>
                 )}

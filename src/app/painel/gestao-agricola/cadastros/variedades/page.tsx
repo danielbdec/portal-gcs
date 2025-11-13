@@ -7,6 +7,7 @@
  * usar os campos corretos da API (ex: 'nome_comercial', 'cultura').
  * - Atualizada a 'interface Variedade' para refletir os dados reais da API.
  * - Atualizadas as colunas da tabela para exibir os novos campos.
+ * - ATUALIZAÇÃO 2: handleSaveVariedade corrigido para enviar os novos campos.
  * =========================================================================
  */
 "use client";
@@ -38,9 +39,6 @@ import ModalVariedadeDetalhes from "./ModalVariedadeDetalhes";
 import NotificationModal from "./NotificationModal";
 
 
-// ==================================================================
-// ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
-// ==================================================================
 // --- INTERFACE DO ITEM (Corrigida para API real) ---
 interface Variedade {
   id: number;
@@ -54,10 +52,7 @@ interface Variedade {
   // Campos do modal que não vêm da lista principal
   id_cultura?: number;
 }
-// ==================================================================
-// ===                       FIM DA ALTERAÇÃO                     ===
-// ==================================================================
-type StatusFiltro = 'Ativo' | 'Inativo' | 'Todos';
+type StatusFiltro = 'Aberto' | 'Inativo' | 'Todos';
 
 
 // --- HELPER DE DATA ---
@@ -131,7 +126,7 @@ const FiltroAbasStatus = ({ filtroAtual, onChange }: {
   filtroAtual: StatusFiltro;
   onChange: (status: StatusFiltro) => void;
 }) => {
-  const abas: StatusFiltro[] = ['Ativo', 'Inativo', 'Todos'];
+  const abas: StatusFiltro[] = ['Aberto', 'Inativo', 'Todos'];
   return (
     <div className="tabs-card">
       {abas.map((aba) => (
@@ -181,14 +176,14 @@ export default function GestaoVariedadePage() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Variedade | null; direction: 'asc' | 'desc' }>({ key: 'id', direction: 'asc' });
 
   // --- Estado de Filtro de Status ---
-  const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>('Ativo');
+  const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>('Aberto');
 
   // --- KPIs ---
   const kpiDadosStatus = useMemo(() => {
-    const abertos = variedades.filter(c => c.status === 'Ativo').length;
+    const abertos = variedades.filter(c => c.status === 'Aberto').length;
     const inativos = variedades.filter(c => c.status === 'Inativo').length;
     return [
-      { name: 'Ativo', value: abertos },
+      { name: 'Abertos', value: abertos },
       { name: 'Inativos', value: inativos },
     ];
   }, [variedades]);
@@ -264,25 +259,21 @@ export default function GestaoVariedadePage() {
       message.error(`Não foi possível carregar as variedades: ${error instanceof Error ? error.message : String(error)}`);
       data = [];
     } finally {
-      const statusMap: Record<string, string> = { 'A': 'Ativo' };
+      const statusMap: Record<string, string> = { 'A': 'Aberto' };
 
-      // ==================================================================
-      // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
-      // ==================================================================
       // Mapeamento corrigido para os campos da API
       const processedData: Variedade[] = data.map((item) => ({
         id: item.id,
         key: `var-${item.id}`,
-        nome: item.nome_comercial || 'Sem Nome',
+        nome: item.nome_comercial || 'Sem Nome', // 'nome' é usado pela lista
         cultura: item.cultura || 'Não Informada',
         obtentor: item.obtentor || 'N/A',
         ciclo_maturacao_dias: item.ciclo_maturacao_dias || 0,
         status: statusMap[item.status] || 'Inativo',
         status_original: item.status as 'A' | 'I',
+        // Passa os dados brutos para o 'initialData' do modal
+        nome_comercial: item.nome_comercial,
       }));
-      // ==================================================================
-      // ===                       FIM DA ALTERAÇÃO                     ===
-      // ==================================================================
 
       setVariedades(processedData);
       setLoading(false);
@@ -298,12 +289,6 @@ export default function GestaoVariedadePage() {
   // --- HANDLERS DOS MODAIS (CRUD) ---
 
   const handleOpenCrudModal = (mode: 'add' | 'edit' | 'delete', item?: Variedade) => {
-    // ATENÇÃO: A API de consulta não retorna 'id_cultura'.
-    // O modal 'ModalVariedade' (que criei antes) espera um 'id_cultura'
-    // para pré-selecionar o Select.
-    // Isso é uma limitação da API de consulta.
-    // O modal de Adicionar/Editar funcionará, mas o "Editar"
-    // pode não mostrar a cultura correta pré-selecionada.
     setModalMode(mode);
     setCurrentItem(item || null);
     setIsCrudModalOpen(true);
@@ -326,19 +311,28 @@ export default function GestaoVariedadePage() {
     setCurrentItem(null);
   };
 
+  // ==================================================================
+  // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
+  // ==================================================================
+  // 'data' agora vem do formulário com os nomes corretos da API
   const handleSaveVariedade = async (data: any) => {
     setIsSaving(true);
     let endpoint = modalMode === 'add' ? '/api/gestao-agricola/cultura/inclui' : '/api/gestao-agricola/cultura/altera';
     let successMsg = modalMode === 'add' ? 'Variedade incluída com sucesso!' : 'Variedade alterada com sucesso!';
     let errorMsg = modalMode === 'add' ? 'Erro ao incluir variedade.' : 'Erro ao alterar variedade.';
 
-    // O ModalVariedade.tsx (do passo anterior) envia os campos corretos
+    // Mapeia os dados do formulário (que agora são os nomes da API)
     const registro: any = {
       id_variedade: modalMode === 'edit' ? data.id : undefined,
-      nome_variedade: data.nome,
+      nome_comercial: data.nome_comercial, // Campo corrigido
       id_cultura: data.id_cultura,
-      status: data.status === 'Ativo' ? 'A' : 'I',
+      obtentor: data.obtentor, // Campo novo
+      ciclo_maturacao_dias: data.ciclo_maturacao_dias, // Campo novo
+      status: data.status === 'Aberto' ? 'A' : 'I',
     };
+    // ==================================================================
+    // ===                       FIM DA ALTERAÇÃO                     ===
+    // ==================================================================
 
     try {
         const response = await fetch(endpoint, {
@@ -392,14 +386,8 @@ export default function GestaoVariedadePage() {
       filtrados = filtrados.filter(p =>
         String(p.id).includes(termo) ||
         p.nome.toLowerCase().includes(termo) ||
-        // ==================================================================
-        // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
-        // ==================================================================
-        p.cultura.toLowerCase().includes(termo) || // Corrigido de 'cultura_nome'
-        p.obtentor.toLowerCase().includes(termo) // Adicionado filtro
-        // ==================================================================
-        // ===                       FIM DA ALTERAÇÃO                     ===
-        // ==================================================================
+        p.cultura.toLowerCase().includes(termo) ||
+        p.obtentor.toLowerCase().includes(termo)
       );
     }
     return filtrados;
@@ -451,9 +439,6 @@ export default function GestaoVariedadePage() {
     return <ArrowDown size={14} style={{ marginLeft: '4px' }} />;
   };
   
-  // ==================================================================
-  // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
-  // ==================================================================
   // Colunas da tabela (Corrigidas para API real)
   const tableColumns: { title: string; key: keyof Variedade; icon: React.ReactNode }[] = useMemo(() => [
     { title: 'ID', key: 'id', icon: <Hash size={16} style={{marginRight: '8px'}} /> },
@@ -463,9 +448,6 @@ export default function GestaoVariedadePage() {
     { title: 'Ciclo (dias)', key: 'ciclo_maturacao_dias', icon: <CalendarClock size={16} style={{marginRight: '8px'}} /> },
     { title: 'Status', key: 'status', icon: <BadgeCheck size={16} style={{marginRight: '8px'}} /> },
   ], []);
-  // ==================================================================
-  // ===                       FIM DA ALTERAÇÃO                     ===
-  // ==================================================================
 
   // --- Renderização Principal (UI) ---
 
@@ -734,9 +716,6 @@ export default function GestaoVariedadePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* ================================================================== */}
-                  {/* ===               📌 ALTERAÇÃO REALIZADA AQUI                === */}
-                  {/* ================================================================== */}
                   {/* Renderização dos 'td' corrigida para os campos da API */
                   variedadesPaginadas.map((item) => {
                     const menuItems: MenuProps['items'] = [
@@ -755,7 +734,7 @@ export default function GestaoVariedadePage() {
                         <td data-label="Status" style={{textAlign: 'center'}}>
                           <span
                             className="status-badge"
-                            style={{ backgroundColor: item.status === 'Ativo' ? 'var(--gcs-green)' : 'var(--gcs-red)' }}
+                            style={{ backgroundColor: item.status === 'Aberto' ? 'var(--gcs-green)' : 'var(--gcs-red)' }}
                           >
                             {item.status}
                           </span>
@@ -768,9 +747,6 @@ export default function GestaoVariedadePage() {
                       </tr>
                     );
                   })}
-                  {/* ================================================================== */}
-                  {/* ===                       FIM DA ALTERAÇÃO                     === */}
-                  {/* ================================================================== */}
                 </tbody>
               </table>
             </div>
@@ -801,7 +777,7 @@ export default function GestaoVariedadePage() {
       <ModalVariedade
         visible={isCrudModalOpen}
         mode={modalMode}
-        initialData={currentItem} // Passa o item da API (sem id_cultura)
+        initialData={currentItem} // Passa o item da API
         onClose={() => handleCloseCrudModal(false)}
         onSave={handleSaveVariedade} // A função de salvar espera o 'id_cultura' do formulário
         onDelete={handleDeleteVariedade} // A função de deletar espera o 'id'

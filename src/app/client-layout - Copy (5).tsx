@@ -21,8 +21,8 @@ import {
   ChevronUp,
   ChevronDown,
   FileText, // Ícone principal de Gestão Agrícola
-  MapPin,   // ÍCONE PARA PIVÔ
-  Leaf,     // ÍCONE PARA VARIEDADES
+  MapPin,   // ÍCONE ADICIONADO PARA PIVÔ
+  Leaf,     // <<< 📌 ÍCONE ADICIONADO AQUI
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
 import Image from "next/image";
@@ -85,13 +85,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       }
     };
   }, [collapsed]);
-
+  
   // --- FUNÇÕES DE CONTROLE DO SCROLL ---
   const startScroll = (direction: "up" | "down") => {
     if (scrollIntervalRef.current) {
       clearInterval(scrollIntervalRef.current);
     }
-
+    
     scrollIntervalRef.current = setInterval(() => {
       if (menuContainerRef.current) {
         const scrollAmount = 10; // Velocidade da rolagem
@@ -114,18 +114,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   if (status === "loading") {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-        }}
-      >
-        <Spin
-          tip="Carregando..."
-          indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />}
-        />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+        <Spin tip="Carregando..." indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />} />
       </div>
     );
   }
@@ -133,18 +123,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   if (status === "unauthenticated") {
     signIn("azure-ad", { callbackUrl: pathname });
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-        }}
-      >
-        <Spin
-          tip="Redirecionando para a página de login..."
-          indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />}
-        />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+        <Spin tip="Redirecionando para a página de login..." indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />} />
       </div>
     );
   }
@@ -159,18 +139,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     // Itens que todos os utilizadores veem
     menuItems.push(
-      {
-        key: "inicio",
-        icon: <House size={iconSize} color="white" />,
-        label: "Início",
-        onClick: () => router.push("/painel"),
-      },
-      {
-        key: "perfil",
-        icon: <ShieldUser size={iconSize} color="white" />,
-        label: "Meu Perfil",
-        onClick: () => router.push("/painel/perfil"),
-      }
+      { key: "inicio", icon: <House size={iconSize} color="white" />, label: "Início", onClick: () => router.push("/painel") },
+      { key: "perfil", icon: <ShieldUser size={iconSize} color="white" />, label: "Meu Perfil", onClick: () => router.push("/painel/perfil") },
     );
 
     // Sub-itens do menu NF Entrada
@@ -183,6 +153,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-visao-geral"),
       });
     }
+    // ... (restante dos sub-itens de NF Entrada) ...
     if (isAdmin || user.funcoes?.includes("nfEntrada.centralDeNotas")) {
       nfEntradaSubItems.push({
         key: "centralnfe",
@@ -251,18 +222,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     // --- MÓDULO: GESTÃO AGRÍCOLA ---
     const gestaoAgricolaSubItems: any[] = [];
-
-    // 1. VARIEDADES
-    if (isAdmin || user.funcoes?.includes("gestao.agricola.cultivar")) {
+    
+    // --- ITEM 1: CADERNO AGRÍCOLA (CORRIGIDO) ---
+    if (isAdmin || user.funcoes?.includes("caderno.safra")) {
       gestaoAgricolaSubItems.push({
-        key: "variedades",
-        icon: <Leaf size={18} color="white" />,
-        label: "Variedades",
-        onClick: () => router.push("/painel/gestao-agricola/cadastros/variedades"),
+        key: "cadernoAgricola", // Chave corrigida
+        icon: <FileChartLine size={18} color="white" />,
+        label: "Caderno Agrícola", // Label corrigido
+        onClick: () => router.push("/painel/gestao-agricola/caderno-agricola"), // Rota corrigida
       });
     }
-
-    // 2. PIVÔS E TALHÕES
+    
+    // --- ITEM 2: PIVÔS E TALHÕES (NOVO) ---
     if (isAdmin || user.funcoes?.includes("gestao.agricola.pivo")) {
       gestaoAgricolaSubItems.push({
         key: "pivoTalhao",
@@ -272,26 +243,22 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       });
     }
 
-    // 3. PLANEJAMENTO SAFRA
-    if (isAdmin || user.funcoes?.includes("gestao.agricola.planejamento")) {
+    // ==================================================================
+    // ===               📌 ALTERAÇÃO REALIZADA AQUI                ===
+    // ==================================================================
+    // --- ITEM 3: VARIEDADES (NOVO) ---
+    if (isAdmin || user.funcoes?.includes("gestao.agricola.cultivar")) {
       gestaoAgricolaSubItems.push({
-        key: "planejamentoSafra",
-        icon: <FileChartLine size={18} color="white" />,
-        label: "Planejamento Safra",
-        onClick: () => router.push("/painel/gestao-agricola/planejamento"),
+        key: "variedades",
+        icon: <Leaf size={18} color="white" />, // <<< ÍCONE TROCADO
+        label: "Variedades",
+        onClick: () => router.push("/painel/gestao-agricola/cadastros/variedades"),
       });
     }
-
-    // 4. CADERNO AGRÍCOLA
-    if (isAdmin || user.funcoes?.includes("caderno.safra")) {
-      gestaoAgricolaSubItems.push({
-        key: "cadernoAgricola",
-        icon: <FileChartLine size={18} color="white" />,
-        label: "Caderno Agrícola",
-        onClick: () => router.push("/painel/gestao-agricola/caderno-agricola"),
-      });
-    }
-
+    // ==================================================================
+    // ===                       FIM DA ALTERAÇÃO                     ===
+    // ==================================================================
+    
     if (gestaoAgricolaSubItems.length > 0) {
       menuItems.push({
         key: "gestaoagricola", // Chave principal do grupo
@@ -324,7 +291,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     // Sub-itens do menu Agrogestor
     const agrogestorSubItems: any[] = [];
-
+    
+    // (Item de caderno agrícola foi REMOVIDO DAQUI)
+    
     if (isAdmin || user.funcoes?.includes("agrogestor.empreendimentos")) {
       agrogestorSubItems.push({
         key: "agrogestorEmpreendimentos",
@@ -373,7 +342,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (!pathname) return undefined;
       if (pathname.startsWith("/painel/perfil")) return "perfil";
       if (pathname.startsWith("/painel/cadastro-usuarios")) return "cadastro-usuarios";
-
+      
       // NF Entrada
       if (pathname.startsWith("/painel/nfe/nfe-visao-geral")) return "visaogeralnfe";
       if (pathname.startsWith("/painel/nfe/nfe-central")) return "centralnfe";
@@ -383,15 +352,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-compras")) return "pendenciacompras";
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-fiscal")) return "pendenciafiscal";
       if (pathname.startsWith("/painel/nfe/nfe-regras-fiscais")) return "regrafiscalnfe";
-
-      // Gestão Agrícola
-      if (pathname.startsWith("/painel/gestao-agricola/cadastros/variedades")) return "variedades";
-      if (pathname.startsWith("/painel/gestao-agricola/cadastros/pivo-talhao")) return "pivoTalhao";
-      if (pathname.startsWith("/painel/gestao-agricola/planejamento")) return "planejamentoSafra";
+      
+      // --- ATUALIZAÇÃO DO GETSELECTEDKEY (Gestão Agrícola) ---
       if (pathname.startsWith("/painel/gestao-agricola/caderno-agricola")) return "cadernoAgricola";
+      if (pathname.startsWith("/painel/gestao-agricola/cadastros/pivo-talhao")) return "pivoTalhao";
+      if (pathname.startsWith("/painel/gestao-agricola/cadastros/variedades")) return "variedades";
+      // --- FIM DA ATUALIZAÇÃO ---
 
-      // Pessoal
+      // --- ATUALIZAÇÃO GETSELECTEDKEY (Pessoal) ---
       if (pathname.startsWith("/painel/pessoas/gestao-funcionarios")) return "gestaoFuncionarios";
+      // --- FIM (Pessoal) ---
 
       // Agrogestor
       if (pathname.startsWith("/painel/agrogestor/empreendimento")) return "agrogestorEmpreendimentos";
@@ -423,6 +393,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       background: "rgba(0, 0, 0, 0.4)",
     };
 
+
     return (
       <div style={{ display: "flex", height: "100vh" }}>
         {/* ================================================================== */}
@@ -434,8 +405,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           style={{
             width: collapsed ? 80 : 240,
             transition: "width 0.3s ease-in-out",
-            background:
-              "linear-gradient(to bottom, var(--cor-sidebar-gradiente-topo), var(--cor-sidebar-gradiente-base))",
+            background: "linear-gradient(to bottom, var(--cor-sidebar-gradiente-topo), var(--cor-sidebar-gradiente-base))",
             color: "white",
             display: "flex",
             flexDirection: "column",
@@ -459,10 +429,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               alt="Logo"
               width={collapsed ? 70 : 140}
               height={collapsed ? 40 : 60}
-              style={{
-                objectFit: "contain",
-                transition: "all 0.3s ease-in-out",
-              }}
+              style={{ objectFit: "contain", transition: "all 0.3s ease-in-out" }}
             />
           </div>
 
@@ -480,17 +447,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 style={{ ...arrowStyle, top: 0 }}
                 onMouseEnter={(e) => {
                   startScroll("up");
-                  (e.currentTarget as HTMLDivElement).style.opacity =
-                    arrowHoverStyle.opacity!.toString();
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    arrowHoverStyle.background!;
+                  (e.currentTarget as HTMLDivElement).style.opacity = arrowHoverStyle.opacity.toString();
+                  (e.currentTarget as HTMLDivElement).style.background = arrowHoverStyle.background;
                 }}
                 onMouseLeave={(e) => {
                   stopScroll();
-                  (e.currentTarget as HTMLDivElement).style.opacity =
-                    arrowStyle.opacity!.toString();
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    arrowStyle.background!;
+                  (e.currentTarget as HTMLDivElement).style.opacity = arrowStyle.opacity.toString();
+                  (e.currentTarget as HTMLDivElement).style.background = arrowStyle.background;
                 }}
               >
                 <ChevronUp size={20} />
@@ -524,24 +487,20 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 items={menuItems}
               />
             </div>
-
+            
             {/* --- SETA PARA BAIXO --- */}
             {isOverflowing && (
               <div
                 style={{ ...arrowStyle, bottom: 0 }}
                 onMouseEnter={(e) => {
                   startScroll("down");
-                  (e.currentTarget as HTMLDivElement).style.opacity =
-                    arrowHoverStyle.opacity!.toString();
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    arrowHoverStyle.background!;
+                  (e.currentTarget as HTMLDivElement).style.opacity = arrowHoverStyle.opacity.toString();
+                  (e.currentTarget as HTMLDivElement).style.background = arrowHoverStyle.background;
                 }}
                 onMouseLeave={(e) => {
                   stopScroll();
-                  (e.currentTarget as HTMLDivElement).style.opacity =
-                    arrowStyle.opacity!.toString();
-                  (e.currentTarget as HTMLDivElement).style.background =
-                    arrowStyle.background!;
+                  (e.currentTarget as HTMLDivElement).style.opacity = arrowStyle.opacity.toString();
+                  (e.currentTarget as HTMLDivElement).style.background = arrowStyle.background;
                 }}
               >
                 <ChevronDown size={20} />
@@ -550,19 +509,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </div>
           {/* FIM DA SEÇÃO DO MENU */}
 
+
           {/* 3. SEÇÃO SAIR (EMBAIXO, FIXO) */}
           <div
             onClick={async () => {
               setLoadingLogout(true);
-
-              const postLogoutUrl =
-                process.env.NEXT_PUBLIC_NEXTAUTH_URL || window.location.origin;
-              const microsoftLogoutUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(
-                postLogoutUrl
-              )}`;
-
+              
+              const postLogoutUrl = process.env.NEXT_PUBLIC_NEXTAUTH_URL || window.location.origin;
+              const microsoftLogoutUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(postLogoutUrl)}`;
+              
               await signOut({ redirect: false });
-
+              
               window.location.href = microsoftLogoutUrl;
             }}
             style={{
@@ -571,6 +528,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               padding: "1rem",
               paddingLeft: collapsed ? "0.5rem" : "1.5rem",
               paddingRight: collapsed ? "0.5rem" : "1.5rem",
+    
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
@@ -581,14 +539,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             }}
           >
             <LogOut size={iconSize} />
-            <span
-              style={{
-                transition: "width 0.2s ease-in-out",
-                whiteSpace: "nowrap",
-                width: collapsed ? 0 : "auto",
-                overflow: "hidden",
-              }}
-            >
+            <span style={{ transition: "width 0.2s ease-in-out", whiteSpace: "nowrap", width: collapsed ? 0 : "auto", overflow: "hidden" }}>
               Sair
             </span>
           </div>
@@ -606,18 +557,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-      }}
-    >
-      <Spin
-        tip="Saindo..."
-        indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />}
-      />
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+      <Spin tip="Saindo..." indicator={<LoadingOutlined style={{ fontSize: 48, color: "#52c41a" }} spin />} />
     </div>
   );
 }
