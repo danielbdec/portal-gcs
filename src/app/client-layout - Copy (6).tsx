@@ -199,16 +199,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         onClick: () => router.push("/painel/nfe/nfe-enviadasBA"),
       });
     }
-    // >>> NOVO: NOTAS ENVIADAS PI <<<
-    if (isAdmin || user.funcoes?.includes("nfEntrada.notasEnviadasPI")) {
-      nfEntradaSubItems.push({
-        key: "notasenviadaspi",
-        icon: <Send size={18} color="white" />,
-        label: "Notas Enviadas PI",
-        onClick: () => router.push("/painel/nfe/nfe-enviadasPI"),
-      });
-    }
-
     if (isAdmin || user.funcoes?.includes("nfEntrada.centralFinanceiro")) {
       nfEntradaSubItems.push({
         key: "centralfinanceiro",
@@ -388,7 +378,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (pathname.startsWith("/painel/nfe/nfe-visao-geral")) return "visaogeralnfe";
       if (pathname.startsWith("/painel/nfe/nfe-central")) return "centralnfe";
       if (pathname.startsWith("/painel/nfe/nfe-enviadasBA")) return "notasenviadasba";
-      if (pathname.startsWith("/painel/nfe/nfe-enviadasPI")) return "notasenviadaspi";
       if (pathname.startsWith("/painel/nfe/nfe-central-financeiro")) return "centralfinanceiro";
       if (pathname.startsWith("/painel/nfe/nfe-central-compras")) return "centralcompras";
       if (pathname.startsWith("/painel/nfe/nfe-pendencia-compras")) return "pendenciacompras";
