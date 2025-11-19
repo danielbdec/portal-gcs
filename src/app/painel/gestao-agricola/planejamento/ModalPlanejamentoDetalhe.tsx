@@ -2,38 +2,22 @@
  * =========================================================================
  * MODAL DE EDIÇÃO (MESTRE-DETALHE) PARA PLANEJAMENTO
  * =========================================================================
- * - ATUALIZAÇÃO: Lógica de "Salvar Cabeçalho" removida.
- * - O modal agora abre com cabeçalho E grade de itens visíveis
- * imediatamente, mesmo no modo 'add'.
- * - O botão "Buscar Pivôs" funciona lendo os dados do formulário
- * (mesmo sem salvar).
- * - Um único botão "Salvar" envia o cabeçalho e os itens
- * de uma só vez.
- * - ATUALIZAÇÃO UI: Colunas da grade agrupadas por Rotação (1ª, 2ª, 3ª)
- * com cores e Tooltips para economizar espaço.
- * - UI: As colunas de DADOS (tbody) agora também têm
- * um fundo colorido suave para facilitar a leitura.
- * - UI: A tabela de itens agora é AGRUPADA visualmente
- * pelo campo "Bloco", com cabeçalhos de grupo.
- * - CORREÇÃO (z-index): Aplicado 'getPopupContainer' ao
- * DatePicker para que apareça na frente do modal.
- * - CORREÇÃO (Estilo): Adicionado CSS para o DatePicker
- * no modo escuro.
- * - CORREÇÃO (Estilo): Aplicado fundo sólido aos cabeçalhos
- * de Bloco para maior destaque.
- * - CORREÇÃO (Estilo): Corrigido fundo/texto do Spinner
- * e da Tabela Vazia no modo escuro.
+ * - VERSÃO RESTAURADA + CORREÇÕES DE BUGS VISUAIS:
+ * 1. CORES (DARK): Restaurado o CSS exato que você forneceu na versão
+ * que funcionava (rgba transparentes).
+ * 2. SPINNER: Adicionado CSS para forçar Branco no modo escuro.
+ * 3. EMPTY STATE: Adicionado CSS para remover fundo cinza no modo escuro.
+ * 4. LOGICA: Mantida a busca de pivôs e salvamento único.
  * =========================================================================
  */
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-// (NOVO) Tooltip importado
-import { Form, Input, Select, Button, Spin, Alert, Modal as AntModal, Table, message, Dropdown, Menu, DatePicker, Tooltip } from 'antd';
+import { Form, Input, Select, Button, Modal as AntModal, Table, message, Dropdown, Menu, DatePicker, Tooltip, ConfigProvider } from 'antd';
 import type { MenuProps } from 'antd';
-import { AlertTriangle, Edit, Plus, Trash2, ClipboardList, Settings2, MoreVertical, Eye, Save, Search } from 'lucide-react';
+import { AlertTriangle, Edit, Plus, Trash2, ClipboardList, Settings2, MoreVertical, Eye, Save, Search, Inbox } from 'lucide-react';
 
-import dayjs from 'dayjs'; // Necessário para o DatePicker
+import dayjs from 'dayjs'; 
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -49,25 +33,21 @@ interface PlanejamentoCabec {
   [key: string]: any;
 }
 
-// ATUALIZADO: Interface do Item com campos de cultura
 interface PlanejamentoItem {
-    id: number; // ID do item (se existente) ou ID do Pivo (se novo)
+    id: number; 
     id_plano_cultivo: number;
     id_pivo_talhao: number;
     
-    // Rotação 1
-    id_cultura_rot1: number | null; // NOVO
-    id_cultivar_rot1: number | null; // Variedade
+    id_cultura_rot1: number | null; 
+    id_cultivar_rot1: number | null; 
     dt_plantio_rot1: string | null;
     
-    // Rotação 2
-    id_cultura_rot2: number | null; // NOVO
-    id_cultivar_rot2: number | null; // Variedade
+    id_cultura_rot2: number | null; 
+    id_cultivar_rot2: number | null; 
     dt_plantio_rot2: string | null;
     
-    // Rotação 3
-    id_cultura_rot3: number | null; // NOVO
-    id_cultivar_rot3: number | null; // Variedade
+    id_cultura_rot3: number | null; 
+    id_cultivar_rot3: number | null; 
     dt_plantio_rot3: string | null;
     
     status: 'A' | 'I';
@@ -86,7 +66,6 @@ interface Variedade {
     nome_comercial: string;
     [key: string]: any;
 }
-// NOVO: Interface (placeholder) para Cultura
 interface Cultura {
     id: number;
     nome: string;
@@ -96,40 +75,20 @@ interface Cultura {
 interface ModalPlanejamentoDetalheProps {
   visible: boolean;
   mode: 'add' | 'edit';
-  initialData: Partial<PlanejamentoCabec> | null; // null se 'add', preenchido se 'edit'
+  initialData: Partial<PlanejamentoCabec> | null; 
   onClose: () => void;
-  onSave: (data: { header: any, items: PlanejamentoItem[] }) => Promise<void>; // (MODIFICADO)
-  isSaving: boolean; // (MODIFICADO) Renomeado de isSavingGlobal
+  onSave: (data: { header: any, items: PlanejamentoItem[] }) => Promise<void>; 
+  isSaving: boolean; 
 }
 
-// Helper de Data (Formato DD/MM/YYYY)
-const formatLocalDate = (dateString: string | null | undefined): string => {
-    if (!dateString) return '—';
-    try {
-        const date = new Date(dateString);
-        // Adiciona 1 dia (se necessário) para corrigir fuso horário
-        date.setUTCDate(date.getUTCDate() + 1);
-        const day = String(date.getUTCDate()).padStart(2, '0');
-        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const year = date.getUTCFullYear();
-        if (isNaN(day as any)) return '—';
-        return `${day}/${month}/${year}`;
-    } catch (e) {
-        return '—';
-    }
-};
-// Helper para converter string 'YYYY-MM-DD' ou ISO para Dayjs
 const toDayjs = (dateString: string | null | undefined): dayjs.Dayjs | null => {
     if (!dateString) return null;
     const date = dayjs(dateString);
     return date.isValid() ? date : null;
 };
 
-
-// =========================================================================
-// --- FUNÇÕES DE NORMALIZAÇÃO ---
-// =========================================================================
 const normalizeUppercase = (value: string) => (value || '').toUpperCase();
+
 
 // =========================================================================
 // --- COMPONENTE DO MODAL (MESTRE-DETALHE) ---
@@ -142,10 +101,8 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
   
   // --- Estados Internos ---
   const [loadingItens, setLoadingItens] = useState(false);
-  // const [isSavingItem, setIsSavingItem] = useState(false); // (REMOVIDO) Usa isSaving
   const [isBuscandoPivos, setIsBuscandoPivos] = useState(false);
   
-  // (MODIFICADO) Agora é any[] para aceitar linhas de grupo
   const [planejamentoItens, setPlanejamentoItens] = useState<any[]>([]);
   
   // Lookups
@@ -161,13 +118,12 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
       { id: 4, nome: 'SORGO' },
   ]);
 
-  // --- Lógica de Arrastar ---
   const modalRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
-  // (MODIFICADO) Popula o formulário (Cabeçalho)
+  // Popula o formulário
   useEffect(() => {
     if (visible) {
         if (mode === 'edit' && initialData) {
@@ -175,24 +131,19 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 ...initialData,
                 status: initialData?.status || 'Inativo',
             });
-            // (NOVO) Busca os itens no modo 'edit'
-            fetchItensDoPlano(initialData.id!); // Busca itens
+            fetchItensDoPlano(initialData.id!); 
             
         } else if (mode === 'add') {
             const defaultData = { status: 'Aberto' };
             form.resetFields();
-            form.setFieldsValue(defaultData); // Formulário
-            setPlanejamentoItens([]); // Limpa itens
+            form.setFieldsValue(defaultData); 
+            setPlanejamentoItens([]); 
         }
-        
-        // (NOVO) Busca lookups (Pivos e Variedades) em ambos os modos
         fetchLookups();
-        
     }
   }, [visible, mode, initialData, form]);
   
   
-  // (NOVA FUNÇÃO) Busca apenas os itens de um plano existente
   const fetchItensDoPlano = async (planoId: number) => {
     setLoadingItens(true);
     try {
@@ -206,7 +157,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             const allItens: PlanejamentoItem[] = await itensRes.json();
             const itensFiltrados = allItens.filter(i => i.id_plano_cultivo === planoId);
             
-            // (NOVO) Adiciona o agrupamento por bloco ao carregar
             const pivosRes = await fetch("/api/gestao-agricola/pivo/consulta", { method: "POST", cache: "no-store" });
             const pivosData: PivoTalhao[] = (pivosRes.ok && pivosRes.status !== 204) ? await pivosRes.json() : [];
             const pivoBlocoMap = new Map<number, string | null>();
@@ -226,7 +176,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
     }
   };
 
-  // (NOVA FUNÇÃO) Busca Pivôs e Variedades (Lookups)
   const fetchLookups = async () => {
     try {
         const [pivosRes, variedadesRes] = await Promise.all([
@@ -234,7 +183,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             fetch("/api/gestao-agricola/cultura/consulta", { method: "POST", cache: "no-store" })
         ]);
 
-        // Processar Pivôs
         if (pivosRes.status !== 204 && pivosRes.ok) {
             const pivosData: PivoTalhao[] = await pivosRes.json();
             const pMap = new Map<number, string>();
@@ -246,7 +194,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             setPivosMap(new Map());
         }
 
-        // Processar Variedades
         if (variedadesRes.status !== 204 && variedadesRes.ok) {
             const variedadesData: Variedade[] = await variedadesRes.json();
             const vMap = new Map<number, string>();
@@ -262,22 +209,18 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
     }
   };
 
-
-  // Efeito para centralizar o modal ao abrir
   useEffect(() => {
     if (visible && modalRef.current) {
         const modal = modalRef.current;
         const initialX = (window.innerWidth - modal.offsetWidth) / 2;
-        const initialY = 20; // Mais perto do topo
+        const initialY = 20; 
         setPosition({ x: initialX > 0 ? initialX : 10, y: initialY });
     }
   }, [visible]);
 
-  // --- Lógica de Arrastar ---
   const handleMouseDown = (e: React.MouseEvent) => {
       if (modalRef.current) {
           const target = e.target as HTMLElement;
-          // Impede o arraste se clicar em inputs, botões, ou na tabela
           if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.closest('button') || target.closest('.ant-select-selector') || target.closest('.ant-input-number') || target.closest('.ant-table-wrapper') || target.closest('.ant-picker')) {
               return;
           }
@@ -309,54 +252,43 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
           document.removeEventListener('mouseup', handleMouseUp);
       };
   }, [isDragging, handleMouseMove, handleMouseUp]);
-  // --- Fim da Lógica de Arrastar ---
 
-  // (NOVO) Helper para adicionar linhas de grupo
   const addGrupoBloco = (itens: any[]) => {
       const pMap = new Map(pivosMap);
       const novosItensComGrupos: any[] = [];
       let currentBloco: string | null = null;
       
       itens.forEach((item) => {
-          // Atualiza o pivosMap (caso venha da busca)
           if(item.nome) {
             pMap.set(item.id_pivo_talhao || item.id, item.nome);
           }
-          
           const bloco = item.bloco || 'Sem Bloco';
           
-          // Add group header row
           if (bloco !== currentBloco) {
               novosItensComGrupos.push({
-                  id: `bloco-${bloco}`, // Unique key for the group row
+                  id: `bloco-${bloco}`, 
                   isGroup: true,
                   bloco: bloco,
               });
               currentBloco = bloco;
           }
-
-          // Add item row
           novosItensComGrupos.push({
               ...item,
-              isGroup: false, // Mark as data row
+              isGroup: false, 
           });
       });
-      setPivosMap(pMap); // Atualiza o map
+      setPivosMap(pMap); 
       return novosItensComGrupos;
   }
 
-  // =========================================================================
-  // --- (MODIFICADO) Handler para Buscar Pivôs/Talhões ---
-  // =========================================================================
   const handleBuscarPivos = async () => {
-    // Pega os dados direto do FORM
     const formValues = form.getFieldsValue();
     const filial = formValues.filial;
     const safra = formValues.safra;
     
     if (!filial || !safra) {
         message.warning('Filial e Safra são obrigatórios no cabeçalho para buscar pivôs.');
-        form.validateFields(['filial', 'safra']); // Mostra erro
+        form.validateFields(['filial', 'safra']); 
         return;
     }
 
@@ -375,7 +307,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
 
             if (response.status === 204) {
                 message.info('Nenhum pivô/talhão encontrado para os filtros (Filial/Safra) informados.');
-                setPlanejamentoItens([]); // Limpa a lista
+                setPlanejamentoItens([]); 
                 return;
             }
             if (!response.ok) {
@@ -383,103 +315,73 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             }
 
             const pivosData: PivoTalhao[] = await response.json();
-
-            // Ordena pelo Bloco
             const pivosOrdenados = pivosData.sort((a, b) => (a.bloco || '').localeCompare(b.bloco || ''));
 
-            // Transforma Pivos em PlanejamentoItens
             const novosItens: PlanejamentoItem[] = pivosOrdenados.map((pivo, index) => {
                 return {
                     id: pivo.id, 
                     id_plano_cultivo: (initialData?.id || 0), 
                     id_pivo_talhao: pivo.id,
-                    bloco: pivo.bloco || null, // (NOVO) Adiciona o bloco
-                    nome: pivo.nome, // (NOVO) Adiciona o nome para o map
-                    // Rotação 1
+                    bloco: pivo.bloco || null, 
+                    nome: pivo.nome, 
                     id_cultura_rot1: null, id_cultivar_rot1: null, dt_plantio_rot1: null,
-                    // Rotação 2
                     id_cultura_rot2: null, id_cultivar_rot2: null, dt_plantio_rot2: null,
-                    // Rotação 3
                     id_cultura_rot3: null, id_cultivar_rot3: null, dt_plantio_rot3: null,
                     status: 'A', observacao: null,
                 };
             });
             
-            // (MODIFICADO) Adiciona linhas de grupo
             const itensComGrupos = addGrupoBloco(novosItens);
             setPlanejamentoItens(itensComGrupos);
-            
-            message.success(`${pivosData.length} pivôs/talhões carregados e agrupados por bloco.`);
+            message.success(`${pivosData.length} pivôs/talhões carregados.`);
 
         } catch (error: any) {
             message.error(`Erro ao buscar pivôs: ${error.message}`);
-            console.error("Erro ao buscar pivôs:", error);
         } finally {
             setIsBuscandoPivos(false);
         }
     };
 
-    // Se já existem itens, pede confirmação
     if (planejamentoItens.length > 0) {
         AntModal.confirm({
             title: 'Substituir Itens?',
             content: 'Já existem itens neste plano. Deseja substituí-los pela nova busca de pivôs?',
             icon: <AlertTriangle size={24} style={{ color: 'var(--gcs-brand-red)' }} />,
             okText: 'Sim, Substituir',
-            okButtonProps: { danger: true, style: { backgroundColor: 'var(--gcs-brand-red)', borderColor: 'var(--gcs-brand-red)' } },
-            cancelText: 'Não, Cancelar',
-            cancelButtonProps: { type: 'primary', style: { backgroundColor: 'var(--gcs-green-dark)', borderColor: 'var(--gcs-green-dark)' } },
             zIndex: 2147483650,
             className: document.body.classList.contains('dark') ? 'ant-modal-dark' : '',
             onOk: runFetch,
         });
     } else {
-        runFetch(); // Se não tem itens, apenas executa
+        runFetch();
     }
   };
 
-
-  // --- (NOVO) Handler para SALVAR TUDO (Submissão) ---
   const handleSubmit = async () => {
-    
     try {
-        // 1. Valida o cabeçalho
         const headerValues = await form.validateFields();
-        
-        // 2. Adiciona o ID (se estiver em modo 'edit')
         const headerData = {
-            ...initialData, // Mantém o ID e outros campos
-            ...headerValues  // Sobrescreve com valores do form
+            ...initialData, 
+            ...headerValues 
         };
-        
-        // 3. Pega os itens e FILTRA as linhas de grupo
         const itemsData = planejamentoItens.filter(item => !item.isGroup);
         
-        // 4. Monta o pacote de dados
         const dataToSave = {
             header: headerData,
             items: itemsData
         };
-        
-        // 5. Envia para a 'page.tsx' tratar
         await onSave(dataToSave);
         
     } catch (errorInfo) {
-        console.log('Falha na validação:', errorInfo);
         message.error('Por favor, preencha os campos obrigatórios do cabeçalho.');
     }
   };
 
-
-  // --- (NOVO) Handler para atualizar a grade editável ---
   const handleItemChange = (id_pivo_talhao: number, field: keyof PlanejamentoItem, value: any) => {
-    
-    // Formata o valor se for Dayjs (DatePicker)
     let formattedValue = value;
     if (dayjs.isDayjs(value)) {
         formattedValue = value.format('YYYY-MM-DD');
     }
-    
     setPlanejamentoItens(prevItens => {
       return prevItens.map(item => {
         if (item.id_pivo_talhao === id_pivo_talhao) {
@@ -490,13 +392,23 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
     });
   };
 
-
-  // --- (MODIFICADO) Definição das Colunas da GRADE EDITÁVEL com Grupos ---
-  
-  // Helper function for onCell para esconder células em linhas de grupo
   const handleCell = (record: any) => ({
       colSpan: record.isGroup ? 0 : 1,
   });
+
+  // Custom Empty State para Dark Mode
+  const renderEmpty = () => {
+      return (
+          <div style={{ 
+              textAlign: 'center', 
+              padding: '20px', 
+              color: 'inherit' 
+          }}>
+              <Inbox size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+              <p>Nenhum item adicionado. Clique em "Buscar Pivôs" para carregar.</p>
+          </div>
+      );
+  };
 
   const colunasItensEditaveis: any[] = [
     {
@@ -507,7 +419,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
       fixed: 'left',
       className: 'col-pivo-talhao', 
       onCell: (record: any) => ({
-          colSpan: record.isGroup ? 10 : 1, // Span all 10 columns (1 + 3 + 3 + 3)
+          colSpan: record.isGroup ? 10 : 1, 
       }),
       render: (id: number, record: any) => {
           if (record.isGroup) {
@@ -516,11 +428,10 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
           return pivosMap.get(id) || `ID: ${id}`;
       },
     },
-    // --- Rotação 1 ---
     {
       title: (
         <Tooltip title="Primeira Rotação de Cultivo">
-          <span style={{ color: 'var(--gcs-blue-sky)', fontWeight: 'bold' }}>1ª Rotação</span>
+          <span className="rot-header-1">1ª Rotação</span>
         </Tooltip>
       ),
       className: 'col-group-rot1', 
@@ -580,17 +491,17 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 onChange={(date) => handleItemChange(record.id_pivo_talhao, 'dt_plantio_rot1', date)}
                 format="DD/MM/YYYY" 
                 style={{ width: '100%' }}
-                getPopupContainer={() => modalRef.current || document.body} // (CORREÇÃO Z-INDEX)
+                placeholder="Selecione a data" 
+                getPopupContainer={() => modalRef.current || document.body} 
             />
           )
         },
       ]
     },
-    // --- Rotação 2 ---
     {
       title: (
         <Tooltip title="Segunda Rotação de Cultivo">
-          <span style={{ color: 'var(--gcs-green)', fontWeight: 'bold' }}>2ª Rotação</span>
+          <span className="rot-header-2">2ª Rotação</span>
         </Tooltip>
       ),
       className: 'col-group-rot2',
@@ -650,17 +561,17 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 onChange={(date) => handleItemChange(record.id_pivo_talhao, 'dt_plantio_rot2', date)}
                 format="DD/MM/YYYY" 
                 style={{ width: '100%' }}
-                getPopupContainer={() => modalRef.current || document.body} // (CORREÇÃO Z-INDEX)
+                placeholder="Selecione a data" 
+                getPopupContainer={() => modalRef.current || document.body} 
             />
           )
         },
       ]
     },
-    // --- Rotação 3 ---
     {
       title: (
         <Tooltip title="Terceira Rotação de Cultivo">
-          <span style={{ color: 'var(--gcs-orange)', fontWeight: 'bold' }}>3ª Rotação</span>
+          <span className="rot-header-3">3ª Rotação</span>
         </Tooltip>
       ),
       className: 'col-group-rot3',
@@ -720,7 +631,8 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 onChange={(date) => handleItemChange(record.id_pivo_talhao, 'dt_plantio_rot3', date)}
                 format="DD/MM/YYYY" 
                 style={{ width: '100%' }}
-                getPopupContainer={() => modalRef.current || document.body} // (CORREÇÃO Z-INDEX)
+                placeholder="Selecione a data" 
+                getPopupContainer={() => modalRef.current || document.body} 
             />
           )
         },
@@ -728,8 +640,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
     },
   ];
 
-
-  // Título dinâmico
   const modalTitle = (
     <div className="modal-planejamento-edit-title">
       <span className="modal-planejamento-edit-icon-wrapper">
@@ -748,9 +658,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
 
   return (
     <>
-      {/* --- ESTILOS --- */}
       <style>{`
-        /* --- Variáveis --- */
         :root {
             --gcs-blue: #00314A;
             --gcs-blue-light: #1b4c89;
@@ -759,10 +667,10 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             --gcs-green-dark: #28a745;
             --gcs-brand-red: #d9534f;
             --gcs-gray-light: #f1f5fb;
-            --gcs-gray-medium: #e9ecef; /* (NOVO) Adicionado */
+            --gcs-gray-medium: #e9ecef;
             --gcs-dark-text: #333;
             --gcs-gray-text: #6c757d;
-            --gcs-blue-sky: #38BDF8; /* Cor 1ª Rot */
+            --gcs-blue-sky: #38BDF8;
             
             --gcs-dark-bg-transparent: rgba(25, 39, 53, 0.5);
             --gcs-dark-bg-heavy: rgba(25, 39, 53, 0.85);
@@ -773,25 +681,29 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             --gcs-dark-text-tertiary: #94A3B8;
         }
         
-        /* --- Base Modal (Mestre-Detalhe) --- */
+        /* FORÇA Z-INDEX DA MENSAGEM DO ANTD */
+        .ant-message {
+            z-index: 2147483655 !important;
+        }
+        
         .modal-planejamento-edit-backdrop {
             position: fixed;
             top: 0; left: 0;
             width: 100vw; height: 100vh;
             background-color: rgba(0,0,0,0.4);
-            z-index: 2147483648; /* Z-index alto para o Mestre-Detalhe */
+            z-index: 2147483648;
         }
         .modal-planejamento-edit-glass {
             position: fixed;
             border-radius: 12px;
             width: 95%;
-            max-width: 1400px; /* (AUMENTADO) BEM LARGO */
+            max-width: 1400px;
             min-height: 400px;
             max-height: 95vh;
             display: flex;
             flex-direction: column;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 2147483649; /* Acima do backdrop */
+            z-index: 2147483649;
             transition: background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
         }
         body.light .modal-planejamento-edit-glass {
@@ -805,7 +717,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             border: 1px solid var(--gcs-dark-border);
         }
 
-        /* --- Modal Header --- */
         .modal-planejamento-edit-header {
             padding: 1.5rem;
             border-bottom: 1px solid;
@@ -851,7 +762,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .modal-planejamento-edit-close-btn { color: var(--gcs-dark-text-secondary); }
         body.dark .modal-planejamento-edit-close-btn:hover { color: var(--gcs-dark-text-primary); }
 
-        /* --- Modal Content --- */
         .modal-planejamento-edit-content-wrapper {
             flex-grow: 1;
             overflow: hidden;
@@ -863,16 +773,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             overflow-y: auto;
             padding: 1.5rem;
         }
-        body.dark .ant-spin-container,
-        body.dark .ant-alert {
-            background: transparent !important;
-        }
-        /* (NOVO) Estilo do texto do Spinner (Carregando...) */
-        body.dark .ant-spin-tip {
-            color: var(--gcs-dark-text-primary) !important;
-        }
         
-        /* --- Modal Footer --- */
         .modal-planejamento-edit-footer {
             padding: 1rem 1.5rem;
             border-top: 1px solid;
@@ -894,7 +795,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             border-top-color: var(--gcs-dark-border);
         }
 
-        /* --- Botões AntD --- */
         .btn-cancelar-laranja {
             background-color: var(--gcs-orange) !important;
             border-color: var(--gcs-orange) !important;
@@ -906,7 +806,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             border-color: #d17814 !important;
         }
         
-        /* NOVO: Botão Azul */
         .btn-buscar-azul {
             background-color: var(--gcs-blue-light) !important;
             border-color: var(--gcs-blue-light) !important;
@@ -925,57 +824,49 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
              background-color: #1e7e34;
         }
         
-        /* --- ESTILOS PARA Antd Form (Habilitado e Desabilitado) --- */
         body.dark .ant-form-item-label > label {
             color: var(--gcs-dark-text-primary);
         }
         
-        /* Habilitado (Modo ADD) */
         body.dark .ant-input,
         body.dark .ant-select-selector,
         body.dark .ant-input-number,
-        body.dark .ant-picker { /* Adicionado DatePicker */
+        body.dark .ant-picker {
             background: var(--gcs-dark-bg-transparent) !important;
             border: 1px solid var(--gcs-dark-border) !important;
             color: var(--gcs-dark-text-primary) !important;
         }
-        body.dark .ant-picker-input > input { /* Texto do DatePicker */
+        body.dark .ant-picker-input > input {
              color: var(--gcs-dark-text-primary) !important;
         }
         body.dark .ant-input:focus,
         body.dark .ant-input-focused,
         body.dark .ant-select-focused .ant-select-selector,
-        body.dark .ant-picker-focused { /* Adicionado DatePicker */
+        body.dark .ant-picker-focused {
             border-color: var(--gcs-dark-border-hover) !important;
             box-shadow: none !important;
         }
         body.dark .ant-select-arrow,
-        body.dark .ant-picker-suffix { /* Adicionado DatePicker */
+        body.dark .ant-picker-suffix {
              color: var(--gcs-dark-text-tertiary) !important;
         }
-        
-        /* (CORREÇÃO) Placeholders */
         body.dark .ant-select-selection-placeholder {
             color: var(--gcs-dark-text-tertiary) !important;
         }
         body.dark .ant-input::placeholder,
         body.dark textarea.ant-input::placeholder,
-        body.dark .ant-picker-input > input::placeholder { /* Adicionado DatePicker */
+        body.dark .ant-picker-input > input::placeholder {
             color: var(--gcs-dark-text-tertiary) !important;
         }
-
-        /* Desabilitado (Modo EDIT) */
         body.dark .ant-input[disabled] {
             background-color: rgba(45, 55, 72, 0.3) !important;
             border-color: rgba(125, 173, 222, 0.1) !important;
             color: var(--gcs-dark-text-tertiary) !important;
         }
-        
-        /* Dropdown do Select (para modo ADD e Grade) */
         body.dark .ant-select-dropdown {
             background: var(--gcs-dark-bg-heavy) !important;
             border: 1px solid var(--gcs-dark-border) !important;
-            z-index: 2147483650 !important; /* (NOVO) Z-Index */
+            z-index: 2147483650 !important;
         }
         body.dark .ant-select-item { color: var(--gcs-dark-text-primary) !important; }
         body.dark .ant-select-item-option-active:not(.ant-select-item-option-selected) {
@@ -985,8 +876,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             background: var(--gcs-blue-light) !important;
             color: white !important;
         }
-        
-        /* (MODIFICADO) Dropdown do DatePicker (Modo Escuro) */
         body.dark .ant-picker-dropdown {
              background: var(--gcs-dark-bg-heavy) !important;
              border: 1px solid var(--gcs-dark-border) !important;
@@ -1020,7 +909,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             background: var(--gcs-blue-light) !important;
         }
         
-        /* --- ESTILOS PARA Antd Table (Mestre-Detalhe) --- */
         body.light .ant-table-wrapper {
             border: 1px solid var(--gcs-border-color);
             border-radius: 8px;
@@ -1031,7 +919,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             color: var(--gcs-blue);
             font-weight: 600;
         }
-        /* (NOVO) Fundo branco para células da grade editável */
         body.light .ant-table-tbody > tr > td {
              background: #fff !important;
         }
@@ -1065,36 +952,64 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .ant-pagination-item-active a { color: white !important; }
         body.dark .ant-pagination-disabled .ant-pagination-item-link { color: #475569 !important; }
         
-        /* (MODIFICADO) Estilos do Placeholder da Tabela (vazia) */
-        body.dark .ant-table-placeholder {
-            background: rgba(25, 39, 53, 0.5) !important;
-            border-bottom-color: var(--gcs-dark-border) !important;
+        /* CORREÇÃO: REMOÇÃO DO FUNDO CINZA NO MODO ESCURO (TABELA VAZIA) */
+        body.dark .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder {
+            background-color: transparent !important;
         }
-        body.dark .ant-table-placeholder .ant-empty-description {
-            color: var(--gcs-dark-text-primary) !important; /* (MODIFICADO) Mais claro */
+        body.dark .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder > td {
+            background-color: transparent !important;
+            border: none !important;
+        }
+        body.dark .ant-table-wrapper .ant-table-container {
+             background-color: transparent !important;
+        }
+        body.dark .ant-table-wrapper .ant-empty-description {
+            color: var(--gcs-dark-text-secondary) !important;
+        }
+
+        /* CORREÇÃO SPINNER */
+        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-text {
+            color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+            font-weight: 600;
+            z-index: 10;
+        }
+        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-dot i {
+            background-color: #ffffff !important;
+        }
+        body.dark .ant-spin-blur {
+            background-color: transparent !important;
+            opacity: 0 !important;
+        }
+        body.dark .ant-spin-nested-loading > div > .ant-spin {
+            background-color: rgba(0, 0, 0, 0.5) !important; 
+            max-height: 100%;
         }
         
-        /* --- (MODIFICADO) Estilos de Colunas Coloridas --- */
+        .rot-header-1 { color: var(--gcs-blue-sky); font-weight: bold; }
+        .rot-header-2 { color: var(--gcs-green); font-weight: bold; }
+        .rot-header-3 { color: var(--gcs-orange); font-weight: bold; }
+        
         body.light .ant-table-thead .col-group-rot1 { background-color: rgba(56, 189, 248, 0.1) !important; }
         body.light .ant-table-thead .col-group-rot2 { background-color: rgba(95, 178, 70, 0.1) !important; }
         body.light .ant-table-thead .col-group-rot3 { background-color: rgba(245, 130, 32, 0.1) !important; }
         body.light .ant-table-tbody .col-pivo-talhao { background-color: #f8f9fa !important; }
-        /* (NOVO) Cor de fundo para as células de dados (tbody) */
+        
         body.light .ant-table-tbody .col-group-rot1 { background-color: rgba(56, 189, 248, 0.03) !important; }
         body.light .ant-table-tbody .col-group-rot2 { background-color: rgba(95, 178, 70, 0.03) !important; }
         body.light .ant-table-tbody .col-group-rot3 { background-color: rgba(245, 130, 32, 0.03) !important; }
         
-        body.dark .ant-table-thead .col-group-rot1 { background-color: rgba(56, 189, 248, 0.1) !important; }
-        body.dark .ant-table-thead .col-group-rot2 { background-color: rgba(95, 178, 70, 0.1) !important; }
-        body.dark .ant-table-thead .col-group-rot3 { background-color: rgba(245, 130, 32, 0.1) !important; }
+        /* CORREÇÃO: RESTAURADO PARA RGBA TRANSPARENTE (COMO PEDIDO) */
+        body.dark .ant-table-thead .col-group-rot1 { background-color: rgba(56, 189, 248, 0.2) !important; }
+        body.dark .ant-table-thead .col-group-rot2 { background-color: rgba(95, 178, 70, 0.2) !important; }
+        body.dark .ant-table-thead .col-group-rot3 { background-color: rgba(245, 130, 32, 0.2) !important; }
+        
         body.dark .ant-table-tbody .col-pivo-talhao { background-color: rgba(25, 39, 53, 0.3) !important; }
-        /* (NOVO) Cor de fundo para as células de dados (tbody) */
+        
         body.dark .ant-table-tbody .col-group-rot1 { background-color: rgba(56, 189, 248, 0.05) !important; }
         body.dark .ant-table-tbody .col-group-rot2 { background-color: rgba(95, 178, 70, 0.05) !important; }
         body.dark .ant-table-tbody .col-group-rot3 { background-color: rgba(245, 130, 32, 0.05) !important; }
         
-        
-        /* --- Título da Seção (Itens) --- */
         .section-title {
             font-size: 1.1rem;
             font-weight: 600;
@@ -1113,13 +1028,11 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             color: var(--gcs-dark-text-primary);
             border-bottom-color: var(--gcs-dark-border);
         }
-        /* (NOVO) Wrapper para botões da seção */
         .section-title-actions {
             display: flex;
             gap: 8px;
         }
         
-        /* --- Estilos do Modal de Confirmação (Dark Mode) --- */
         .ant-modal-dark .ant-modal-content {
             background: var(--gcs-dark-bg-heavy) !important;
         }
@@ -1154,7 +1067,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             border-color: #b01725 !important;
         }
         
-        /* (MODIFICADO) Estilos para Linha de Grupo de Bloco */
         .bloco-header {
             font-size: 1.1em;
             font-weight: bold;
@@ -1163,13 +1075,12 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         }
         body.light .bloco-header {
             color: var(--gcs-blue);
-            background-color: var(--gcs-gray-medium); /* (MODIFICADO) */
+            background-color: var(--gcs-gray-medium);
         }
         body.dark .bloco-header {
             color: var(--gcs-dark-text-primary);
-            background-color: var(--gcs-blue-light); /* (MODIFICADO) */
+            background-color: var(--gcs-blue-light);
         }
-        /* Remove padding da célula que contém o header */
         .ant-table-cell[colspan="10"] {
             padding: 0 !important;
         }
@@ -1178,7 +1089,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
 
       <div 
         className="modal-planejamento-edit-backdrop"
-        onClick={onClose} // Fecha ao clicar no fundo
+        onClick={onClose} 
       ></div>
       
       <div
@@ -1200,15 +1111,14 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
           <div className="modal-planejamento-edit-content-wrapper">
               <div className="modal-planejamento-edit-content-scrollable">
                 
-                {/* --- SEÇÃO 1: CABEÇALHO (Formulário Habilitado/Desabilitado) --- */}
+                {/* --- SEÇÃO 1: CABEÇALHO --- */}
                 <h3 className="section-title">Dados do Plano (Cabeçalho)</h3>
                 
                 <Form 
                     form={form} 
                     layout="vertical" 
                     name="form_in_modal_edit" 
-                    // (MODIFICADO) Desabilita em 'edit' ou se estiver salvando
-                    disabled={(mode === 'edit' && !!initialData?.id) || isSaving} // (Ajuste) Desabilita se modo edit E tem ID
+                    disabled={(mode === 'edit' && !!initialData?.id) || isSaving} 
                 >
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px'}}>
                         
@@ -1266,7 +1176,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 <div style={{height: '24px'}}></div> 
 
                 {/* --- SEÇÃO 2: ITENS (Tabela) --- */}
-                {/* (MODIFICADO) Esta seção agora está sempre visível */}
                 <>
                   <h3 className="section-title">
                     <span>Itens do Plano (Rotações)</span>
@@ -1285,17 +1194,17 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                     </div>
                   </h3>
                   
-                  <Spin spinning={loadingItens || isBuscandoPivos} tip={isBuscandoPivos ? "Buscando pivôs..." : "Carregando itens..."}>
-                      <Table
-                          columns={colunasItensEditaveis} 
-                          dataSource={planejamentoItens}
-                          rowKey={(record: any) => record.isGroup ? record.id : record.id_pivo_talhao} // (CORREÇÃO) Chave robusta
-                          size="small"
-                          pagination={false} 
-                          locale={{ emptyText: 'Nenhum item adicionado. Clique em "Buscar Pivôs" para carregar.' }}
-                          scroll={{ x: 1500 }} // Habilita scroll horizontal
-                      />
-                  </Spin>
+                  <Table
+                      columns={colunasItensEditaveis} 
+                      dataSource={planejamentoItens}
+                      rowKey={(record: any) => record.isGroup ? record.id : record.id_pivo_talhao} 
+                      size="small"
+                      pagination={false} 
+                      locale={{ emptyText: renderEmpty() }} 
+                      scroll={{ x: 1500 }} 
+                      sticky 
+                      loading={loadingItens || isBuscandoPivos} 
+                  />
                 </>
               </div>
           </div>
@@ -1310,16 +1219,13 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
               Cancelar
             </Button>
             
-            {/* (REMOVIDO) Botão de Salvar Cabeçalho */}
-            
-            {/* (MODIFICADO) Botão de Salvar TUDO */}
             <Button
                 key="save_all"
                 type="primary"
                 icon={<Save size={16} />}
                 loading={isSaving}
                 disabled={isSaving || isBuscandoPivos}
-                onClick={handleSubmit} // (MODIFICADO) Chama o novo handler
+                onClick={handleSubmit} 
                 style={{ backgroundColor: 'var(--gcs-green-dark)', borderColor: 'var(--gcs-green-dark)' }}
             >
                 Salvar Planejamento
