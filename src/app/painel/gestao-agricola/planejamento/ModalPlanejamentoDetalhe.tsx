@@ -2,12 +2,11 @@
  * =========================================================================
  * MODAL DE EDIÇÃO (MESTRE-DETALHE) PARA PLANEJAMENTO
  * =========================================================================
- * - VERSÃO RESTAURADA + CORREÇÕES DE BUGS VISUAIS:
- * 1. CORES (DARK): Restaurado o CSS exato que você forneceu na versão
- * que funcionava (rgba transparentes).
- * 2. SPINNER: Adicionado CSS para forçar Branco no modo escuro.
- * 3. EMPTY STATE: Adicionado CSS para remover fundo cinza no modo escuro.
- * 4. LOGICA: Mantida a busca de pivôs e salvamento único.
+ * - VERSÃO FINAL AJUSTADA (FIX VISUAL DARK MODE):
+ * 1. CORES: Restauradas para o padrão transparente (rgba 0.1) que você aprovou.
+ * 2. FUNDO DA TABELA: Forçado para transparente/escuro para que o rgba 0.1
+ * não fique "pastel" (branco) no modo escuro.
+ * 3. SPINNER/EMPTY: Corrigidos para branco/transparente.
  * =========================================================================
  */
 "use client";
@@ -774,6 +773,31 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             padding: 1.5rem;
         }
         
+        /* --- CORREÇÃO SPINNER --- */
+        body.dark .ant-spin-container,
+        body.dark .ant-alert {
+            background: transparent !important;
+        }
+        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-text {
+            color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+            font-weight: 600;
+            z-index: 10;
+        }
+        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-dot i {
+            background-color: #ffffff !important;
+        }
+        body.dark .ant-spin-blur {
+            background-color: transparent !important;
+            opacity: 0 !important;
+        }
+        body.dark .ant-spin-nested-loading > div > .ant-spin {
+            background-color: rgba(0, 0, 0, 0.5) !important; 
+            max-height: 100%;
+        }
+
+        
+        /* --- Modal Footer --- */
         .modal-planejamento-edit-footer {
             padding: 1rem 1.5rem;
             border-top: 1px solid;
@@ -795,6 +819,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             border-top-color: var(--gcs-dark-border);
         }
 
+        /* --- Botões AntD --- */
         .btn-cancelar-laranja {
             background-color: var(--gcs-orange) !important;
             border-color: var(--gcs-orange) !important;
@@ -824,6 +849,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
              background-color: #1e7e34;
         }
         
+        /* --- ESTILOS PARA Antd Form (Habilitado e Desabilitado) --- */
         body.dark .ant-form-item-label > label {
             color: var(--gcs-dark-text-primary);
         }
@@ -931,8 +957,9 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .ant-table {
             background: var(--gcs-dark-bg-transparent) !important;
         }
+        /* CORREÇÃO CRÍTICA: FORÇAR O FUNDO DA TH A SER TRANSPARENTE */
         body.dark .ant-table-thead > tr > th {
-            background-color: rgba(25, 39, 53, 0.5) !important;
+            background-color: transparent !important; /* Essencial para o rgba funcionar */
             color: var(--gcs-dark-text-primary) !important;
             font-weight: 600;
             border-bottom-color: var(--gcs-dark-border) !important;
@@ -952,7 +979,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .ant-pagination-item-active a { color: white !important; }
         body.dark .ant-pagination-disabled .ant-pagination-item-link { color: #475569 !important; }
         
-        /* CORREÇÃO: REMOÇÃO DO FUNDO CINZA NO MODO ESCURO (TABELA VAZIA) */
+        /* CORREÇÃO: REMOÇÃO DO FUNDO CINZA (EMPTY STATE) */
         body.dark .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder {
             background-color: transparent !important;
         }
@@ -967,24 +994,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             color: var(--gcs-dark-text-secondary) !important;
         }
 
-        /* CORREÇÃO SPINNER */
-        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-text {
-            color: #ffffff !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-            font-weight: 600;
-            z-index: 10;
-        }
-        body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-dot i {
-            background-color: #ffffff !important;
-        }
-        body.dark .ant-spin-blur {
-            background-color: transparent !important;
-            opacity: 0 !important;
-        }
-        body.dark .ant-spin-nested-loading > div > .ant-spin {
-            background-color: rgba(0, 0, 0, 0.5) !important; 
-            max-height: 100%;
-        }
         
         .rot-header-1 { color: var(--gcs-blue-sky); font-weight: bold; }
         .rot-header-2 { color: var(--gcs-green); font-weight: bold; }
@@ -1000,9 +1009,9 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.light .ant-table-tbody .col-group-rot3 { background-color: rgba(245, 130, 32, 0.03) !important; }
         
         /* CORREÇÃO: RESTAURADO PARA RGBA TRANSPARENTE (COMO PEDIDO) */
-        body.dark .ant-table-thead .col-group-rot1 { background-color: rgba(56, 189, 248, 0.2) !important; }
-        body.dark .ant-table-thead .col-group-rot2 { background-color: rgba(95, 178, 70, 0.2) !important; }
-        body.dark .ant-table-thead .col-group-rot3 { background-color: rgba(245, 130, 32, 0.2) !important; }
+        body.dark .ant-table-thead .col-group-rot1 { background-color: rgba(56, 189, 248, 0.1) !important; }
+        body.dark .ant-table-thead .col-group-rot2 { background-color: rgba(95, 178, 70, 0.1) !important; }
+        body.dark .ant-table-thead .col-group-rot3 { background-color: rgba(245, 130, 32, 0.1) !important; }
         
         body.dark .ant-table-tbody .col-pivo-talhao { background-color: rgba(25, 39, 53, 0.3) !important; }
         
