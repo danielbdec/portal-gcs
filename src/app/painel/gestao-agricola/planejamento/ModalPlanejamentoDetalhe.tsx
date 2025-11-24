@@ -2,11 +2,13 @@
  * =========================================================================
  * MODAL DE EDIÇÃO (MESTRE-DETALHE) PARA PLANEJAMENTO
  * =========================================================================
- * - VERSÃO FINAL AJUSTADA (FIX VISUAL DARK MODE):
- * 1. CORES: Restauradas para o padrão transparente (rgba 0.1) que você aprovou.
- * 2. FUNDO DA TABELA: Forçado para transparente/escuro para que o rgba 0.1
- * não fique "pastel" (branco) no modo escuro.
- * 3. SPINNER/EMPTY: Corrigidos para branco/transparente.
+ * - VERSÃO FINAL DEFINITIVA (COM CORREÇÃO DE DATA/IDIOMA):
+ * 1. IDIOMA (DATEPICKER): Configurado 'ConfigProvider' com locale pt-BR
+ * para que o botão 'Today' vire 'Hoje' e os meses fiquem em português.
+ * 2. COR BOTÃO HOJE (DARK): CSS adicionado para forçar a cor do link
+ * 'Hoje' para branco no modo escuro.
+ * 3. ESTILOS ANTERIORES: Mantidos (Tabela transparente, cores rgba,
+ * spinner branco, empty state sem fundo).
  * =========================================================================
  */
 "use client";
@@ -16,7 +18,13 @@ import { Form, Input, Select, Button, Modal as AntModal, Table, message, Dropdow
 import type { MenuProps } from 'antd';
 import { AlertTriangle, Edit, Plus, Trash2, ClipboardList, Settings2, MoreVertical, Eye, Save, Search, Inbox } from 'lucide-react';
 
+// --- IMPORTAÇÃO DE LOCALE (PT-BR) ---
+import ptBR from 'antd/locale/pt_BR';
 import dayjs from 'dayjs'; 
+import 'dayjs/locale/pt-br';
+
+// Configura o Dayjs globalmente para PT-BR
+dayjs.locale('pt-br');
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -773,11 +781,7 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             padding: 1.5rem;
         }
         
-        /* --- CORREÇÃO SPINNER --- */
-        body.dark .ant-spin-container,
-        body.dark .ant-alert {
-            background: transparent !important;
-        }
+        /* SPINNER BRANCO NO MODO DARK */
         body.dark .ant-table-wrapper .ant-spin-nested-loading > div > .ant-spin .ant-spin-text {
             color: #ffffff !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.9);
@@ -796,7 +800,20 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             max-height: 100%;
         }
 
-        
+        /* CORREÇÃO BOTÃO HOJE (TODAY) */
+        body.dark .ant-picker-today-btn {
+            color: var(--gcs-dark-text-primary) !important;
+        }
+        body.dark .ant-picker-today-btn:hover {
+            color: var(--gcs-blue-sky) !important;
+        }
+        body.dark .ant-picker-footer {
+            border-color: var(--gcs-dark-border) !important;
+        }
+        body.dark .ant-picker-footer-extra {
+            color: var(--gcs-dark-text-primary) !important;
+        }
+
         /* --- Modal Footer --- */
         .modal-planejamento-edit-footer {
             padding: 1rem 1.5rem;
@@ -917,7 +934,12 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
              color: var(--gcs-dark-text-primary) !important;
              border-bottom-color: var(--gcs-dark-border) !important;
         }
-        body.dark .ant-picker-cell,
+        body.dark .ant-picker-content th {
+             color: var(--gcs-dark-text-primary) !important;
+        }
+        body.dark .ant-picker-cell {
+             color: var(--gcs-dark-text-secondary) !important;
+        }
         body.dark .ant-picker-cell-in-view {
              color: var(--gcs-dark-text-secondary) !important; 
         }
@@ -928,11 +950,12 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .ant-picker-cell:hover:not(.ant-picker-cell-selected) .ant-picker-cell-inner {
              background: var(--gcs-dark-bg-transparent) !important;
         }
-        body.dark .ant-picker-cell-in-view.ant-picker-cell-today .ant-picker-cell-inner::before {
+        body.dark .ant-picker-cell-today .ant-picker-cell-inner::before {
              border-color: var(--gcs-blue-sky) !important;
         }
         body.dark .ant-picker-cell-selected .ant-picker-cell-inner {
             background: var(--gcs-blue-light) !important;
+            color: white !important;
         }
         
         body.light .ant-table-wrapper {
@@ -957,9 +980,9 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
         body.dark .ant-table {
             background: var(--gcs-dark-bg-transparent) !important;
         }
-        /* CORREÇÃO CRÍTICA: FORÇAR O FUNDO DA TH A SER TRANSPARENTE */
+        /* CORREÇÃO FUNDAMENTAL: REMOVER FUNDO BRANCO DO ANTD NO HEADER */
         body.dark .ant-table-thead > tr > th {
-            background-color: transparent !important; /* Essencial para o rgba funcionar */
+            background-color: transparent !important; /* OBRIGATÓRIO PARA RGBA FUNCIONAR */
             color: var(--gcs-dark-text-primary) !important;
             font-weight: 600;
             border-bottom-color: var(--gcs-dark-border) !important;
@@ -1185,36 +1208,39 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 <div style={{height: '24px'}}></div> 
 
                 {/* --- SEÇÃO 2: ITENS (Tabela) --- */}
-                <>
-                  <h3 className="section-title">
-                    <span>Itens do Plano (Rotações)</span>
+                {/* Envolve a tabela em um ConfigProvider para aplicar o locale correto */}
+                <ConfigProvider locale={ptBR}>
+                  <>
+                    <h3 className="section-title">
+                      <span>Itens do Plano (Rotações)</span>
+                      
+                      <div className="section-title-actions">
+                          <Button
+                              type="primary"
+                              icon={<Search size={16} />}
+                              onClick={handleBuscarPivos}
+                              className="btn-buscar-azul"
+                              loading={isBuscandoPivos}
+                              disabled={isSaving || isBuscandoPivos}
+                          >
+                              Buscar Pivôs/Talhões
+                          </Button>
+                      </div>
+                    </h3>
                     
-                    <div className="section-title-actions">
-                        <Button
-                            type="primary"
-                            icon={<Search size={16} />}
-                            onClick={handleBuscarPivos}
-                            className="btn-buscar-azul"
-                            loading={isBuscandoPivos}
-                            disabled={isSaving || isBuscandoPivos}
-                        >
-                            Buscar Pivôs/Talhões
-                        </Button>
-                    </div>
-                  </h3>
-                  
-                  <Table
-                      columns={colunasItensEditaveis} 
-                      dataSource={planejamentoItens}
-                      rowKey={(record: any) => record.isGroup ? record.id : record.id_pivo_talhao} 
-                      size="small"
-                      pagination={false} 
-                      locale={{ emptyText: renderEmpty() }} 
-                      scroll={{ x: 1500 }} 
-                      sticky 
-                      loading={loadingItens || isBuscandoPivos} 
-                  />
-                </>
+                    <Table
+                        columns={colunasItensEditaveis} 
+                        dataSource={planejamentoItens}
+                        rowKey={(record: any) => record.isGroup ? record.id : record.id_pivo_talhao} 
+                        size="small"
+                        pagination={false} 
+                        locale={{ emptyText: renderEmpty() }} 
+                        scroll={{ x: 1500 }} 
+                        // REMOVIDO STICKY PARA EVITAR O BUG DO FUNDO BRANCO
+                        loading={loadingItens || isBuscandoPivos} 
+                    />
+                  </>
+                </ConfigProvider>
               </div>
           </div>
           
