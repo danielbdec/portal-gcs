@@ -214,7 +214,6 @@ const FormFields = ({ formData, mode, disabled, handleInputChange }: {
         </div>
     </div>
 );
-// =================================================================================
 
 const ModalEmpreendimento = ({
     visible,
@@ -264,7 +263,7 @@ const ModalEmpreendimento = ({
         if (visible && modalRef.current) {
             const modal = modalRef.current;
             const initialX = (window.innerWidth - modal.offsetWidth) / 2;
-            const initialY = 60;
+            const initialY = Math.max(20, (window.innerHeight - modal.offsetHeight) / 2);
             setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
         }
     }, [initialData, visible]);
@@ -294,7 +293,8 @@ const ModalEmpreendimento = ({
     const handleMouseDown = (e: React.MouseEvent) => {
       if (modalRef.current) {
           const target = e.target as HTMLElement;
-          if(target.id === 'modal-header' || target.parentElement?.id === 'modal-header') {
+          // Permite arrastar apenas pelo header
+          if(target.closest('.modal-header')) {
             setIsDragging(true);
             const modalRect = modalRef.current.getBoundingClientRect();
             setOffset({ x: e.clientX - modalRect.left, y: e.clientY - modalRect.top });
@@ -357,32 +357,44 @@ const ModalEmpreendimento = ({
 
     return (
         <>
+            {/* CSS Injetado para controlar a cor do texto de carregamento baseado no tema */}
+            <style>{`
+                .modal-loading-text { color: var(--gcs-blue); }
+                body.dark .modal-loading-text { color: #F1F5F9 !important; }
+            `}</style>
+
+            {/* Backdrop com zIndex compatível com o sistema de temas (2200) */}
             <div onClick={isSaving ? undefined : onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000 }}></div>
             <div
                 ref={modalRef}
+                className="modal-window" // Aplica estilos de cores do tema
                 style={{
-                    position: 'fixed', top: position.y, left: position.x,
-                    backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                    zIndex: 1001, width: '90%', maxWidth: '1000px',
-                    display: 'flex', flexDirection: 'column'
+                    // IMPORTANTE: transform 'none' para não conflitar com o posicionamento JS
+                    position: 'fixed', 
+                    top: position.y, 
+                    left: position.x,
+                    transform: 'none', 
+                    zIndex: 2201, 
+                    width: '90%', 
+                    maxWidth: '1000px',
+                    margin: 0 // Garante que não haja margens afetando a posição
                 }}
             >
-                <div id="modal-header" onMouseDown={handleMouseDown} style={{
-                    padding: '1rem 1.5rem', borderBottom: '1px solid var(--gcs-border-color)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    cursor: 'move', backgroundColor: '#f1f5fb',
-                    borderTopLeftRadius: '12px', borderTopRightRadius: '12px'
-                }}>
+                <div 
+                    className="modal-header" // Aplica estilo do tema e cursor
+                    onMouseDown={handleMouseDown}
+                >
                     <h3 style={{ margin: 0, color: 'var(--gcs-blue)' }}>{titles[mode]}</h3>
                     <button onClick={isSaving ? undefined : onClose} disabled={isSaving} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><XIcon size={20} color="var(--gcs-gray-dark)" /></button>
                 </div>
                 
-                <div style={{ padding: '1.5rem' }}>
+                {/* Adicionado flex: 1 e overflowY: auto para permitir rolagem se o modal for muito grande */}
+                <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
                     {isDeleteMode ? (
                         <div>
                             <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
                                 <AlertTriangle size={40} color="var(--gcs-red)" style={{marginBottom: '1rem'}}/>
-                                <p style={{ color: '#333', fontSize: '1.1rem' }}>
+                                <p style={{ fontSize: '1.1rem' }}>
                                     Tem certeza que deseja excluir o empreendimento abaixo?
                                 </p>
                                 <p style={{marginTop: '0.5rem', color: 'var(--gcs-gray-dark)'}}>Esta ação não pode ser desfeita.</p>
@@ -394,9 +406,10 @@ const ModalEmpreendimento = ({
                     )}
                 </div>
 
-                <div style={{ padding: '1.5rem', borderTop: '1px solid var(--gcs-border-color)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem', backgroundColor: '#f8f9fa', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
+                <div className="modal-footer">
                     {isSaving ? (
-                        <div style={{display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gcs-blue)', fontWeight: 'bold'}}>
+                        /* CORREÇÃO APLICADA AQUI: Classe modal-loading-text adicionada e inline style color removido */
+                        <div className="modal-loading-text" style={{display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold'}}>
                             <Loader2 size={20} className="animate-spin" />
                             <span>{getLoadingMessage()}</span>
                         </div>
