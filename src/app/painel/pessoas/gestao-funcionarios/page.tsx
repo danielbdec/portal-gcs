@@ -349,7 +349,8 @@ export default function GestaoPessoalPage() {
   };
 
   // --- Gráfico e KPIs (ATUALIZAÇÃO 2) ---
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Inicializando como undefined para satisfazer o Recharts
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
 
   // KPIs dinâmicos (baseados nos dados filtrados)
   const kpiData = useMemo(() => {
@@ -790,7 +791,8 @@ export default function GestaoPessoalPage() {
                             activeIndex={activeIndex} 
                             activeShape={renderActiveShape}
                             onMouseEnter={(_, index) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
+                            // CORREÇÃO: Usando undefined
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoCentroCusto.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={CORES_GRAFICO[index % CORES_GRAFICO.length]} />

@@ -615,7 +615,9 @@ const ModalFuncionario: React.FC<ModalFuncionarioProps> = ({ visible, onClose, i
         }
         body.light .gestao-list-item { color: var(--gcs-dark-text); }
         body.light .gestao-list-item:hover { background-color: var(--gcs-gray-light); }
-        body.light .gestao-list-item[aria-selected="true"] {
+        
+        /* CORREÇÃO AQUI: Alterado de [aria-selected="true"] para [data-active="true"] */
+        body.light .gestao-list-item[data-active="true"] {
             background-color: #eaf3ff;
             color: var(--gcs-blue-light);
             font-weight: 600;
@@ -623,7 +625,9 @@ const ModalFuncionario: React.FC<ModalFuncionarioProps> = ({ visible, onClose, i
         
         body.dark .gestao-list-item { color: var(--gcs-dark-text-secondary); }
         body.dark .gestao-list-item:hover { background-color: rgba(25, 39, 53, 0.7); }
-        body.dark .gestao-list-item[aria-selected="true"] {
+        
+        /* CORREÇÃO AQUI: Alterado de [aria-selected="true"] para [data-active="true"] */
+        body.dark .gestao-list-item[data-active="true"] {
             background-color: var(--gcs-blue-light);
             color: white;
             font-weight: 600;
@@ -1292,21 +1296,24 @@ const ModalFuncionario: React.FC<ModalFuncionarioProps> = ({ visible, onClose, i
                 <div className="gestao-list">
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'documentos'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'documentos'}
                     onClick={() => setAbaAtiva('documentos')}
                   >
                     <FileText size={16} /> Documentos
                   </button>
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'ferias'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'ferias'}
                     onClick={() => setAbaAtiva('ferias')}
                   >
                     <CalendarClock size={16} /> Férias
                   </button>
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'historico'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'historico'}
                     onClick={() => setAbaAtiva('historico')}
                   >
                     <History size={16} /> Histórico
@@ -1314,21 +1321,24 @@ const ModalFuncionario: React.FC<ModalFuncionarioProps> = ({ visible, onClose, i
                   {/* --- (NOVO) BOTÃO OCORRÊNCIAS --- */}
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'ocorrencias'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'ocorrencias'}
                     onClick={() => setAbaAtiva('ocorrencias')}
                   >
                     <Gavel size={16} /> Ocorrências
                   </button>
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'testes'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'testes'}
                     onClick={() => setAbaAtiva('testes')}
                   >
                     <ClipboardCheck size={16} /> Testes
                   </button>
                   <button
                     className="gestao-list-item"
-                    aria-selected={abaAtiva === 'rescisao'}
+                    // CORREÇÃO: aria-selected para data-active
+                    data-active={abaAtiva === 'rescisao'}
                     onClick={() => setAbaAtiva('rescisao')}
                   >
                     <UserX size={16} /> Rescisão
@@ -1348,8 +1358,6 @@ const ModalFuncionario: React.FC<ModalFuncionarioProps> = ({ visible, onClose, i
                 
                 {/* Conteúdo scrollável */}
                 <div className="detalhes-scrollable">
-                  
-                  {/* --- ATUALIZAÇÃO 3: Bloco de Descrições REMOVIDO --- */}
                   
                   {/* --- ATUALIZAÇÃO: Conteúdo dinâmico da Aba (REORDENADO) --- */}
                   <div>

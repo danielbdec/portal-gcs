@@ -6,11 +6,8 @@
  * - Consome a API de 'gestao-planej-cabec-consulta'.
  * - Exibe a tabela de cabeçalho (plano_cultivo).
  * - ATUALIZAÇÃO:
- * - "Novo Planejamento": Abre ModalPlanejamentoDetalhe (modo 'add').
- * - "Alterar": Abre ModalPlanejamentoDetalhe (modo 'edit').
- * - "Excluir": Abre ModalPlanejamento (modo 'delete').
- * - LÓGICA DE SALVAR: Agora usa um 'handleSave' único que
- * recebe cabeçalho e itens do modal de uma vez.
+ * - Tipagem de 'status' corrigida para 'Aberto' | 'Inativo' na interface
+ * PlanejamentoCabec para compatibilidade com os modais.
  * =========================================================================
  */
 "use client";
@@ -42,8 +39,8 @@ import {
 import { LoadingOutlined } from "@ant-design/icons";
 import "antd/dist/reset.css";
 
-// --- Imports dos Modais (Nomenclatura Corrigida) ---
-import ModalPlanejamento from "./ModalPlanejamento";           // Modal Simples (AGORA SÓ DELETE)
+// --- Imports dos Modais ---
+import ModalPlanejamento from "./ModalPlanejamento";           // Modal Simples (Delete)
 import ModalPlanejamentoDetalhe from "./ModalPlanejamentoDetalhe"; // Modal Mestre-Detalhe (Add/Edit)
 import NotificationModal from "./NotificationModal";           // Modal de Notificação
 
@@ -52,10 +49,11 @@ import NotificationModal from "./NotificationModal";           // Modal de Notif
 interface PlanejamentoCabec {
   id: number;
   key: string; // Para a tabela
-  filial: string; // NOVO CAMPO
+  filial: string;
   safra: string;
   descricao: string;
-  status: string; // "Aberto" ou "Inativo"
+  // CORREÇÃO: Tipagem estrita para status para casar com os Modais
+  status: 'Aberto' | 'Inativo'; 
   status_original: 'A' | 'I'; // Status da API
   observacao: string | null;
   dt_inclusao: string;
@@ -64,8 +62,6 @@ interface PlanejamentoCabec {
 }
 
 // --- INTERFACE DOS ITENS (plano_cultivo_item) ---
-// (Esta interface está duplicada no ModalPlanejamentoDetalhe,
-// mas é necessária aqui para a tipagem da nova função de salvar)
 interface PlanejamentoItem {
     id: number;
     id_plano_cultivo: number;
@@ -92,7 +88,7 @@ interface PivoTalhao {
 }
 interface Variedade {
     id: number;
-    nome_comercial: string; // Baseado no ModalVariedade.tsx
+    nome_comercial: string;
     [key: string]: any;
 }
 
@@ -100,7 +96,7 @@ interface Variedade {
 type StatusFiltro = 'Aberto' | 'Inativo' | 'Todos';
 
 
-// --- HELPER DE DATA (Do seu exemplo de Pivô) ---
+// --- HELPER DE DATA ---
 const formatProtheusDateTime = (dateString: string | null | undefined): string => {
     if (!dateString) {
         return '—';
@@ -108,7 +104,6 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
     try {
         const dateTest = new Date(dateString);
         if (isNaN(dateTest.getTime())) {
-            // Tenta formato YYYYMMDD
             if (dateString.length === 8) {
                 const year = dateString.substring(0, 4);
                 const month = dateString.substring(4, 6);
@@ -117,8 +112,6 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
             }
             return '—';
         }
-
-        // Padrão ISO '2025-10-01T10:00:00'
         const year = dateString.substring(0, 4);
         const month = dateString.substring(5, 7);
         const day = dateString.substring(8, 10);
@@ -128,10 +121,7 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
             const minute = dateString.substring(14, 16);
             return `${day}/${month}/${year} ${hour}:${minute}`;
         }
-        
-        // Retorna apenas data se não houver hora
         return `${day}/${month}/${year}`;
-
     } catch (error) {
         console.error("Erro ao formatar data Protheus:", error);
         return '—';
@@ -139,7 +129,7 @@ const formatProtheusDateTime = (dateString: string | null | undefined): string =
 };
 
 
-// --- COMPONENTES AUXILIARES (DO LAYOUT 1) ---
+// --- COMPONENTES AUXILIARES ---
 const LoadingSpinner = ({ text }: { text: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
         <div className="auth-spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -208,28 +198,25 @@ export default function GestaoPlanejamentoPage() {
   // Estado principal
   const [planejamentos, setPlanejamentos] = useState<PlanejamentoCabec[]>([]);
 
-  // --- Estados do Tema (Layout 1) ---
+  // --- Estados do Tema ---
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
   const hasFetchedTheme = useRef(false);
   const [isSavingTheme, setIsSavingTheme] = useState(false);
 
-  // --- Estados da Página (Layout 2) ---
+  // --- Estados da Página ---
   const [busca, setBusca] = useState<string>("");
   const buscaDebounced = useDebouncedValue(busca, 400);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState(false); // Usado para salvar/excluir cabeçalho
+  const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
 
-  // ==================================================================
-  // ===           📌 ATUALIZAÇÃO DOS ESTADOS DOS MODAIS           ===
-  // ==================================================================
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); // Para ModalPlanejamento (Delete)
-  const [isDetalheModalOpen, setIsDetalheModalOpen] = useState(false); // Para ModalPlanejamentoDetalhe (Add/Edit)
-  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add'); // 'delete' é tratado pelo isDeleteModalOpen
+  // --- Estados dos Modais ---
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); 
+  const [isDetalheModalOpen, setIsDetalheModalOpen] = useState(false); 
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add'); 
   const [currentItem, setCurrentItem] = useState<Partial<PlanejamentoCabec> | null>(null);
-  // ==================================================================
   
-  // --- Estados de Paginação e Ordenação (Layout 1) ---
+  // --- Estados de Paginação e Ordenação ---
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [sortConfig, setSortConfig] = useState<{ key: keyof PlanejamentoCabec | null; direction: 'asc' | 'desc' }>({ key: 'id', direction: 'asc' });
@@ -238,7 +225,7 @@ export default function GestaoPlanejamentoPage() {
   const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>('Aberto');
 
   // --- Gráfico e KPIs ---
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
 
   // KPIs de Status (Total vs Abertos)
   const kpiDadosStatus = useMemo(() => {
@@ -253,7 +240,7 @@ export default function GestaoPlanejamentoPage() {
     const safraMap = new Map<string, number>();
     planejamentos.forEach(item => {
         const safra = (item.safra || 'N/A');
-        safraMap.set(safra, (safraMap.get(safra) || 0) + 1); // Contagem de itens
+        safraMap.set(safra, (safraMap.get(safra) || 0) + 1); 
     });
 
     return Array.from(safraMap.entries())
@@ -261,7 +248,7 @@ export default function GestaoPlanejamentoPage() {
             name: name,
             value: value
         }))
-        .sort((a, b) => b.value - a.value); // Ordena da maior para a menor
+        .sort((a, b) => b.value - a.value); 
   }, [planejamentos]);
 
   // Total para cálculo do percentual do gráfico
@@ -269,7 +256,7 @@ export default function GestaoPlanejamentoPage() {
       return dadosGraficoSafra.reduce((acc, entry) => acc + entry.value, 0);
   }, [dadosGraficoSafra]);
 
-  // Cores (baseado no layout do Pivô)
+  // Cores
   const coresSafraTexto: Record<string, string> = {
       "24/25": "#EAB308",
       "25/26": "#5FB246",
@@ -285,7 +272,7 @@ export default function GestaoPlanejamentoPage() {
   const DEFAULT_COR_GRAFICO = "url(#gradCinza)";
 
 
-  // --- LÓGICA DE TEMA (Layout 1) ---
+  // --- LÓGICA DE TEMA ---
   useEffect(() => {
     const storedTheme = localStorage.getItem('theme') as 'light' | 'dark';
     setTheme(storedTheme || 'light');
@@ -316,7 +303,7 @@ export default function GestaoPlanejamentoPage() {
   };
 
 
-  // --- LÓGICA DE AUTENTICAÇÃO (Layout 2) ---
+  // --- LÓGICA DE AUTENTICAÇÃO ---
   useEffect(() => {
     if (status === 'loading') { setAuthStatus('loading'); return; }
     if (status === 'authenticated') {
@@ -356,13 +343,16 @@ export default function GestaoPlanejamentoPage() {
       message.error(`Não foi possível carregar os planejamentos: ${error instanceof Error ? error.message : String(error)}`);
       data = [];
     } finally {
-      const statusMap: Record<string, string> = { 'A': 'Aberto' };
+      // CORREÇÃO AQUI: Tipagem estrita para o map de status
+      const statusMap: Record<string, 'Aberto' | 'Inativo'> = { 'A': 'Aberto' };
+      
       setPlanejamentos(data.map((item, index) => ({
         ...item,
         key: item.id?.toString() ?? `key-${index}`,
+        // Garante que status seja apenas 'Aberto' ou 'Inativo'
         status: statusMap[item.status] || 'Inativo',
         status_original: item.status || 'I',
-        filial: item.filial || 'N/A', // NOVO
+        filial: item.filial || 'N/A',
         safra: item.safra || 'N/A',
         descricao: item.descricao || 'N/A',
       })));
@@ -388,7 +378,7 @@ export default function GestaoPlanejamentoPage() {
     const termo = buscaDebounced.toLowerCase().trim();
     if (termo) {
         dadosFiltrados = dadosFiltrados.filter(c =>
-            c.filial.toLowerCase().includes(termo) || // NOVO
+            c.filial.toLowerCase().includes(termo) ||
             c.safra.toLowerCase().includes(termo) ||
             c.descricao.toLowerCase().includes(termo) ||
             c.id.toString().includes(termo)
@@ -426,7 +416,7 @@ export default function GestaoPlanejamentoPage() {
   };
 
   // ==================================================================
-  // ===           📌 NOVA LÓGICA DE ABERTURA DE MODAL             ===
+  // ===           📌 LÓGICA DE ABERTURA DE MODAL                  ===
   // ==================================================================
   
   // Handlers dos Modais
@@ -451,14 +441,6 @@ export default function GestaoPlanejamentoPage() {
   const handleCloseDeleteModal = () => setIsDeleteModalOpen(false);
   const handleCloseDetalheModal = () => setIsDetalheModalOpen(false);
   
-  /**
-   * (REMOVIDO) handleSaveHeader
-   */
-
-  /**
-   * (NOVO) Salva TUDO (Cabeçalho e Itens)
-   * Chamado de dentro do ModalPlanejamentoDetalhe
-   */
   const handleSave = async (data: { header: any, items: PlanejamentoItem[] }) => {
     if (!session?.user?.email) {
       setNotification({ visible: true, type: 'error', message: 'Sessão expirada. Faça login novamente.' });
@@ -493,11 +475,6 @@ export default function GestaoPlanejamentoPage() {
     }
   };
 
-
-  /**
-   * (MODIFICADO) Salva o CABEÇALHO (modo 'delete')
-   * Chamado de dentro do ModalPlanejamento (agora só de delete)
-   */
   const handleDeleteHeader = async (data: any) => {
     if (!session?.user?.email) {
       setNotification({ visible: true, type: 'error', message: 'Sessão expirada. Faça login novamente.' });
@@ -527,7 +504,7 @@ export default function GestaoPlanejamentoPage() {
   };
   // ==================================================================
   
-  // --- COMPONENTES DE ORDENAÇÃO (Layout 1) ---
+  // --- COMPONENTES DE ORDENAÇÃO ---
   const requestSort = (key: keyof PlanejamentoCabec) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -547,14 +524,11 @@ export default function GestaoPlanejamentoPage() {
     return <ArrowDown size={14} style={{ marginLeft: '4px' }} />;
   };
 
-  // --- Função para formatar legenda ---
   const renderLegendText = (value: string) => {
     return <span style={{ marginLeft: '4px' }} className="recharts-legend-item-text">{value}</span>;
   };
 
-  // --- Gráfico (Layout 1) ---
-
-  // Tooltip Customizado (Glassmorphism)
+  // --- Gráfico ---
   const CustomTooltip = ({ active, payload }: any) => {
       if (active && payload && payload.length) {
           const value = payload[0].value;
@@ -894,7 +868,8 @@ export default function GestaoPlanejamentoPage() {
                             activeIndex={activeIndex} 
                             activeShape={renderActiveShape}
                             onMouseEnter={(_, index) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
+                            // CORREÇÃO: set undefined
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoSafra.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={coresSafraDonut[entry.name] || DEFAULT_COR_GRAFICO} />

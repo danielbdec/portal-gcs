@@ -58,12 +58,18 @@ const ModalRegraFiscal = ({
         if (visible && initialData) {
             setFormData({
                 ...initialData,
-                cst_pis_cof_saida: Array.isArray(initialData.cst_pis_cof_saida) ? initialData.cst_pis_cof_saida.join(', ') : '',
-                cst_icms_saida: Array.isArray(initialData.cst_icms_saida) ? initialData.cst_icms_saida.join(', ') : ''
+                // CORREÇÃO: Cast 'as any' permite atribuir a string formatada ao estado que espera array
+                cst_pis_cof_saida: (Array.isArray(initialData.cst_pis_cof_saida) ? initialData.cst_pis_cof_saida.join(', ') : '') as any,
+                cst_icms_saida: (Array.isArray(initialData.cst_icms_saida) ? initialData.cst_icms_saida.join(', ') : '') as any
             });
         } else if (visible && !initialData) {
             setFormData({
-                operacao: '', tes: '', cfop_ref_saida: '', cst_pis_cof_saida: '', cst_icms_saida: ''
+                operacao: '', 
+                tes: '', 
+                cfop_ref_saida: '', 
+                // CORREÇÃO: Inicialização vazia com cast
+                cst_pis_cof_saida: '' as any, 
+                cst_icms_saida: '' as any
             });
         }
 
@@ -76,22 +82,7 @@ const ModalRegraFiscal = ({
         }
     }, [initialData, visible]);
 
-    if (!visible) return null;
-
-    // Funções para arrastar o modal
-    const handleMouseDown = (e: React.MouseEvent) => {
-      if (modalRef.current) {
-          const target = e.target as HTMLElement;
-          // Permite arrastar apenas pelo cabeçalho
-          if(target.id === 'modal-header' || target.parentElement?.id === 'modal-header') {
-            setIsDragging(true);
-            const modalRect = modalRef.current.getBoundingClientRect();
-            setOffset({ x: e.clientX - modalRect.left, y: e.clientY - modalRect.top });
-            e.preventDefault();
-          }
-      }
-    };
-  
+    // --- CORREÇÃO: Hooks movidos para ANTES do return condicional ---
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isDragging) return;
         setPosition({ x: e.clientX - offset.x, y: e.clientY - offset.y });
@@ -111,6 +102,24 @@ const ModalRegraFiscal = ({
             document.removeEventListener('mouseup', handleMouseUp);
         };
     }, [isDragging, handleMouseMove, handleMouseUp]);
+    // ----------------------------------------------------------------
+
+    // Verificação de visibilidade movida para cá (após os hooks)
+    if (!visible) return null;
+
+    // Funções para arrastar o modal
+    const handleMouseDown = (e: React.MouseEvent) => {
+      if (modalRef.current) {
+          const target = e.target as HTMLElement;
+          // Permite arrastar apenas pelo cabeçalho
+          if(target.id === 'modal-header' || target.parentElement?.id === 'modal-header') {
+            setIsDragging(true);
+            const modalRect = modalRef.current.getBoundingClientRect();
+            setOffset({ x: e.clientX - modalRect.left, y: e.clientY - modalRect.top });
+            e.preventDefault();
+          }
+      }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -118,10 +127,15 @@ const ModalRegraFiscal = ({
     };
     
     const handleSaveClick = () => {
+        // CORREÇÃO: Cast 'as any' para permitir o split(), já que o TS acha que é um array
+        const pisValue = formData.cst_pis_cof_saida as unknown as string;
+        const icmsValue = formData.cst_icms_saida as unknown as string;
+
         const dataToSave = {
             ...formData,
-            cst_pis_cof_saida: typeof formData.cst_pis_cof_saida === 'string' ? formData.cst_pis_cof_saida.split(',').map(s => s.trim()).filter(Boolean) : [],
-            cst_icms_saida: typeof formData.cst_icms_saida === 'string' ? formData.cst_icms_saida.split(',').map(s => s.trim()).filter(Boolean) : []
+            // Converte a string de volta para array ao salvar
+            cst_pis_cof_saida: typeof pisValue === 'string' ? pisValue.split(',').map(s => s.trim()).filter(Boolean) : [],
+            cst_icms_saida: typeof icmsValue === 'string' ? icmsValue.split(',').map(s => s.trim()).filter(Boolean) : []
         };
         onSave(dataToSave, mode);
     };
@@ -180,11 +194,13 @@ const ModalRegraFiscal = ({
                         </div>
                         <div>
                             <label className="modal-label">CST PIS/COFINS Saída</label>
-                            <input className="modal-input" name="cst_pis_cof_saida" value={formData.cst_pis_cof_saida as string || ''} onChange={handleInputChange} disabled={isDeleteMode} placeholder="Valores separados por vírgula" />
+                            {/* Cast para any no value para evitar erro de tipo ao renderizar string */}
+                            <input className="modal-input" name="cst_pis_cof_saida" value={formData.cst_pis_cof_saida as any || ''} onChange={handleInputChange} disabled={isDeleteMode} placeholder="Valores separados por vírgula" />
                         </div>
                         <div>
                             <label className="modal-label">CST ICMS Saída</label>
-                            <input className="modal-input" name="cst_icms_saida" value={formData.cst_icms_saida as string || ''} onChange={handleInputChange} disabled={isDeleteMode} placeholder="Valores separados por vírgula" />
+                            {/* Cast para any no value para evitar erro de tipo ao renderizar string */}
+                            <input className="modal-input" name="cst_icms_saida" value={formData.cst_icms_saida as any || ''} onChange={handleInputChange} disabled={isDeleteMode} placeholder="Valores separados por vírgula" />
                         </div>
                     </div>
                 </div>
@@ -208,289 +224,4 @@ const ModalRegraFiscal = ({
     );
 };
 
-// === COMPONENTE DO FILTRO AVANÇADO ===
-const FilterPopoverRegras = ({ onApplyFilters, initialFilters }: { onApplyFilters: (filters: any) => void, initialFilters: any }) => {
-    // ... (Código do FilterPopoverRegras permanece o mesmo)
-};
-
-export default function RegrasFiscaisPage() {
-  const [regras, setRegras] = useState<RegraFiscal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchText, setSearchText] = useState("");
-  const [advancedFilters, setAdvancedFilters] = useState({ tes: '', cfop: '', cst: '' });
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'add' | 'edit' | 'delete'>('add');
-  const [currentRegra, setCurrentRegra] = useState<RegraFiscal | null>(null);
-
-  const handleSearch = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/nfe/nfe-consulta-regras-fiscais", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchTerm: "" }),
-      });
-
-      if (!response.ok) throw new Error(`Erro: ${response.statusText}`);
-      
-      const data = await response.json();
-      const arrayDeRegras = Array.isArray(data) ? data : data.regras || [];
-      const dataWithKeys = arrayDeRegras.map((item: Omit<RegraFiscal, 'key'>, index: number) => ({
-        ...item,
-        key: `regra-${index}`,
-      }));
-      setRegras(dataWithKeys);
-    } catch (error) {
-      console.error("Erro ao buscar regras fiscais:", error);
-      setRegras([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    handleSearch();
-  }, [handleSearch]);
-
-  const notasFiltradasOrdenadas = useMemo(() => {
-    return (regras || []).filter((regra) => {
-      const termoBusca = searchText.toLowerCase();
-      
-      const buscaOk =
-        !searchText ||
-        regra.operacao.toLowerCase().includes(termoBusca) ||
-        regra.tes.toLowerCase().includes(termoBusca) ||
-        regra.cfop_ref_saida.toLowerCase().includes(termoBusca);
-
-      const tesOk = !advancedFilters.tes || regra.tes.toLowerCase().includes(advancedFilters.tes.toLowerCase());
-      const cfopOk = !advancedFilters.cfop || regra.cfop_ref_saida.toLowerCase().includes(advancedFilters.cfop.toLowerCase());
-      const cstOk = !advancedFilters.cst || regra.cst_pis_cof_saida.some(c => c.includes(advancedFilters.cst));
-
-      return buscaOk && tesOk && cfopOk && cstOk;
-    });
-  }, [regras, searchText, advancedFilters]);
-  
-  const handleExportXLSX = () => {
-    // ... (handleExportXLSX permanece o mesmo)
-  };
-
-  const handleOpenModal = (mode: 'add' | 'edit' | 'delete', regra: RegraFiscal | null = null) => {
-    setModalMode(mode);
-    setCurrentRegra(regra);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setCurrentRegra(null);
-  };
-
-  const handleSaveRegra = (data: Partial<RegraFiscal>, mode: 'add' | 'edit' | 'delete') => {
-    console.log("MODO:", mode);
-    console.log("DADOS PARA SALVAR:", data);
-    
-    if (mode === 'add') {
-        console.log("Ação: SIMULAR CRIAÇÃO DE NOVA REGRA");
-    } else if (mode === 'edit') {
-        console.log("Ação: SIMULAR ATUALIZAÇÃO DA REGRA COM CHAVE:", currentRegra?.key);
-    } else if (mode === 'delete') {
-        console.log("Ação: SIMULAR EXCLUSÃO DA REGRA COM CHAVE:", currentRegra?.key);
-    }
-    
-    handleCloseModal();
-    setTimeout(() => {
-      handleSearch();
-    }, 500);
-  };
-
-  const columns = [
-    { title: "Operação", dataIndex: "operacao", key: "operacao" },
-    { title: "TES", dataIndex: "tes", key: "tes" },
-    { title: "CFOP Ref. Saída", dataIndex: "cfop_ref_saida", key: "cfop_ref_saida" },
-    { title: "CST PIS/COFINS Saída", dataIndex: "cst_pis_cof_saida", key: "cst_pis_cof_saida", render: (tags: string[]) => tags?.map(tag => <Tag className="custom-tag" key={tag}>{tag}</Tag>) },
-    { title: "CST ICMS Saída", dataIndex: "cst_icms_saida", key: "cst_icms_saida", render: (tags: string[]) => tags?.map(tag => <Tag className="custom-tag" key={tag}>{tag}</Tag>) },
-    {
-      title: "Ações",
-      key: "action",
-      align: "center" as const,
-      render: (_: any, record: RegraFiscal) => (
-        <Space size="middle">
-          <Tooltip title="Alterar">
-            <Button className="btn-alterar" shape="circle" icon={<EditOutlined />} onClick={() => handleOpenModal('edit', record)} />
-          </Tooltip>
-          <Tooltip title="Excluir">
-            <Button className="btn-excluir" shape="circle" icon={<DeleteOutlined />} onClick={() => handleOpenModal('delete', record)} />
-          </Tooltip>
-        </Space>
-      ),
-    },
-  ];
-
-  return (
-    <div className="page-container">
-      <style>{`
-        :root {
-            --gcs-blue: #00314A;
-            --gcs-green: #5FB246;
-            --gcs-gray-light: #f8f9fa;
-            --gcs-gray-medium: #e9ecef;
-            --gcs-gray-dark: #6c757d;
-            --gcs-border-color: #dee2e6;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
-        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .btn-green { background-color: var(--gcs-green); color: white; }
-        .btn-green:hover:not(:disabled) { background-color: #4a9d3a; }
-        .btn-outline-gray { background-color: #fff; color: var(--gcs-gray-dark); border-color: var(--gcs-border-color); }
-        .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
-        .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
-        .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-        .main-content-card {
-            background-color: #fff;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            border: 1px solid var(--gcs-border-color);
-        }
-        .modal-label {
-            display: block; margin-bottom: 6px; font-size: 14px;
-            font-weight: 500; color: #333;
-        }
-        .modal-input {
-            width: 100%; padding: 10px; border-radius: 6px;
-            border: 1px solid var(--gcs-border-color); font-size: 1rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .modal-input:focus {
-            border-color: var(--gcs-blue);
-            box-shadow: 0 0 0 3px rgba(0, 49, 74, 0.1);
-            outline: none;
-        }
-        .modal-input:disabled {
-            background-color: var(--gcs-gray-light);
-            cursor: not-allowed;
-            color: var(--gcs-gray-dark);
-        }
-      `}</style>
-      
-      <div className="main-content-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', marginBottom: '24px' }}>
-          <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <FileText size={32} />
-              <span>Regras Fiscais</span>
-          </h2>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                  <Input
-                      placeholder="Buscar por Operação, TES ou CFOP..."
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      className="search-input"
-                      style={{ padding: "12px 16px", fontSize: "1rem", borderRadius: "8px", border: "1px solid var(--gcs-border-color)", width: "350px" }}
-                  />
-                  <button className="btn btn-green" style={{cursor: 'default'}}>
-                      <Search size={18} /> Pesquisar
-                  </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                      <button onClick={handleSearch} title="Atualizar Regras" className="btn btn-outline-gray" style={{padding: '9px'}}>
-                          <RefreshCcw size={20} />
-                      </button>
-                      <FilterPopoverRegras
-                          onApplyFilters={setAdvancedFilters}
-                          initialFilters={advancedFilters}
-                      />
-                      <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
-                          <FileDown size={20} />
-                      </button>
-                  </div>
-                  <div style={{ height: 'auto', marginTop: '0.25rem' }}>
-                    <span style={{ color: 'var(--gcs-gray-dark)', fontSize: '12px', fontStyle: 'italic' }}>
-                        Atualizado agora mesmo
-                    </span>
-                  </div>
-              </div>
-          </div>
-      </div>
-      
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4rem 2rem', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)' }}>
-          <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          <div style={{ marginTop: '1.5rem', fontWeight: 'bold', color: 'var(--gcs-blue)', fontSize: '1.1rem' }}>
-            Carregando as regras Fiscais, aguarde
-          </div>
-        </div>
-      ) : (
-        <div className="table-section">
-          <div className="table-header-controls">
-              <Title level={5} className="table-section-title">
-                  <FileText />
-                  Listagem de Regras
-              </Title>
-              <Button type="primary" className="btn-incluir" icon={<PlusOutlined />} onClick={() => handleOpenModal('add')}>
-                  Incluir Nova Regra
-              </Button>
-          </div>
-          <Table 
-            columns={columns} 
-            dataSource={notasFiltradasOrdenadas}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 'max-content' }}
-          />
-        </div>
-      )}
-
-      <ModalRegraFiscal 
-        visible={isModalOpen}
-        mode={modalMode}
-        initialData={currentRegra}
-        onClose={handleCloseModal}
-        onSave={handleSaveRegra}
-      />
-
-      <style jsx global>{`
-        .page-container { 
-          background-color: #f0f2f5; 
-          padding: 24px; 
-        }
-        .table-section { 
-          background: #fff; 
-          border-radius: 8px; 
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09); 
-          padding: 24px; 
-        }
-        .table-header-controls { 
-          display: flex; 
-          justify-content: space-between; 
-          align-items: center; 
-          margin-bottom: 24px; 
-        }
-        .table-section-title {
-          margin: 0 !important;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .ant-table-thead > tr > th { 
-          background-color: #00314A !important; 
-          color: white !important; 
-          font-weight: bold; 
-        }
-        .btn-incluir { 
-          background-color: #1677ff !important; 
-        }
-        .btn-alterar { 
-          background-color: #F58220 !important; border: none !important;
-        }
-        .btn-excluir { 
-          background-color: #d9534f !important; border: none !important;
-        }
-        .custom-tag { 
-          background-color: #e6f7ff !important; border-color: #91d5ff !important; color: #096dd9 !important; 
-        }
-      `}</style>
-    </div>
-  );
-}
+export default ModalRegraFiscal;

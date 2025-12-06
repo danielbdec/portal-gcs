@@ -149,7 +149,7 @@ const AcessoNegado = () => {
   return (
     <div className="content-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '600px', margin: '10vh auto', backgroundColor: '#fff', borderRadius: '12px' }}>
       <Lock size={48} color="var(--gcs-orange)" />
-      <h2 style={{ marginTop: '1.frem', color: 'var(--gcs-blue)' }}>Acesso Negado</h2>
+      <h2 style={{ marginTop: '1.5rem', color: 'var(--gcs-blue)' }}>Acesso Negado</h2>
       <p style={{ color: 'var(--gcs-gray-dark)', maxWidth: '400px', margin: '1rem auto' }}>Você não tem as permissões necessárias para visualizar esta página.</p>
       <button onClick={() => router.push('/painel')} className="btn btn-green" style={{ marginTop: '1rem' }}>Voltar ao Painel</button>
     </div>
@@ -157,7 +157,8 @@ const AcessoNegado = () => {
 };
 
 // Função de normalização de strings
-const norm = (s: any) => (s ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+// CORREÇÃO: Substituído /\p{Diacritic}/gu por /[\u0300-\u036f]/g para compatibilidade com ES5/TypeScript
+const norm = (s: any) => (s ?? '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
 // --- COMPONENTE PRINCIPAL ---
 

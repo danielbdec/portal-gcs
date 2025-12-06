@@ -147,7 +147,8 @@ export default function AgrogestorPage() {
   const [busca, setBusca] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [advancedFilters, setAdvancedFilters] = useState({ estado: 'Todos', unidade: 'Todas' });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // ALTERAÇÃO AQUI: Mudando de null para undefined para satisfazer o Recharts
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'delete'>('add');
   const [currentEmpreendimento, setCurrentEmpreendimento] = useState<EmpreendimentoCompleto | null>(null);
@@ -418,7 +419,8 @@ export default function AgrogestorPage() {
             <div style={{ width: 280, height: 160 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie activeIndex={activeIndex} activeShape={renderActiveShape} data={dadosGraficoEstados} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={3} onMouseEnter={(_, index) => setActiveIndex(index)} onMouseLeave={() => setActiveIndex(null)}>
+                        {/* ALTERAÇÃO AQUI: onMouseLeave agora seta undefined */}
+                        <Pie activeIndex={activeIndex} activeShape={renderActiveShape} data={dadosGraficoEstados} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={3} onMouseEnter={(_, index) => setActiveIndex(index)} onMouseLeave={() => setActiveIndex(undefined)}>
                             {dadosGraficoEstados.map((entry, index) => (<Cell key={`cell-${index}`} fill={coresGrafico[index % coresGrafico.length]} />))}
                         </Pie>
                         <Legend layout="horizontal" align="center" verticalAlign="bottom" iconSize={10} wrapperStyle={{ fontSize: '12px' }}/>

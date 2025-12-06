@@ -353,7 +353,8 @@ export default function ConsultaNotas() {
     endDateProtheus: ''
   });
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Inicializando activeIndex como undefined
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
@@ -456,12 +457,14 @@ export default function ConsultaNotas() {
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
+        // CORREÇÃO: undefined
+        setActiveIndex(undefined);
     } else {
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+        // CORREÇÃO: undefined
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
     }
   }, [filtroStatus, dadosGraficoStatus]);
 
@@ -478,7 +481,8 @@ export default function ConsultaNotas() {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+    // CORREÇÃO: undefined
+    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
   };
 
   const handleChartClick = (data: any) => {

@@ -462,6 +462,9 @@ const ModalPlanejamentoItem: React.FC<ModalPlanejamentoItemProps> = ({
              color: var(--gcs-dark-text-primary) !important;
              border-bottom-color: var(--gcs-dark-border) !important;
         }
+        body.dark .ant-picker-content th {
+             color: var(--gcs-dark-text-primary) !important;
+        }
         body.dark .ant-picker-cell,
         body.dark .ant-picker-cell-in-view {
              color: var(--gcs-dark-text-secondary) !important;
@@ -550,7 +553,8 @@ const ModalPlanejamentoItem: React.FC<ModalPlanejamentoItemProps> = ({
                           name="dt_plantio_rot1"
                           label="Data Plantio (1ª Rot.)"
                         >
-                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" dropdownStyle={{ zIndex: dropdownZIndex }} />
+                            {/* CORREÇÃO: Usando popupStyle para DatePicker */}
+                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" popupStyle={{ zIndex: dropdownZIndex }} />
                         </Form.Item>
                     </div>
                     
@@ -579,7 +583,8 @@ const ModalPlanejamentoItem: React.FC<ModalPlanejamentoItemProps> = ({
                           name="dt_plantio_rot2"
                           label="Data Plantio (2ª Rot.)"
                         >
-                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" dropdownStyle={{ zIndex: dropdownZIndex }} />
+                             {/* CORREÇÃO: Usando popupStyle para DatePicker */}
+                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" popupStyle={{ zIndex: dropdownZIndex }} />
                         </Form.Item>
                     </div>
 
@@ -608,7 +613,8 @@ const ModalPlanejamentoItem: React.FC<ModalPlanejamentoItemProps> = ({
                           name="dt_plantio_rot3"
                           label="Data Plantio (3ª Rot.)"
                         >
-                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" dropdownStyle={{ zIndex: dropdownZIndex }} />
+                             {/* CORREÇÃO: Usando popupStyle para DatePicker */}
+                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" popupStyle={{ zIndex: dropdownZIndex }} />
                         </Form.Item>
                     </div>
 

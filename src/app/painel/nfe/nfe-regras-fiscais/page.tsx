@@ -207,12 +207,16 @@ const ModalRegraFiscal = ({
         if (visible && initialData) {
             setFormData({
                 ...initialData,
-                cst_pis_cof_saida: Array.isArray(initialData.cst_pis_cof_saida) ? initialData.cst_pis_cof_saida.join(', ') : '',
-                cst_icms_saida: Array.isArray(initialData.cst_icms_saida) ? initialData.cst_icms_saida.join(', ') : ''
+                // CORREÇÃO AQUI: Adicionado 'as any' para permitir string no lugar de array durante edição
+                cst_pis_cof_saida: (Array.isArray(initialData.cst_pis_cof_saida) ? initialData.cst_pis_cof_saida.join(', ') : '') as any,
+                cst_icms_saida: (Array.isArray(initialData.cst_icms_saida) ? initialData.cst_icms_saida.join(', ') : '') as any
             });
         } else if (visible && !initialData) {
             setFormData({
-                operacao: '', tes: '', cfop_ref_saida: '', cst_pis_cof_saida: '', cst_icms_saida: '',
+                operacao: '', tes: '', cfop_ref_saida: '', 
+                // CORREÇÃO AQUI: Inicialização com 'as any'
+                cst_pis_cof_saida: '' as any, 
+                cst_icms_saida: '' as any,
                 icms_st_nf: 'Não', icms_desonerado: 'Não', insumo_direto: 'N', insumo_indireto: 'N', insumo_outro: 'N'
             });
         }
@@ -291,10 +295,14 @@ const ModalRegraFiscal = ({
             return;
         }
 
+        // CORREÇÃO AQUI: Tratamento de string vs array usando cast
+        const pisValue = formData.cst_pis_cof_saida as unknown as string;
+        const icmsValue = formData.cst_icms_saida as unknown as string;
+
         const dataToSave = {
             ...formData,
-            cst_pis_cof_saida: typeof formData.cst_pis_cof_saida === 'string' ? formData.cst_pis_cof_saida.split(',').map(s => s.trim()).filter(Boolean) : [],
-            cst_icms_saida: typeof formData.cst_icms_saida === 'string' ? formData.cst_icms_saida.split(',').map(s => s.trim()).filter(Boolean) : []
+            cst_pis_cof_saida: typeof pisValue === 'string' ? pisValue.split(',').map(s => s.trim()).filter(Boolean) : [],
+            cst_icms_saida: typeof icmsValue === 'string' ? icmsValue.split(',').map(s => s.trim()).filter(Boolean) : []
         };
         onSave(dataToSave, mode);
     };
@@ -401,11 +409,11 @@ const ModalRegraFiscal = ({
                         </div>
                         <div style={{ gridColumn: '1 / -1' }}>
                             <label className="modal-label">CST PIS/COFINS Saída</label>
-                            <input className="modal-input" name="cst_pis_cof_saida" value={formData.cst_pis_cof_saida as string || ''} onChange={handleInputChange} disabled={isDeleteMode || isSaving} placeholder="Valores separados por vírgula" />
+                            <input className="modal-input" name="cst_pis_cof_saida" value={formData.cst_pis_cof_saida as any || ''} onChange={handleInputChange} disabled={isDeleteMode || isSaving} placeholder="Valores separados por vírgula" />
                         </div>
                         <div style={{ gridColumn: '1 / -1' }}>
                             <label className="modal-label">CST/CSOSN ICMS Saída</label>
-                            <input className="modal-input" name="cst_icms_saida" value={formData.cst_icms_saida as string || ''} onChange={handleInputChange} disabled={isDeleteMode || isSaving} placeholder="Valores separados por vírgula" />
+                            <input className="modal-input" name="cst_icms_saida" value={formData.cst_icms_saida as any || ''} onChange={handleInputChange} disabled={isDeleteMode || isSaving} placeholder="Valores separados por vírgula" />
                         </div>
                         
                         <div>
@@ -483,7 +491,7 @@ const ModalRegraFiscal = ({
     );
 };
 
-const FilterPopoverRegras = ({ onApplyFilters, initialFilters }: { onApplyFilters: (filters: any) => void, initialFilters: any }) => {
+const FilterPopover = ({ onApplyFilters, initialFilters }: { onApplyFilters: (filters: any) => void, initialFilters: any }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [tes, setTes] = useState(initialFilters.tes || '');
     const [cfop, setCfop] = useState(initialFilters.cfop || '');
@@ -567,28 +575,7 @@ export default function RegrasFiscaisPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
 
-  // --- GUARDA DE ROTA ---
-  useEffect(() => {
-    if (status === 'loading') {
-      setAuthStatus('loading');
-      return;
-    }
-    if (status === 'authenticated') {
-      const user = session.user;
-      // Chave de permissão para esta página específica
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.regrasFiscais');
-      
-      if (hasAccess) {
-        setAuthStatus('authorized');
-        handleSearch(); // Carrega os dados da página apenas se o utilizador for autorizado
-      } else {
-        setAuthStatus('unauthorized');
-      }
-    } else {
-        router.push('/login'); // Redireciona se não estiver autenticado
-    }
-  }, [status, session, router]);
-
+  // --- Função de Busca movida para antes do useEffect ---
   const handleSearch = useCallback(async () => {
     setLoading(true);
     try {
@@ -596,7 +583,7 @@ export default function RegrasFiscaisPage() {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ searchTerm: "" }),
-        cache: 'no-store' // CORREÇÃO DE CACHE
+        cache: 'no-store'
       });
       if (!response.ok) throw new Error(`Erro: ${response.statusText}`);
       const data = await response.json();
@@ -625,6 +612,28 @@ export default function RegrasFiscaisPage() {
       setLoading(false);
     }
   }, []);
+
+  // --- GUARDA DE ROTA ---
+  useEffect(() => {
+    if (status === 'loading') {
+      setAuthStatus('loading');
+      return;
+    }
+    if (status === 'authenticated') {
+      const user = session.user;
+      // Chave de permissão para esta página específica
+      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.regrasFiscais');
+      
+      if (hasAccess) {
+        setAuthStatus('authorized');
+        handleSearch(); // Carrega os dados da página apenas se o utilizador for autorizado
+      } else {
+        setAuthStatus('unauthorized');
+      }
+    } else {
+        router.push('/login'); // Redireciona se não estiver autenticado
+    }
+  }, [status, session, router, handleSearch]); // Adicionado handleSearch às dependências
 
   const notasFiltradasOrdenadas = useMemo(() => {
     return (regras || []).filter((regra) => {
@@ -878,7 +887,7 @@ export default function RegrasFiscaisPage() {
                       <button onClick={handleSearch} title="Atualizar Regras" className="btn btn-outline-gray" style={{padding: '9px'}}>
                           <RefreshCcw size={20} />
                       </button>
-                      <FilterPopoverRegras onApplyFilters={setAdvancedFilters} initialFilters={advancedFilters} />
+                      <FilterPopover onApplyFilters={setAdvancedFilters} initialFilters={advancedFilters} />
                       <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
                           <FileDown size={20} />
                       </button>

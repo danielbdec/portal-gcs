@@ -12,7 +12,8 @@
     "start": "cross-env PORT=3006 next start",
     "lint": "next lint",
     "refine": "refine",
-    "dev:https": "node server.js"
+    "dev:https": "node server.js",
+    "start:https": "cross-env NODE_ENV=production PORT=3006 node server.js"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.1",

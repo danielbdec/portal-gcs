@@ -227,7 +227,8 @@ export default function AgrogestorPage() {
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({ estado: ALL_STATES, unidade: ALL_UNITS });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Inicializar como undefined para satisfazer o tipo do Recharts
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isSavingTheme, setIsSavingTheme] = useState(false);
@@ -953,7 +954,7 @@ export default function AgrogestorPage() {
                             strokeWidth={1}
                             paddingAngle={3} 
                             onMouseEnter={(_, index) => setActiveIndex(index)} 
-                            onMouseLeave={() => setActiveIndex(null)}
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoEstados.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={coresGraficoDonut[index % coresGraficoDonut.length]} />

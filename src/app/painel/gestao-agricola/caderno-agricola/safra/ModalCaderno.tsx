@@ -6,7 +6,7 @@ import { Spin, Button } from "antd"; // Import do Button
 import { X } from 'lucide-react';
 import "antd/dist/reset.css";
 
-// --- NOVOS IMPORTS DOS COMPONENTES FILHOS ---
+// --- NOVOS IMPORTS DOS COMPONENTES FILHOS (CORREÇÃO: sem extensão .tsx) ---
 import ListaCulturas from "./ListaCulturas";
 import DetalhesCultura from "./DetalhesCultura";
 
@@ -40,8 +40,8 @@ interface ModalProps {
 
 const ModalCaderno: React.FC<ModalProps> = ({ visible, onClose, caderno }) => {
   
-  // --- Estado compartilhado: Qual cultura está selecionada ---
-  const [selectedCulturaId, setSelectedCulturaId] = useState<number | null>(1); // Começa com a primeira selecionada
+  // --- ATUALIZADO: Estado compartilhado: Começa com null ---
+  const [selectedCulturaId, setSelectedCulturaId] = useState<number | null>(null); 
 
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -67,8 +67,8 @@ const ModalCaderno: React.FC<ModalProps> = ({ visible, onClose, caderno }) => {
   // Lógica de Fechar
   useEffect(() => { if (!visible) return; const prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { onClose(); return; } }; window.addEventListener('keydown', handleKeyDown); return () => { document.body.style.overflow = prevOverflow; window.removeEventListener('keydown', handleKeyDown); lastFocusedElementRef.current?.focus(); }; }, [visible, onClose]);
   
-  // Handler que o Pai (este modal) usa para atualizar o estado
-  const handleSelectCultura = (id: number) => {
+  // --- ATUALIZADO: Handler aceita null ---
+  const handleSelectCultura = (id: number | null) => {
     setSelectedCulturaId(id);
   };
 
@@ -343,6 +343,19 @@ const ModalCaderno: React.FC<ModalProps> = ({ visible, onClose, caderno }) => {
             color: white;
             font-weight: 600;
         }
+        
+        /* --- NOVO: Estilo para Fallback (Lista Vazia) --- */
+        body.light .culturas-list-fallback {
+            color: var(--gcs-gray-text);
+        }
+        body.dark .culturas-list-fallback {
+            color: var(--gcs-dark-text-tertiary);
+        }
+        body.dark .culturas-list-fallback svg {
+            color: var(--gcs-dark-text-tertiary);
+        }
+        /* --- FIM DO NOVO ESTILO --- */
+
 
         /* Coluna da Direita (Detalhes) */
         .detalhes-content {
@@ -738,7 +751,9 @@ const ModalCaderno: React.FC<ModalProps> = ({ visible, onClose, caderno }) => {
         {/* === INÍCIO DO NOVO LAYOUT === */}
         <div className="modal-content-wrapper-flex">
           
+          {/* --- ATUALIZADO: Passando o cadernoId --- */}
           <ListaCulturas
+            cadernoId={caderno?.id || null}
             selectedCulturaId={selectedCulturaId}
             onSelectCultura={handleSelectCultura}
           />

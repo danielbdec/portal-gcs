@@ -457,49 +457,6 @@ return (
 // ================== FIM DAS ALTERAÇÕES DE ANCORAGEM ==================
 
 
-const ConfirmationModal = ({
-isOpen,
-onClose,
-onConfirm,
-message,
-title = "Confirmação Necessária",
-icon = <AlertTriangle size={40} color="#f7941d" />,
-confirmText = "OK, Entendi",
-confirmColor = "#dc3545",
-showCancelButton = true
-}: {
-isOpen: boolean,
-onClose: () => void,
-onConfirm: () => void,
-message: string,
-title?: string,
-icon?: React.ReactNode,
-confirmText?: string,
-confirmColor?: string,
-showCancelButton?: boolean
-}) => {
-if (!isOpen) return null;
-return (
-    <>
-        <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483648 }}></div>
-        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 2147483649, maxWidth: '450px', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                {icon}
-            </div>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#333' }}>{title}</h3>
-            <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
-            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                {showCancelButton && (
-                    <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-                )}
-                <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
-            </div>
-        </div>
-    </>
-);
-};
-
-
 export default function ConsultaNotas() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -537,7 +494,8 @@ export default function ConsultaNotas() {
     endDateProtheus: ''
   });
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: number | undefined para Recharts
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
@@ -698,18 +656,20 @@ export default function ConsultaNotas() {
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
+        // CORREÇÃO: Utilizando undefined
+        setActiveIndex(undefined);
     } else {
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+        // CORREÇÃO: Utilizando undefined
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
     }
   }, [filtroStatus, dadosGraficoStatus]);
 
   useEffect(() => {
     setChartKey(prevKey => prevKey + 1);
-  }, [filtroStatus, theme]); // Adicionado theme aqui para recarregar o gráfico
+  }, [filtroStatus, theme]); 
 
 
   const onPieEnter = (_: any, index: number) => {
@@ -720,7 +680,8 @@ export default function ConsultaNotas() {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+    // CORREÇÃO: Utilizando undefined
+    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
   };
 
   const handleChartClick = (data: any) => {
@@ -767,7 +728,7 @@ export default function ConsultaNotas() {
           sortDir: sortConfig.direction || 'asc',
           termo: (busca || '').trim() || undefined,
           filial: advancedFilters.filial === 'Todas' ? undefined : advancedFilters.filial,
-          tipo: advancedFilters.tipo === 'Todas' ? undefined : advancedFilters.tipo,
+          tipo: advancedFilters.tipo === 'Todos' ? undefined : advancedFilters.tipo,
           responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
           statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
           startDate: advancedFilters.startDate || undefined,
@@ -866,7 +827,7 @@ export default function ConsultaNotas() {
     "Importado": "var(--gcs-green)",
     "Manual": "#343a40",
     "Falha ERP": "#8B0000",
-    "Compras": "#FACC15",
+    "Compras": "#FFC107",
     "Fiscal": "#00314A",
     "Enviadas": "#17a2b8",
   };
@@ -1700,9 +1661,9 @@ export default function ConsultaNotas() {
 
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
-        <div
-            className="chart-card clickable-chart"
-            style={{
+        <div 
+            className="chart-card clickable-chart" 
+            style={{ 
                 flexShrink: 0,
                 display: 'flex',
                 flexDirection: 'column',
@@ -1735,7 +1696,7 @@ export default function ConsultaNotas() {
                             activeIndex={activeIndex}
                             activeShape={renderActiveShape}
                             onMouseEnter={onPieEnter}
-                            onPieLeave={onPieLeave}
+                            onMouseLeave={onPieLeave}
                             onClick={(data) => handleChartClick(data.payload.payload)}
                         >
                             {dadosGraficoStatus.map((entry, index) => {
@@ -1743,11 +1704,11 @@ export default function ConsultaNotas() {
                                 return <Cell key={`cell-${index}`} fill={pieFill} />;
                             })}
                         </Pie>
-                        <Legend
-                            layout="horizontal"
-                            align="center"
-                            verticalAlign="bottom"
-                            iconSize={10}
+                        <Legend 
+                            layout="horizontal" 
+                            align="center" 
+                            verticalAlign="bottom" 
+                            iconSize={10} 
                             wrapperStyle={{ fontSize: '12px', marginTop: '10px' }}
                             formatter={renderLegendText}
                         />
@@ -1760,13 +1721,13 @@ export default function ConsultaNotas() {
                 </ResponsiveContainer>
             </div>
         </div>
-
+        
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} />
                 <span>Central de Notas</span>
             </h2>
-
+            
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <input
@@ -1857,7 +1818,7 @@ export default function ConsultaNotas() {
       >
         <PriorityRibbonTabs
           filtroStatus={filtroStatus}
-          statusCounts={statusCounts as any}
+          statusCounts={totaisAbas}
           onChange={(key) => {
             if (key === "outras") return;
             handleFiltroStatusChange(key);
@@ -1889,7 +1850,8 @@ export default function ConsultaNotas() {
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
-                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><Calendar size={16} style={{marginRight: '8px'}}/> Datas</div></th>
+                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_recebimento')} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Recebimento <SortIcon columnKey="dt_recebimento" /></div></th>
+                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_lcto_protheus' as keyof Nota)} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Lançamento Protheus <SortIcon columnKey={"dt_lcto_protheus" as keyof Nota} /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><TrendingUp size={16} style={{marginRight: '8px'}} /> Status Setor</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('observacao')} className="th-sortable"><MessageSquare size={16} style={{marginRight: '8px'}}/> Observação <SortIcon columnKey="observacao" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('comprador')} className="th-sortable"><User size={16} style={{marginRight: '8px'}} /> Responsável <SortIcon columnKey="comprador" /></div></th>
@@ -1909,17 +1871,14 @@ export default function ConsultaNotas() {
                       statusNotaCor = 'var(--gcs-orange)';
                   }
 
-                  const dateTooltipContent = (
-                    <div style={{fontSize: '12px', textAlign: 'left'}}>
-                        <div style={{marginBottom: '4px'}}><strong>Recebimento:</strong> {nota.dt_recebimento} {nota.hr_Recebimento}</div>
-                        <div><strong>Lançamento:</strong> {formatProtheusDateTime(nota.dt_lcto_protheus)}</div>
-                    </div>
-                  );
-
                   return (
                     <tr
                       key={nota.chave}
                       className="data-row"
+                      style={{
+                        borderTop: "1px solid var(--gcs-border-color)",
+                        backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
+                      }}
                     >
                       <td data-label="Conferido" className="td-conferido" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <ConferidoCheckbox
@@ -1955,13 +1914,10 @@ export default function ConsultaNotas() {
                         )}
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
-                      
-                      <td data-label="Datas" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
-                        <Tooltip title={dateTooltipContent} placement="top">
-                            <span style={{cursor: 'help'}}><Calendar size={18} /></span>
-                        </Tooltip>
+                      <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
+                      <td data-label="Lançamento Protheus" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+                        {formatProtheusDateTime(nota.dt_lcto_protheus)}
                       </td>
-                      
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
                               statusUnidade={nota.status_envio_unidade}
@@ -2013,7 +1969,6 @@ export default function ConsultaNotas() {
       statusNF={notaSelecionada?.status_nf || ""}
       onActionSuccess={fetchNotas}
       statusCompras={notaSelecionada?.status_compras}
-      observacao={notaSelecionada?.observacao}
     />
 
     <NotificationModal
@@ -2023,21 +1978,6 @@ export default function ConsultaNotas() {
         onClose={handleCloseNotification}
     />
 
-    <ConfirmationModal
-        isOpen={isConfirmConferenciaOpen}
-        onClose={handleCloseConferencia}
-        onConfirm={handleConfirmConferencia}
-        title="Confirmar Conferência"
-        message={
-            newConferenciaStatus === 'S'
-                ? "Com essa ação você está confirmando que realizou a conferência dessa nota no Protheus. Deseja continuar?"
-                : "Você tem certeza que deseja desmarcar a conferência desta nota?"
-        }
-        confirmText={isSubmittingConferencia ? "Processando..." : (newConferenciaStatus === 'S' ? "Sim, Continuar" : "Sim, Desmarcar")}
-        confirmColor={newConferenciaStatus === 'S' ? "#28a745" : "#dc3545"}
-        showCancelButton={!isSubmittingConferencia}
-        icon={newConferenciaStatus === 'S' ? <CheckSquare size={40} color="#28a745" /> : <AlertTriangle size={40} color="#f7941d" />}
-    />
   </>);
 
 }

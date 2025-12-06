@@ -21,7 +21,8 @@
       "@pages/*": ["./pages/*"]
     },
     "typeRoots": ["./types", "./node_modules/@types"],
-    "incremental": true
+    "incremental": true,
+    "downlevelIteration": true
   },
   "include": [
     "next-env.d.ts",

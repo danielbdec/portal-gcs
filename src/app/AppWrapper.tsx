@@ -10,7 +10,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   const publicRoutes = ['/login', '/register', '/forgot-password'];
 
   // Se a rota atual for uma das rotas públicas, renderize apenas a página.
-  if (publicRoutes.includes(pathname)) {
+  // CORREÇÃO AQUI: Adicionado "|| ''" para garantir que seja sempre string
+  if (publicRoutes.includes(pathname || '')) {
     return <>{children}</>;
   }
 

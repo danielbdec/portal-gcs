@@ -306,7 +306,8 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
                                     </div>
                                     <div style={{ fontSize: '0.9em', color: '#6c757d', marginTop: '4px' }}>{p.Produto}</div>
                                     <div style={{ fontSize: '0.8em', color: '#888', textAlign: 'right' }}>
-                                        <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda)}
+                                        {/* --- CORREÇÃO: p.moeda ?? null para garantir que não passe undefined --- */}
+                                        <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda ?? null)}
                                         {p.moeda === 2 && typeof p.Valor === 'number' && typeof p.ultima_ptax === 'number' && (
                                             <Meta>
                                                 (aprox. {formatCurrency(p.Valor * p.ultima_ptax, 1)} @ {p.ultima_ptax.toFixed(4)})

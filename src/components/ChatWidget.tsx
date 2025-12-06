@@ -1,6 +1,7 @@
 "use client";
 import { marked } from "marked";
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 
 export default function ChatWidget() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +43,7 @@ export default function ChatWidget() {
           setCarregandoHistorico(false);
         });
     }
-  }, [open]);
+  }, [open, messages.length]); // Dependência adicionada aqui
 
   const enviarMensagem = async () => {
     if (!input.trim()) return;
@@ -104,7 +105,7 @@ export default function ChatWidget() {
 
   return (
     <>
-  <style>{`
+      <style>{`
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -112,7 +113,8 @@ export default function ChatWidget() {
     .chat-message-enter {
       animation: fadeInUp 0.3s ease forwards;
     }
-  `}</style>      <style>{`        @keyframes fadeInUp {          from { opacity: 0; transform: translateY(10px); }          to { opacity: 1; transform: translateY(0); }        }        .chat-message-enter {          animation: fadeInUp 0.3s ease forwards;        }      `}</style>
+  `}</style>
+      <style>{`        @keyframes fadeInUp {          from { opacity: 0; transform: translateY(10px); }          to { opacity: 1; transform: translateY(0); }        }        .chat-message-enter {          animation: fadeInUp 0.3s ease forwards;        }      `}</style>
       <style>
         {`
           @keyframes blink {
@@ -163,7 +165,7 @@ export default function ChatWidget() {
               width: 60,
               height: 60,
               // MUDANÇA AQUI: Cor do "balão" (botão)
-              backgroundColor: "#5FB246", 
+              backgroundColor: "#5FB246",
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
               color: "white",
               border: "none",
@@ -232,17 +234,24 @@ export default function ChatWidget() {
           >
             {/* MUDANÇA AQUI: Cor do cabeçalho */}
             <div style={{ padding: "10px", textAlign: "center", background: "linear-gradient(to right, #5FB246, #7ac962)", borderBottom: "1px solid #eee" }}>
-<img src="/logo.png" alt="Logo" style={{ height: 28 }} />
-<div style={{ fontSize: 10, color: "#eefae5", marginTop: 4 }}>🟢 Assistente online</div>
-</div>
-<div style={{ flex: 1, padding: 12, overflowY: "auto" }}>
+              <Image
+                src="/logo.png"
+                alt="Logo"
+                width={0}
+                height={0}
+                sizes="100vw"
+                style={{ height: 28, width: "auto", margin: "0 auto" }}
+              />
+              <div style={{ fontSize: 10, color: "#eefae5", marginTop: 4 }}>🟢 Assistente online</div>
+            </div>
+            <div style={{ flex: 1, padding: 12, overflowY: "auto" }}>
               {carregandoHistorico ? (
                 <div style={{ textAlign: "center", marginTop: 20, color: "#666", fontSize: 14 }}>
                   Carregando histórico...
                 </div>
               ) : (
                 <>
-  <style>{`
+                  <style>{`
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -250,50 +259,57 @@ export default function ChatWidget() {
     .chat-message-enter {
       animation: fadeInUp 0.3s ease forwards;
     }
-  `}</style>      <style>{`        @keyframes fadeInUp {          from { opacity: 0; transform: translateY(10px); }          to { opacity: 1; transform: translateY(0); }        }        .chat-message-enter {          animation: fadeInUp 0.3s ease forwards;        }      `}</style>
+  `}</style>
+                  <style>{`        @keyframes fadeInUp {          from { opacity: 0; transform: translateY(10px); }          to { opacity: 1; transform: translateY(0); }        }        .chat-message-enter {          animation: fadeInUp 0.3s ease forwards;        }      `}</style>
                   {messages.map((msg, i) => (
-<>
-  {/* MUDANÇA AQUI: Cor do texto "Você:" */}
-  <div style={{ width: "100%", textAlign: msg.sender === "user" ? "right" : "left", fontSize: 11, fontWeight: "bold", color: msg.sender === "bot" ? "#3c3c3c" : "#5FB246", margin: "4px 0" }}>
-    {msg.sender === "bot" ? "Assistente:" : "Você:"}
-  </div>
-                    <div key={i} className="chat-message-enter" style={{ display: "flex", justifyContent: msg.sender === "user" ? "flex-end" : "flex-start", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
-                      {msg.sender === "bot" && (
-  <img src="/bot-avatar.png" alt="Bot" style={{ width: 28, height: 28, borderRadius: "50%", marginTop: 4 }} />
-)}
+                    <>
+                      {/* MUDANÇA AQUI: Cor do texto "Você:" */}
+                      <div style={{ width: "100%", textAlign: msg.sender === "user" ? "right" : "left", fontSize: 11, fontWeight: "bold", color: msg.sender === "bot" ? "#3c3c3c" : "#5FB246", margin: "4px 0" }}>
+                        {msg.sender === "bot" ? "Assistente:" : "Você:"}
+                      </div>
+                      <div key={i} className="chat-message-enter" style={{ display: "flex", justifyContent: msg.sender === "user" ? "flex-end" : "flex-start", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
+                        {msg.sender === "bot" && (
+                          <Image
+                            src="/bot-avatar.png"
+                            alt="Bot"
+                            width={28}
+                            height={28}
+                            style={{ borderRadius: "50%", marginTop: 4 }}
+                          />
+                        )}
 
-<div
-                        style={{
-                          display: "inline-block",
-                          backgroundColor: msg.sender === "user" ? "#DCF8C6" : "#F1F1F1",
-                          padding: "10px 12px",
-                          borderRadius: 10,
-                          maxWidth: "80%",
-                          fontSize: 14,
-                        }}
-                      >
-                        {msg.sender === "bot" ? (
-  <div style={{ whiteSpace: "pre-line" }} dangerouslySetInnerHTML={{ __html: marked.parse(msg.text || "") }} />
-) : (
-  <div>{msg.text}</div>
-)}
                         <div
                           style={{
-                            fontSize: "11px",
-                            color: "#999",
-                            marginTop: 4,
-                            textAlign: "right",
+                            display: "inline-block",
+                            backgroundColor: msg.sender === "user" ? "#DCF8C6" : "#F1F1F1",
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            maxWidth: "80%",
+                            fontSize: 14,
                           }}
                         >
-                          {new Date(msg.timestamp).toLocaleTimeString("pt-BR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {msg.sender === "bot" ? (
+                            <div style={{ whiteSpace: "pre-line" }} dangerouslySetInnerHTML={{ __html: marked.parse(msg.text || "") }} />
+                          ) : (
+                            <div>{msg.text}</div>
+                          )}
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#999",
+                              marginTop: 4,
+                              textAlign: "right",
+                            }}
+                          >
+                            {new Date(msg.timestamp).toLocaleTimeString("pt-BR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </>
-))}
+                    </>
+                  ))}
                   {aguardandoResposta && (
                     <div style={{ textAlign: "left", marginBottom: 5 }}>
                       <div

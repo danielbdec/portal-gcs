@@ -293,7 +293,8 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
                                         </div>
                                         <div className="search-modal-result-subtext">{p.Produto}</div>
                                         <div style={{ fontSize: '0.8em', textAlign: 'right' }}>
-                                            <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda)}
+                                            {/* CORREÇÃO AQUI: Converter undefined para null */}
+                                            <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda ?? null)}
                                             {p.moeda === 2 && typeof p.Valor === 'number' && typeof p.ultima_ptax === 'number' && (
                                                 <Meta className="meta-text">(aprox. {formatCurrency(p.Valor * p.ultima_ptax, 1)} @ {p.ultima_ptax.toFixed(4)})</Meta>
                                             )}
@@ -575,15 +576,11 @@ const ManualPedidoModal = ({
     const handleMouseDown = (e: React.MouseEvent) => {
         if (modalRef.current) {
             const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT' || target.closest('button')) {
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
                 return;
             }
             setIsDragging(true);
-
-            // Se for o primeiro arraste, calcula a posição atual para evitar o "salto"
             const modalRect = modalRef.current.getBoundingClientRect();
-            setPosition({ x: modalRect.left, y: modalRect.top });
-
             setOffset({
                 x: e.clientX - modalRect.left,
                 y: e.clientY - modalRect.top
@@ -613,6 +610,15 @@ const ManualPedidoModal = ({
             document.removeEventListener('mouseup', handleMouseUp);
         };
     }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    useEffect(() => {
+        if (isOpen && modalRef.current) {
+            const modal = modalRef.current;
+            const initialX = (window.innerWidth - modal.offsetWidth) / 2;
+            const initialY = 80;
+            setPosition({ x: initialX > 0 ? initialX : 20, y: initialY });
+        }
+    }, [isOpen]);
     
     const tableColumns: TableProps<ItemPedidoManual>['columns'] = [
         { title: 'Item', dataIndex: 'item_xml', key: 'item', width: '5%', align: 'center', render: (text) => <strong>{text}</strong> },

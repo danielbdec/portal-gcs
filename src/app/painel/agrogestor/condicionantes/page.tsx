@@ -165,7 +165,8 @@ export default function CondicionantesPage() {
   const [busca, setBusca] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [advancedFilters, setAdvancedFilters] = useState({ documento: 'Todos' });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // ALTERAÇÃO: Inicializando com undefined em vez de null para satisfazer o tipo do PieChart
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'delete'>('add');
@@ -479,7 +480,8 @@ export default function CondicionantesPage() {
                             outerRadius={65} 
                             paddingAngle={3} 
                             onMouseEnter={(_, index) => setActiveIndex(index)} 
-                            onMouseLeave={() => setActiveIndex(null)}
+                            // ALTERAÇÃO: setando para undefined em vez de null
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoDocumentos.map((entry, index) => (<Cell key={`cell-${index}`} fill={coresGrafico[index % coresGrafico.length]} />))}
                         </Pie>

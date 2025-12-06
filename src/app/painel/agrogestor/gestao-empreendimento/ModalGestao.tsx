@@ -59,7 +59,12 @@ interface ModalGestaoProps {
     Hook de Notificação (Reutilizável)
     ======================================================================== */
 function useNotify() {
-    const [notification, setNotification] = useState({ visible: false, type: 'success' as const, message: '' });
+    // Tipagem explícita para permitir 'success' ou 'error'
+    const [notification, setNotification] = useState<{
+        visible: boolean;
+        type: 'success' | 'error';
+        message: string;
+    }>({ visible: false, type: 'success', message: '' });
     
     const notifySuccess = useCallback((message: string) => {
         setNotification({ visible: true, type: 'success', message });
@@ -327,9 +332,29 @@ const ModalUploadGenerico: React.FC<{ title: string; tipoDocumento: string; modu
   const [numero, setNumero] = useState<string>(""); const [orgao, setOrgao] = useState<string>(""); const [dataEmissao, setDataEmissao] = useState<string>(""); const [dataValidade, setDataValidade] = useState<string>(""); const [file, setFile] = useState<File | null>(null); const [observacao, setObservacao] = useState<string>(""); const [idCondicionante, setIdCondicionante] = useState<string>(""); const [tipoCondicionanteNome, setTipoCondicionanteNome] = useState<string>(""); const [sending, setSending] = useState<boolean>(false); const [buscaModalOpen, setBuscaModalOpen] = useState(false); const [position, setPosition] = useState({ x: 0, y: 0 }); const [isDragging, setIsDragging] = useState(false); const modalRef = useRef<HTMLDivElement>(null); const dragOffsetRef = useRef({ x: 0, y: 0 });
   useEffect(() => { if (open && modalRef.current) { const { clientWidth, clientHeight } = modalRef.current; setPosition({ x: window.innerWidth / 2 - clientWidth / 2, y: window.innerHeight / 2 - clientHeight / 2 }); modalRef.current.focus(); } }, [open]);
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => { const t = e.target as HTMLElement; if (!modalRef.current || t.closest('button, input, textarea, select, label')) return; setIsDragging(true); const modalRect = modalRef.current.getBoundingClientRect(); dragOffsetRef.current = { x: e.clientX - modalRect.left, y: e.clientY - modalRect.top }; };
-  const handleMouseMove = (e: MouseEvent) => { if (!isDragging || !modalRef.current) return; e.preventDefault(); setPosition({ x: e.clientX - dragOffsetRef.current.x, y: e.clientY - dragOffsetRef.current.y }); };
-  const handleMouseUp = () => { setIsDragging(false); };
-  useEffect(() => { if (isDragging) { document.addEventListener('mousemove', handleMouseMove); document.addEventListener('mouseup', handleMouseUp); } return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); }; }, [isDragging]);
+  
+  // --- ALTERAÇÃO AQUI: Funções de drag com useCallback para serem usadas no useEffect ---
+  const handleMouseMove = useCallback((e: MouseEvent) => { 
+      if (!isDragging || !modalRef.current) return; 
+      e.preventDefault(); 
+      setPosition({ x: e.clientX - dragOffsetRef.current.x, y: e.clientY - dragOffsetRef.current.y }); 
+  }, [isDragging]);
+
+  const handleMouseUp = useCallback(() => { 
+      setIsDragging(false); 
+  }, []);
+
+  useEffect(() => { 
+      if (isDragging) { 
+          document.addEventListener('mousemove', handleMouseMove); 
+          document.addEventListener('mouseup', handleMouseUp); 
+      } 
+      return () => { 
+          document.removeEventListener('mousemove', handleMouseMove); 
+          document.removeEventListener('mouseup', handleMouseUp); 
+      }; 
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
   useEffect(() => { if (!open) return; const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { onClose(); } }; window.addEventListener('keydown', handleKeyDown); return () => { window.removeEventListener('keydown', handleKeyDown); }; }, [open, onClose]);
   useEffect(() => { if (!open) { setNumero(""); setOrgao(""); setDataEmissao(""); setDataValidade(""); setFile(null); setObservacao(""); setIdCondicionante(""); setTipoCondicionanteNome(""); setSending(false); } }, [open]);
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0] || null; if (!f) { setFile(null); return; } const fName = f.name.toLowerCase(); const okExt = allowedExtensions.some((ext) => fName.endsWith(ext.toLowerCase())); if (!okExt) { notifyError(`Extensão não permitida. Use ${extensionsLabel}.`); return; } if (f.size > 30 * 1024 * 1024) { notifyError("Arquivo acima de 30MB."); return; } setFile(f); };
@@ -669,7 +694,8 @@ const ModalGestao: React.FC<ModalGestaoProps> = ({ visible, onClose, empreendime
                   nomeArquivo: doc.nome_arquivo,
                   relKey: doc.relKey,
                   observacao: doc.observacao || doc.observacoes || '',
-                  condicionante: doc.condicionante === 'S' ? 'S' : 'N',
+                  // CORREÇÃO AQUI: Cast explícito para 'S' | 'N'
+                  condicionante: (doc.condicionante === 'S' ? 'S' : 'N') as 'S' | 'N',
                   id_condicionante: doc.id_condicionante,
                   tipo_condicionante_nome: doc.nome_condicionante,
               }));
@@ -778,7 +804,8 @@ const ModalGestao: React.FC<ModalGestaoProps> = ({ visible, onClose, empreendime
         </div>
       )
     }
-  ], [documentos, ocorrencias, loading, downloadingDocId, handleOpenUploadModal, handleAbrirModalEdicao, handleAbrirModalExclusao, handleDownload, handleOpenMapaModal, handleOpenAddOcorrencia]);
+    // --- ALTERAÇÃO AQUI: Adicionado handleOpenEditOcorrencia ao array de dependências ---
+  ], [documentos, ocorrencias, loading, downloadingDocId, handleOpenUploadModal, handleAbrirModalEdicao, handleAbrirModalExclusao, handleDownload, handleOpenMapaModal, handleOpenAddOcorrencia, handleOpenEditOcorrencia]);
 
   if (!visible || !empreendimento) return null;
 

@@ -11,11 +11,14 @@ import {
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
-    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock
+    ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
+    // CheckSquare, Square // Removidos pois não são mais usados
 } from "lucide-react";
 import ModalDetalhes from "./ModalDetalhes";
+import NotificationModal from "./NotificationModal"; // Importado
 import React from "react";
 import "antd/dist/reset.css";
+import PriorityRibbonTabs from "./PriorityRibbonTabs";
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
@@ -63,6 +66,42 @@ const formatTimeAgo = (date: Date | null): string => {
     return `há ${days} dias`;
 };
 
+// Helper para formatar data e hora do Protheus (ISODate)
+const formatProtheusDateTime = (dateString: string | null | undefined): string => {
+    if (!dateString) {
+        return '—';
+    }
+    try {
+        const dateTest = new Date(dateString);
+        if (isNaN(dateTest.getTime())) {
+            return '—';
+        }
+
+        const year = dateString.substring(0, 4);
+        const month = dateString.substring(5, 7);
+        const day = dateString.substring(8, 10);
+        const hour = dateString.substring(11, 13);
+        const minute = dateString.substring(14, 16);
+
+        if (year.length !== 4 || month.length !== 2 || day.length !== 2 || hour.length !== 2 || minute.length !== 2) {
+             if(dateString.length >= 16){
+                const hourAlt = dateString.substring(11, 13);
+                const minuteAlt = dateString.substring(14, 16);
+                if(hourAlt.length === 2 && minuteAlt.length === 2){
+                    return `${day}/${month}/${year} ${hourAlt}:${minuteAlt}`;
+                }
+             }
+             return '—';
+        }
+
+        return `${day}/${month}/${year} ${hour}:${minute}`;
+
+    } catch (error) {
+        console.error("Erro ao formatar data Protheus:", error);
+        return '—';
+    }
+};
+
 
 interface Nota {
   filial: string;
@@ -82,6 +121,8 @@ interface Nota {
   status_envio_unidade?: string;
   status_compras?: string;
   status_fiscal?: string;
+  dt_lcto_protheus?: string;
+  // conferido?: 'S' | 'N' | null; // Removido da interface se não for mais necessário
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
@@ -133,39 +174,57 @@ const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
     );
 };
 
-
 const FilterPopover = ({
-    notas,
+    allFiliais,
+    allCompradores,
+    allStatusLancamento,
     onApplyFilters,
     initialFilters
 }: {
-    notas: Nota[],
+    allFiliais: string[],
+    allCompradores: string[],
+    allStatusLancamento: string[],
     onApplyFilters: (filters: any) => void,
     initialFilters: any
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [filial, setFilial] = useState(initialFilters.filial || 'Todas');
-    const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
+    const [startDate, setStartDate] = useState(initialFilters.startDate || '');
+    const [endDate, setEndDate] = useState(initialFilters.endDate || '');
+    const [startDateProtheus, setStartDateProtheus] = useState(initialFilters.startDateProtheus || '');
+    const [endDateProtheus, setEndDateProtheus] = useState(initialFilters.endDateProtheus || '');
     const popoverRef = useRef<HTMLDivElement>(null);
 
-    const filiaisUnicas = useMemo(() => ['Todas', ...Array.from(new Set(notas.map(n => n.filial).filter(Boolean)))], [notas]);
-    const tiposUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.tipo_nf?.toUpperCase()).filter(Boolean)))], [notas]);
-    const responsaveisUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.comprador).filter(Boolean)))], [notas]);
-    const statusUnicos = useMemo(() => ['Todos', ...Array.from(new Set(notas.map(n => n.status_lancamento || 'N/A').filter(Boolean)))], [notas]);
+    const filiaisUnicas = useMemo(() => ['Todos', ...allFiliais.filter(f => f !== 'Todos')], [allFiliais]);
+    const responsaveisUnicos = useMemo(() => ['Todos', ...allCompradores.filter(c => c !== 'Todos')], [allCompradores]);
+    const statusUnicos = useMemo(() => ['Todos', ...allStatusLancamento.filter(s => s !== 'Todos')], [allStatusLancamento]);
+
 
     const handleApply = () => {
-        onApplyFilters({ filial, tipo, responsavel, statusLancamento });
+        onApplyFilters({
+            filial, responsavel, statusLancamento,
+            startDate, endDate,
+            startDateProtheus, endDateProtheus
+        });
         setIsOpen(false);
     };
 
     const handleClear = () => {
         setFilial('Todas');
-        setTipo('Todos');
         setResponsavel('Todos');
         setStatusLancamento('Todos');
-        onApplyFilters({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
+        setStartDate('');
+        setEndDate('');
+        setStartDateProtheus('');
+        setEndDateProtheus('');
+
+        onApplyFilters({
+            filial: 'Todas', responsavel: 'Todos',
+            statusLancamento: 'Todos', startDate: '', endDate: '',
+            startDateProtheus: '', endDateProtheus: ''
+        });
         setIsOpen(false);
     };
 
@@ -191,7 +250,7 @@ const FilterPopover = ({
                     top: '100%',
                     right: 0,
                     marginTop: '8px',
-                    width: '300px',
+                    width: '360px',
                     backgroundColor: 'white',
                     borderRadius: '8px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -204,17 +263,32 @@ const FilterPopover = ({
                         <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
                     </div>
 
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Inicial</label>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Final</label>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Inicial</label>
+                            <input type="date" value={startDateProtheus} onChange={(e) => setStartDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Final</label>
+                            <input type="date" value={endDateProtheus} onChange={(e) => setEndDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+                        </div>
+                    </div>
+
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Filial</label>
                         <select value={filial} onChange={(e) => setFilial(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
                             {filiaisUnicas.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
-                        <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {tiposUnicos.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
 
@@ -242,97 +316,58 @@ const FilterPopover = ({
     );
 };
 
-
-const ConfirmationModal = ({
-    isOpen,
-    onClose,
-    onConfirm,
-    message,
-    title = "Confirmação Necessária",
-    icon = <AlertTriangle size={40} color="#f7941d" />,
-    confirmText = "OK, Entendi",
-    confirmColor = "#dc3545",
-    showCancelButton = true
-}: {
-    isOpen: boolean,
-    onClose: () => void,
-    onConfirm: () => void,
-    message: string,
-    title?: string,
-    icon?: React.ReactNode,
-    confirmText?: string,
-    confirmColor?: string,
-    showCancelButton?: boolean
-}) => {
-    if (!isOpen) return null;
-    return (
-        <>
-            <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483648 }}></div>
-            <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 2147483649, maxWidth: '450px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-                    {icon}
-                </div>
-                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#333' }}>{title}</h3>
-                <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                    {showCancelButton && (
-                        <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-                    )}
-                    <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
-                </div>
-            </div>
-        </>
-    );
-};
-
-const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-  return (
-    <g>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius + 8}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-      />
-    </g>
-  );
-};
-
-
+// --- COMPONENTE PRINCIPAL ---
 export default function ConsultaNotas() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
 
   const [notas, setNotas] = useState<Nota[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState<string>("Todos");
-  
-  // DEBOUNCE: buscaRaw é o que o usuário digita, busca é o valor com delay
+  const [filtroStatus, setFiltroStatus] = useState<string>("Compras"); // Filtro padrão 'Compras'
+
   const [buscaRaw, setBuscaRaw] = useState<string>("");
   const [busca, setBusca] = useState<string>("");
-  
+
   const [loading, setLoading] = useState<boolean>(true);
   const [notaSelecionada, setNotaSelecionada] = useState<Nota | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
-  const itensPorPagina = 10;
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [totalServidor, setTotalServidor] = useState<number>(0);
+  const [totaisAbas, setTotaisAbas] = useState<Record<string, number>>({});
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
-  const [advancedFilters, setAdvancedFilters] = useState({ filial: 'Todas', tipo: 'Todos', responsavel: 'Todos', statusLancamento: 'Todos' });
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
+
+  const [advancedFilters, setAdvancedFilters] = useState({
+    filial: 'Todas',
+    responsavel: 'Todos',
+    statusLancamento: 'Todos',
+    startDate: '',
+    endDate: '',
+    startDateProtheus: '',
+    endDateProtheus: ''
+  });
+
+  // CORREÇÃO AQUI: Alterado de null para undefined
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
 
-  // DEBOUNCE: useEffect para aplicar o delay na busca
+  const [totalPendentes, setTotalPendentes] = useState<number>(0);
+  const [totalNotasHoje, setTotalNotasHoje] = useState<number>(0);
+
+  const [allFiliais, setAllFiliais] = useState<string[]>(['Todos']);
+  const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
+  const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
+
+
   useEffect(() => {
     const handler = setTimeout(() => {
         setBusca(buscaRaw);
-        setPaginaAtual(1); // Reseta a página para a 1 a cada nova busca
-    }, 400); // Delay de 400ms
+        setPaginaAtual(1);
+    }, 400);
 
     return () => {
         clearTimeout(handler);
@@ -348,8 +383,7 @@ export default function ConsultaNotas() {
     setFiltroStatus(status);
     setPaginaAtual(1);
   };
-  
-  // --- GUARDA DE ROTA ---
+
   useEffect(() => {
     if (status === 'loading') {
       setAuthStatus('loading');
@@ -357,11 +391,10 @@ export default function ConsultaNotas() {
     }
     if (status === 'authenticated') {
       const user = session.user;
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralFinanceiro');
-      
+      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralCompras'); // Permissão alterada
+
       if (hasAccess) {
         setAuthStatus('authorized');
-        fetchNotas();
       } else {
         setAuthStatus('unauthorized');
       }
@@ -381,49 +414,13 @@ export default function ConsultaNotas() {
   const statusDisponiveis = useMemo(() => {
     return ["Todos", "Compras", "Fiscal", "Enviadas", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
   }, []);
-  
-  const notasFiltradasPorAvancado = useMemo(() => {
-    return (notas || []).filter((nota) => {
-        const filialOk = advancedFilters.filial === 'Todas' || nota.filial === advancedFilters.filial;
-        const tipoOk = advancedFilters.tipo === 'Todos' || nota.tipo_nf?.toUpperCase() === advancedFilters.tipo;
-        const responsavelOk = advancedFilters.responsavel === 'Todos' || nota.comprador === advancedFilters.responsavel;
-        const statusLancamentoOk = advancedFilters.statusLancamento === 'Todos' || (nota.status_lancamento || 'N/A') === advancedFilters.statusLancamento;
-        return filialOk && tipoOk && responsavelOk && statusLancamentoOk;
-    });
-  }, [notas, advancedFilters]);
-  
+
+
   const statusCounts = useMemo(() => {
-      const source = notasFiltradasPorAvancado;
-      const counts: Record<string, number> = { Todos: source.length };
-      
-      const sourcePendentes = source.filter(n => n.status_lancamento !== 'Concluído');
+    if (totaisAbas && Object.keys(totaisAbas).length) return totaisAbas;
+    return {};
+  }, [totaisAbas]);
 
-      const statusNfMap: Record<string, string> = {
-        "Erro I.A.": "erro i.a.",
-        "Não Recebidas": "aguardando",
-        "Importado": "importado",
-        "Manual": "manual",
-        "Falha ERP": "erro execauto"
-      };
-
-      Object.keys(statusNfMap).forEach(status => {
-          const statusValue = statusNfMap[status];
-          // As abas "Manual" e "Importado" são exceções e devem contar todos, incluindo os concluídos.
-          if (status === "Manual" || status === "Importado") {
-              counts[status] = source.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          } else {
-              // As outras abas contarão apenas os pendentes.
-              counts[status] = sourcePendentes.filter(n => n.status_nf?.trim().toLowerCase() === statusValue).length;
-          }
-      });
-      
-      counts['Compras'] = sourcePendentes.filter(n => n.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      counts['Fiscal'] = sourcePendentes.filter(n => n.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO').length;
-      counts['Enviadas'] = sourcePendentes.filter(n => n.status_envio_unidade?.trim().toUpperCase() === 'SIM').length;
-
-
-      return counts;
-  }, [notasFiltradasPorAvancado]);
 
   const dadosGraficoStatus = useMemo(() => {
     return statusDisponiveis
@@ -434,55 +431,32 @@ export default function ConsultaNotas() {
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' || advancedFilters.responsavel !== 'Todos' || advancedFilters.tipo !== 'Todos' || advancedFilters.statusLancamento !== 'Todos';
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' ||
+                               advancedFilters.responsavel !== 'Todos' ||
+                               advancedFilters.statusLancamento !== 'Todos' ||
+                               advancedFilters.startDate !== '' ||
+                               advancedFilters.endDate !== '' ||
+                               advancedFilters.startDateProtheus !== '' ||
+                               advancedFilters.endDateProtheus !== '';
 
+    // Considera o filtro NFE como um filtro aplicado permanentemente, mas não visível na UI
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
-  
-  const notasProcessadasHoje = useMemo(() => {
-    const hoje = new Date();
-    const hojeString = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-    return notas.filter(nota => {
-        if (!nota.dt_atualizacao) return false;
-        
-        let notaDateString;
-        
-        if (nota.dt_atualizacao.includes('/')) {
-            const parts = nota.dt_atualizacao.split(' ')[0].split('/');
-            if (parts.length === 3) {
-                notaDateString = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            } else {
-                return false;
-            }
-        } else if (nota.dt_atualizacao.includes('-')) {
-            notaDateString = nota.dt_atualizacao.split(' ')[0].split('T')[0];
-        } else {
-            return false;
-        }
-
-        return notaDateString === hojeString;
-    }).length;
-  }, [notas]);
-
-  const notasPendentes = useMemo(() => {
-    const statusExcluidos = ["manual", "importado"];
-    return notas.filter(nota => {
-      return nota.status_nf && !statusExcluidos.includes(nota.status_nf.trim().toLowerCase());
-    }).length;
-  }, [notas]);
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
+        // CORREÇÃO AQUI: set undefined
+        setActiveIndex(undefined);
     } else {
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+        // CORREÇÃO AQUI: set undefined
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
     }
   }, [filtroStatus, dadosGraficoStatus]);
-  
+
   useEffect(() => {
     setChartKey(prevKey => prevKey + 1);
   }, [filtroStatus]);
@@ -491,12 +465,13 @@ export default function ConsultaNotas() {
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
-  
+
   const onPieLeave = () => {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+    // CORREÇÃO AQUI: set undefined
+    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
   };
 
   const handleChartClick = (data: any) => {
@@ -517,74 +492,111 @@ export default function ConsultaNotas() {
     setModalAberto(true);
   };
 
+  const statusFiltroToStatusNf = (tab: string): string | null => {
+    const map: Record<string, string> = {
+      "Erro I.A.": "erro i.a.",
+      "Não Recebidas": "aguardando",
+      "Importado": "importado",
+      "Manual": "manual",
+      "Falha ERP": "erro execauto",
+    };
+    return map[tab] ?? null;
+  };
+
+  const sortWhitelist = new Set(['dt_atualizacao','dt_recebimento','nf','serie','nome_fornecedor','status_nf','tipo_nf', 'dt_lcto_protheus']);
+  const sortKeyToBackend = (k: keyof Nota | null) => (k && sortWhitelist.has(k as string) ? (k as string) : 'dt_atualizacao');
+
+
   const fetchNotas = async () => {
       try {
         setLoading(true);
-        const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho", {
+
+        const body: any = {
+          page: paginaAtual,
+          pageSize,
+          sortBy: sortKeyToBackend(sortConfig.key),
+          sortDir: sortConfig.direction || 'asc',
+          termo: (busca || '').trim() || undefined,
+          tipo: 'NFE', // <-- FILTRO FIXO ADICIONADO AQUI
+          filial: advancedFilters.filial === 'Todas' ? undefined : advancedFilters.filial,
+          responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
+          statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
+          startDate: advancedFilters.startDate || undefined,
+          endDate: advancedFilters.endDate || undefined,
+          startDateProtheus: advancedFilters.startDateProtheus || undefined,
+          endDateProtheus: advancedFilters.endDateProtheus || undefined,
+          // only_compras_pendentes: true // <-- Aplicado condicionalmente abaixo
+        };
+
+        if (filtroStatus && filtroStatus !== 'Todos') {
+            const statusNf = statusFiltroToStatusNf(filtroStatus);
+            if (statusNf) {
+                body.status_nf = statusNf;
+            } else {
+                if (filtroStatus === 'Compras')  body.only_compras_pendentes  = true;
+                if (filtroStatus === 'Fiscal')   body.only_fiscal_pendentes   = true;
+                if (filtroStatus === 'Enviadas') body.only_enviadas_pendentes = true;
+            }
+        } else {
+             // Se o filtro principal for 'Todos', mantemos apenas o filtro 'tipo=NFE'
+             // Se precisar que 'Todos' signifique 'Compras Pendentes' E 'NFE', descomente a linha abaixo
+             // body.only_compras_pendentes = true;
+        }
+
+        console.log("==> Enviando body para API:", JSON.stringify(body, null, 2));
+
+        const response = await fetch("/api/nfe/nfe-consulta-notas-cabecalho-paginado", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify(body),
         });
-        const data = await response.json();
-        setNotas(Array.isArray(data) ? data : []);
-        setChartKey(prevKey => prevKey + 1); 
+        const payload = await response.json();
+
+        console.log("<== Recebido payload da API:", payload);
+
+        setNotas(Array.isArray(payload?.data) ? payload.data : []);
+        setTotalServidor(Number(payload?.total ?? 0));
+        setTotaisAbas(payload?.tabs || {});
+        setTotalPendentes(Number(payload?.pendentes_total ?? 0));
+        setTotalNotasHoje(Number(payload?.notas_hoje ?? 0));
+
+        // Atualiza listas de filtros APENAS se vierem dados válidos
+        if (Array.isArray(payload?.distinct_filiais) && payload.distinct_filiais.length > 0) {
+            setAllFiliais(['Todos', ...payload.distinct_filiais.filter(Boolean)]);
+        } else if (!advancedFilters.filial || advancedFilters.filial === 'Todas') {
+             setAllFiliais(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_compradores) && payload.distinct_compradores.length > 0) {
+             setAllCompradores(['Todos', ...payload.distinct_compradores.filter(Boolean)]);
+        } else if (!advancedFilters.responsavel || advancedFilters.responsavel === 'Todos') {
+             setAllCompradores(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_status) && payload.distinct_status.length > 0) {
+             setAllStatusLancamento(['Todos', ...payload.distinct_status.filter(Boolean)]);
+        } else if (!advancedFilters.statusLancamento || advancedFilters.statusLancamento === 'Todos') {
+             setAllStatusLancamento(['Todos']);
+        }
+
+
+        setChartKey(prevKey => prevKey + 1);
         setLastUpdated(new Date());
       } catch (error) {
         console.error("Erro ao buscar as notas:", error);
+        setNotas([]);
+        setTotalServidor(0);
+        setTotaisAbas({});
+        setTotalPendentes(0);
+        setTotalNotasHoje(0);
+        // Reseta filtros em caso de erro grave
+        setAllFiliais(['Todos']);
+        setAllCompradores(['Todos']);
+        setAllStatusLancamento(['Todos']);
       } finally {
         setLoading(false);
       }
     };
 
-    const notasFiltradasOrdenadas = useMemo(() => {
-    let notasFiltradas = notasFiltradasPorAvancado.filter((nota) => {
-      const termo = busca.toLowerCase();
-      
-      const buscaOk =
-        nota.nome_fornecedor.toLowerCase().includes(termo) ||
-        nota.nf.includes(termo) ||
-        nota.chave.includes(termo);
-
-      const concluidoOk = filtroStatus === 'Todos' || filtroStatus === 'Manual' || filtroStatus === 'Importado' || nota.status_lancamento !== 'Concluído';
-
-      let statusOk = false;
-      if (filtroStatus === 'Todos') {
-        statusOk = true;
-      } else if (filtroStatus === 'Compras') {
-        statusOk = nota.status_compras?.trim().toUpperCase() !== 'CONCLUÍDO';
-      } else if (filtroStatus === 'Fiscal') {
-        statusOk = nota.status_fiscal?.trim().toUpperCase() !== 'CONCLUÍDO';
-      } else if (filtroStatus === 'Enviadas') {
-        statusOk = nota.status_envio_unidade?.trim().toUpperCase() === 'SIM';
-      } else {
-        const statusNfEquivalente = {
-            "Erro I.A.": "erro i.a.",
-            "Não Recebidas": "aguardando",
-            "Importado": "importado",
-            "Manual": "manual",
-            "Falha ERP": "erro execauto"
-        }[filtroStatus] || filtroStatus.toLowerCase();
-        
-        statusOk = nota.status_nf?.trim().toLowerCase() === statusNfEquivalente;
-      }
-
-      return statusOk && buscaOk && concluidoOk;
-    });
-
-    if (sortConfig.key) {
-      notasFiltradas.sort((a, b) => {
-        const aValue = a[sortConfig.key!]
-        const bValue = b[sortConfig.key!]
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-
-    return notasFiltradas;
-  }, [notasFiltradasPorAvancado, busca, filtroStatus, sortConfig]);
 
   const requestSort = (key: keyof Nota) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -592,10 +604,10 @@ export default function ConsultaNotas() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setPaginaAtual(1); // Resetar para a primeira página ao ordenar
   };
 
-  const totalPaginas = Math.ceil(notasFiltradasOrdenadas.length / itensPorPagina);
-  const notasPaginadas = notasFiltradasOrdenadas.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
+  const notasPaginadas = notas; // A paginação agora é feita no backend
 
   const coresStatus: Record<string, string> = {
     "Erro I.A.": "#ff6f61",
@@ -619,10 +631,12 @@ export default function ConsultaNotas() {
   };
 
   const handleExportXLSX = () => {
-    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
+    // REMOVIDO - "Conferido" do header
+    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
 
-    const data = notasFiltradasOrdenadas.map(nota => {
+    const data = notasPaginadas.map(nota => {
       return [
+        // REMOVIDO - Mapeamento de 'conferido'
         nota.status_lancamento || '',
         nota.filial,
         nota.nf,
@@ -630,6 +644,7 @@ export default function ConsultaNotas() {
         nota.tipo_nf || '',
         nota.nome_fornecedor,
         `${nota.dt_recebimento} ${nota.hr_Recebimento}`,
+        formatProtheusDateTime(nota.dt_lcto_protheus),
         nota.status_envio_unidade || '',
         nota.status_compras || '',
         nota.status_fiscal || '',
@@ -642,20 +657,38 @@ export default function ConsultaNotas() {
     const worksheetData = [headers, ...data];
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
+    // Ajustado para remover a primeira coluna
     worksheet['!cols'] = [
-        { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, 
+        /*{ wch: 10 },*/ { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
         { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-        { wch: 50 }, { wch: 25 }, { wch: 50 },
+        { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },
     ];
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Notas Fiscais");
-    XLSX.writeFile(workbook, "Consulta_Notas_Fiscais.xlsx");
+    XLSX.writeFile(workbook, "Consulta_Notas_Fiscais_Pagina.xlsx");
   };
+
+  // --- FUNÇÕES DE CONFERÊNCIA (CHECKBOX) REMOVIDAS ---
+
+  // Função para fechar notificação genérica (mantida)
+  const handleCloseNotification = () => {
+      setNotification({ visible: false, type: 'success', message: '' });
+      console.log("handleCloseNotification: Notificação fechada.");
+  };
+  // --- FIM DAS FUNÇÕES DE CONFERÊNCIA REMOVIDAS ---
+
 
   const renderLegendText = (value: string) => {
     return <span style={{ marginLeft: '4px' }}>{value}</span>;
   };
+
+  useEffect(() => {
+    if (authStatus === 'authorized') {
+      fetchNotas();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus, paginaAtual, pageSize, busca, filtroStatus, advancedFilters, sortConfig]);
 
   if (authStatus === 'loading') {
     return (
@@ -672,7 +705,34 @@ export default function ConsultaNotas() {
         </div>
     );
   }
-  
+
+  const renderActiveShape = (props: any) => {
+    const RADIAN = Math.PI / 180;
+    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+    const sin = Math.sin(-RADIAN * midAngle);
+    const cos = Math.cos(-RADIAN * midAngle);
+    const sx = cx + (outerRadius + 10) * cos;
+    const sy = cy + (outerRadius + 10) * sin;
+    const mx = cx + (outerRadius + 30) * cos;
+    const my = cy + (outerRadius + 30) * sin;
+    const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+    const ey = my;
+    const textAnchor = cos >= 0 ? 'start' : 'end';
+
+    return (
+      <g>
+        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+        <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 6} outerRadius={outerRadius + 10} fill={fill} />
+        <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
+        <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333" style={{ fontSize: '13px' }}>{`${payload.name}`}</text>
+        <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999" style={{ fontSize: '12px' }}>{`(${value} - ${(percent * 100).toFixed(1)}%)`}</text>
+      </g>
+    );
+  };
+
+  // --- COMPONENTE CHECKBOX REMOVIDO ---
+
   return (<>
     <style>{`
         :root {
@@ -685,6 +745,19 @@ export default function ConsultaNotas() {
             --gcs-gray-dark: #6c757d;
             --gcs-border-color: #dee2e6;
             --gcs-gray-soft: #adb5bd;
+
+            /* Cores do Funil (usadas pelo novo componente) */
+            --gcs-red-light-bg: #f8d7da;
+            --gcs-red-border: #f1c2c7;
+            --gcs-red-text: #b22c38;
+
+            --gcs-orange-light-bg: #fff8e1;
+            --gcs-orange-border: #FDBA74;
+            --gcs-orange-text: #F58220;
+
+            --gcs-blue-light-bg: #f1f5fb;
+            --gcs-blue-border: #a3b8d1;
+            --gcs-blue-text: #00314A;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
@@ -746,11 +819,11 @@ export default function ConsultaNotas() {
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .chart-3d-effect .recharts-pie-sector path {
             stroke: #fff;
             stroke-width: 1px;
-            filter: drop-shadow(1px 1px 0px rgba(0,0,0,0.1))
+            filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.1))
                     drop-shadow(2px 2px 0px rgba(0,0,0,0.09))
                     drop-shadow(3px 3px 0px rgba(0,0,0,0.08))
                     drop-shadow(4px 4px 0px rgba(0,0,0,0.07))
@@ -915,7 +988,7 @@ export default function ConsultaNotas() {
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} color="var(--gcs-blue)" />
-                <span>Central Financeiro NFe</span>
+                <span>Central de Compras</span>
             </h2>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -935,10 +1008,12 @@ export default function ConsultaNotas() {
                             <RefreshCcw size={20} />
                         </button>
                         <FilterPopover
-                            notas={notas}
+                            allFiliais={allFiliais}
+                            allCompradores={allCompradores}
+                            allStatusLancamento={allStatusLancamento}
                             onApplyFilters={handleApplyAdvancedFilters}
                             initialFilters={advancedFilters}
-                        />
+                         />
                         <button onClick={handleExportXLSX} title="Exportar para Excel" className="btn btn-outline-blue" style={{padding: '9px'}}>
                             <FileDown size={20} />
                         </button>
@@ -965,7 +1040,7 @@ export default function ConsultaNotas() {
                     Notas Hoje
                 </h4>
                 <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-green)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasProcessadasHoje}
+                    {totalNotasHoje}
                 </p>
             </div>
             
@@ -976,25 +1051,29 @@ export default function ConsultaNotas() {
                     Pendentes
                 </h4>
                 <p style={{ fontSize: '2.2rem', margin: 0, color: 'var(--gcs-orange)', fontWeight: 'bold', lineHeight: 1.2 }}>
-                    {notasPendentes}
+                    {totalPendentes}
                 </p>
             </div>
         </div>
       </div>
 
-      <div className="tabs-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="filter-tabs-container">
-          {statusDisponiveis.map((status) => {
-            const isSelected = filtroStatus === status;
-            return (
-              <button key={status} onClick={() => handleFiltroStatusChange(status)} className={`tab-button ${isSelected ? 'active' : ''}`}>
-                {status} ({statusCounts[status] || 0})
-              </button>
-            )
-          })}
-        </div>
+      <div className="tabs-card" style={{
+          marginBottom: '1.5rem',
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          boxShadow: 'none'
+      }}>
+        <PriorityRibbonTabs
+          filtroStatus={filtroStatus}
+          statusCounts={statusCounts as any}
+          onChange={(key) => {
+            if (key === "outras") return;
+            handleFiltroStatusChange(key);
+          }}
+        />
       </div>
-      
+
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
           <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -1002,7 +1081,7 @@ export default function ConsultaNotas() {
             Carregando notas...
           </div>
         </div>
-      ) : notasFiltradasOrdenadas.length === 0 ? (
+      ) : notasPaginadas.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--gcs-gray-dark)", marginTop: "4rem", fontSize: '1.1rem' }}>
           Nenhuma nota encontrada para os filtros aplicados.
         </div>
@@ -1012,12 +1091,15 @@ export default function ConsultaNotas() {
             <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: '14px' }}>
               <thead style={{ backgroundColor: "var(--gcs-blue)", color: "#fff", textAlign: "left" }}>
                 <tr>
+                  {/* REMOVIDO - Header da coluna Conferido */}
                   <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('filial')} className="th-sortable"><Building2 size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
-                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
+                  {/* REMOVIDO - Coluna Tipo NFe já que o filtro é fixo */}
+                  {/* <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th> */}
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_recebimento')} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Recebimento <SortIcon columnKey="dt_recebimento" /></div></th>
+                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('dt_lcto_protheus' as keyof Nota)} className="th-sortable"><Calendar size={16} style={{marginRight: '8px'}} /> Lançamento Protheus <SortIcon columnKey={"dt_lcto_protheus" as keyof Nota} /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><TrendingUp size={16} style={{marginRight: '8px'}} /> Status Setor</div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('observacao')} className="th-sortable"><MessageSquare size={16} style={{marginRight: '8px'}}/> Observação <SortIcon columnKey="observacao" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('comprador')} className="th-sortable"><User size={16} style={{marginRight: '8px'}} /> Responsável <SortIcon columnKey="comprador" /></div></th>
@@ -1026,7 +1108,7 @@ export default function ConsultaNotas() {
               </thead>
               <tbody>
                 {notasPaginadas.map((nota, index) => {
-                  
+
                   const statusLancamento = nota.status_lancamento;
                   const statusNotaTexto = statusLancamento || 'N/A';
                   let statusNotaCor = 'var(--gcs-gray-dark)';
@@ -1039,13 +1121,14 @@ export default function ConsultaNotas() {
 
                   return (
                     <tr
-                      key={index}
+                      key={nota.chave} // Usar a chave como key é mais seguro
                       className="data-row"
                       style={{
                         borderTop: "1px solid var(--gcs-border-color)",
                         backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
                       }}
                     >
+                      {/* REMOVIDO - Célula da coluna Conferido */}
                       <td data-label="Status da Nota" className="td-status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <span
                           className="status-badge"
@@ -1059,23 +1142,17 @@ export default function ConsultaNotas() {
                           <span style={{fontWeight: 'bold', color: '#343a40'}}>{nota.nf}</span>
                           <span style={{color: 'var(--gcs-gray-dark)'}}> / {nota.serie}</span>
                       </td>
+                      {/* REMOVIDO - Célula da coluna Tipo NFe */}
+                      {/*
                       <td data-label="Tipo" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
-                        {nota.tipo_nf ? (
-                            <span
-                                className="status-badge"
-                                style={{
-                                    backgroundColor: nota.tipo_nf.toUpperCase() === 'CTE' ? 'var(--gcs-gray-soft)' : 'var(--gcs-gray-dark)'
-                                }}
-                            >
-                                {nota.tipo_nf.toUpperCase()}
-                            </span>
-                        ) : (
-                            <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>
-                        )}
+                        {nota.tipo_nf ? (...) : (...)}
                       </td>
+                      */}
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
                       <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
-                      
+                      <td data-label="Lançamento Protheus" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+                        {formatProtheusDateTime(nota.dt_lcto_protheus)}
+                      </td>
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
                               statusUnidade={nota.status_envio_unidade}
@@ -1083,7 +1160,6 @@ export default function ConsultaNotas() {
                               statusFiscal={nota.status_fiscal}
                           />
                       </td>
-
                       <td data-label="Observação" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {nota.observacao ? nota.observacao : <span style={{ color: 'var(--gcs-gray-dark)' }}>—</span>}
                       </td>
@@ -1109,10 +1185,11 @@ export default function ConsultaNotas() {
           <div style={{ marginTop: "2rem", display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Pagination
               current={paginaAtual}
-              total={notasFiltradasOrdenadas.length}
-              pageSize={itensPorPagina}
+              total={totalServidor}
+              pageSize={pageSize}
               onChange={(page) => setPaginaAtual(page)}
               showSizeChanger={false}
+              showTotal={(total, range) => `${range[0]}-${range[1]} de ${total} notas`}
             />
           </div>
         </>
@@ -1129,6 +1206,15 @@ export default function ConsultaNotas() {
       statusCompras={notaSelecionada?.status_compras}
       observacao={notaSelecionada?.observacao}
     />
+
+    <NotificationModal
+        visible={notification.visible}
+        type={notification.type}
+        message={notification.message}
+        onClose={handleCloseNotification}
+    />
+
+    {/* REMOVIDO - Modal de confirmação de conferência */}
   </>);
 
 }

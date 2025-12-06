@@ -358,7 +358,10 @@ const MapaKML: React.FC<MapaKMLProps> = ({ urlKML }) => {
 
     for (const feature of geoJson.features) {
       const geom = feature?.geometry;
-      if (!geom || !geom.type || !geom.coordinates) continue;
+      
+      // Fix: GeometryCollection doesn't have coordinates directly. 
+      // Using a type check or cast to safely access coordinates on non-collection geometries.
+      if (!geom || !geom.type || geom.type === 'GeometryCollection' || !(geom as any).coordinates) continue;
 
       const styleUrl: string | undefined = feature?.properties?.styleUrl;
       const kmlStyle = forceUniform ? undefined : resolveStyleUrl(styleUrl, catalog);

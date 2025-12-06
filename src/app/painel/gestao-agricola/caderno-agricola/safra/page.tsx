@@ -182,7 +182,9 @@ export default function CadernoAgricolaPage() {
   const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>('Ativo');
 
   // --- Gráfico e KPIs ---
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Tipagem de activeIndex alterada de number | null para number | undefined
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
+  
   const dadosGraficoStatus = useMemo(() => {
     const ativos = cadernos.filter(c => c.status === 'Ativo').length;
     const inativos = cadernos.filter(c => c.status === 'Inativo').length;
@@ -662,7 +664,7 @@ export default function CadernoAgricolaPage() {
             box-shadow: 0 4px 12px rgba(0, 49, 74, 0.2);
         }
         
-        /* --- *** CORREÇÃO: Abas Dark *** --- */
+        /* --- Abas Dark --- */
         body.dark .seg-item {
             color: var(--gcs-dark-text-secondary);
             background: rgba(25, 39, 53, 0.15);
@@ -679,7 +681,20 @@ export default function CadernoAgricolaPage() {
             border-color: var(--gcs-pagination-blue);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
         }
-        /* --- *** FIM DA CORREÇÃO *** --- */
+
+        /* --- Correção 1: Texto da tabela vazia --- */
+        .empty-table-message {
+            text-align: center;
+            margin-top: 4rem;
+            font-size: 1.1rem;
+        }
+        body.light .empty-table-message {
+            color: var(--gcs-gray-dark);
+        }
+        body.dark .empty-table-message {
+            color: var(--gcs-dark-text-secondary); /* Corrigido */
+        }
+        /* --- Fim da Correção --- */
 
         /* --- Responsividade (Layout 1) --- */
         @media (max-width: 1200px) { .header-wrapper { flex-direction: column; align-items: center; gap: 1.5rem; } .main-content-card, .kpi-card { width: 100%; } }
@@ -717,7 +732,8 @@ export default function CadernoAgricolaPage() {
                             cornerRadius={8} paddingAngle={3}
                             activeIndex={activeIndex} activeShape={renderActiveShape}
                             onMouseEnter={(_, index) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
+                            // CORREÇÃO AQUI: set undefined
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoStatus.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={coresStatusDonut[entry.name] || '#ccc'} />

@@ -97,23 +97,38 @@ const validateNomePivoTalhao = (_: any, value: string) => {
 /**
  * Parser para o InputNumber
  * Remove todos os caracteres que NÃO são dígitos ou a PRIMEIRO separador (vírgula).
+ * CORREÇÃO: Tipagem do retorno alterada para 'any' ou 'number' para satisfazer o InputNumber<number>
+ * mas mantendo a lógica de string para o parser funcionar corretamente.
  */
-const numberParser = (value: string | undefined): string => {
-    if (!value) return '';
+const numberParser = (value: string | undefined): number => {
+    if (!value) return 0; // Retorna 0 ou outro valor padrão numérico se vazio, ou ajusta conforme necessidade
     
     // 1. Substitui ponto por vírgula (para consistência no Brasil)
-    const valueWithComma = value.replace('.', ',');
+    let valueWithComma = value.replace('.', ',');
     
     // 2. Remove todos os caracteres que NÃO são dígitos ou vírgula
     const onlyNumbersAndComma = valueWithComma.replace(/[^0-9,]/g, '');
     
     // 3. Garante que haja apenas UMA vírgula
     const parts = onlyNumbersAndComma.split(',');
-    if (parts.length <= 1) {
-        return onlyNumbersAndComma; // '123'
+    let finalString = onlyNumbersAndComma;
+    
+    if (parts.length > 2) {
+        finalString = `${parts[0]},${parts.slice(1).join('')}`;
     }
     
-    // '123,45,67' -> ['123', '45', '67'] -> '123,4567'
+    // Converte para formato numérico javascript (ponto como separador) para retornar
+    return parseFloat(finalString.replace(',', '.')) || 0;
+};
+
+// Alternativa: Parser que retorna string (o que o AntD geralmente aceita na prop parser)
+// mas precisamos fazer o cast no uso se o TS reclamar.
+const stringParser = (value: string | undefined): string => {
+    if (!value) return '';
+    const valueWithComma = value.replace('.', ',');
+    const onlyNumbersAndComma = valueWithComma.replace(/[^0-9,]/g, '');
+    const parts = onlyNumbersAndComma.split(',');
+    if (parts.length <= 1) return onlyNumbersAndComma;
     return `${parts[0]},${parts.slice(1).join('')}`;
 };
 
@@ -902,7 +917,8 @@ const ModalPivo: React.FC<ModalPivoProps> = ({ visible, mode, initialData, onClo
                             placeholder="Ex: 63,10"
                             decimalSeparator="," // Aceita vírgula
                             step="0.01" // Permite incrementos decimais
-                            parser={numberParser} // Aplica o parser para limpar letras
+                            // CORREÇÃO AQUI: Cast para satisfazer a tipagem
+                            parser={stringParser as any} 
                          />
                       </Form.Item>
                       

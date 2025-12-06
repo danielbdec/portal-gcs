@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Users, Save, UserCheck, UserX, Edit, ShieldCheck, Trash2, PlusCircle, KeyRound, Cog, UserRoundCheck, UserRoundX, Lock } from "lucide-react";
@@ -166,7 +166,6 @@ function CadastroFuncoes({
         </button>
         {funcaoEditando && <button onClick={limparFormularioFuncao} className="btn btn-outline-gray" disabled={isSubmitting}>Cancelar</button>}
       </div>
-      {/* Mensagem foi removida, agora usa NotificationModal */}
       <hr style={{ margin: '2rem 0', border: 'none', borderTop: '1px solid var(--gcs-border-color)' }} />
       <h4 style={{ marginTop: 0, fontSize: '1.25rem', color: 'var(--gcs-blue)', marginBottom: '1.5rem' }}>
         Funções Cadastradas
@@ -315,7 +314,7 @@ function GerenciamentoUsuarioModal({
                                 ))}
                             </fieldset>
                             ))
-                        ) : <p style={{ color: 'var(--gcs-gray-dark)' }}>Nenhuma permissão encontrada. Cadastre funções na aba "Funções do Portal".</p>}
+                        ) : <p style={{ color: 'var(--gcs-gray-dark)' }}>Nenhuma permissão encontrada. Cadastre funções na aba &quot;Funções do Portal&quot;.</p>}
                     </div>
                 )}
                 <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
@@ -346,6 +345,50 @@ function CadastroUsuariosInner() {
   // Estado para spinner do botão "Gerenciar"
   const [loadingUserId, setLoadingUserId] = useState<number | null>(null);
 
+  // --- FUNÇÕES DE CARREGAMENTO (Envolvidas em useCallback) ---
+  const carregarUsuarios = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal/consulta-usuarios", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({})
+      });
+      if (!res.ok) { setUsuarios([]); return; }
+      const data = await res.json();
+      setUsuarios(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Falha ao carregar usuários:", error);
+      setUsuarios([]);
+    }
+  }, []);
+
+  const carregarFuncoes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal/consulta-funcoes", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({})
+      });
+      if (!res.ok) { setTodasFuncoes([]); return; }
+      const data = await res.json();
+      setTodasFuncoes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Falha ao carregar funções:", error);
+      setTodasFuncoes([]);
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    await Promise.all([
+      carregarUsuarios(),
+      carregarFuncoes()
+    ]);
+    setIsLoading(false);
+  }, [carregarUsuarios, carregarFuncoes]);
+
   useEffect(() => {
     if (status === 'loading') {
       setAuthStatus('loading');
@@ -363,50 +406,7 @@ function CadastroUsuariosInner() {
     } else {
         router.push('/login');
     }
-  }, [status, session, router]);
-  
-  const fetchData = async () => {
-    setIsLoading(true);
-    await Promise.all([
-      carregarUsuarios(),
-      carregarFuncoes()
-    ]);
-    setIsLoading(false);
-  };
-
-  const carregarUsuarios = async () => {
-    try {
-      const res = await fetch("/api/portal/consulta-usuarios", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({})
-      });
-      if (!res.ok) { setUsuarios([]); return; }
-      const data = await res.json();
-      setUsuarios(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Falha ao carregar usuários:", error);
-      setUsuarios([]);
-    }
-  };
-
-  const carregarFuncoes = async () => {
-    try {
-      const res = await fetch("/api/portal/consulta-funcoes", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({})
-      });
-      if (!res.ok) { setTodasFuncoes([]); return; }
-      const data = await res.json();
-      setTodasFuncoes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Falha ao carregar funções:", error);
-      setTodasFuncoes([]);
-    }
-  };
+  }, [status, session, router, fetchData]);
 
   const salvarUsuario = async (dados: any): Promise<boolean> => {
     const isEditing = !!dados.id;
@@ -643,12 +643,15 @@ function CadastroUsuariosInner() {
             </div>
         )}
         {activeTab === 'funcoes' && (
-            <CadastroFuncoes 
-                funcoes={todasFuncoes} 
-                onFuncaoChange={carregarFuncoes} 
-                isLoading={isLoading}
-                setNotification={setNotification} // Passa a função de notificação
-            />
+            <div className="content-card">
+              <p style={{ color: 'var(--gcs-gray-dark)' }}>Cadastre funções na aba &quot;Funções do Portal&quot;.</p>
+              <CadastroFuncoes 
+                  funcoes={todasFuncoes} 
+                  onFuncaoChange={carregarFuncoes} 
+                  isLoading={isLoading}
+                  setNotification={setNotification} // Passa a função de notificação
+              />
+            </div>
         )}
       </div>
       <GerenciamentoUsuarioModal 

@@ -1,3 +1,4 @@
+// page.tsx (Refatorado para Filtro Fixo: NFE)
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -12,10 +13,10 @@ import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
     ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
-    CheckSquare, Square // <-- CheckSquare e Square podem ser removidos se não forem mais usados em outro lugar
+    CheckSquare, Square
 } from "lucide-react";
 import ModalDetalhes from "./ModalDetalhes";
-import NotificationModal from "./NotificationModal"; // Importado
+import NotificationModal from "./NotificationModal";
 import React from "react";
 import "antd/dist/reset.css";
 import PriorityRibbonTabs from "./PriorityRibbonTabs";
@@ -122,7 +123,6 @@ interface Nota {
   status_compras?: string;
   status_fiscal?: string;
   dt_lcto_protheus?: string;
-  conferido?: 'S' | 'N' | null; // <-- Mantido na interface caso a API ainda retorne, mas não será usado na UI
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
@@ -297,7 +297,7 @@ const FilterPopover = ({
                         </select>
                     </div>
 
-                    {/* Removido o filtro de TIPO daqui pois agora é fixo 'NFE'
+                    {/* Removido o select de TIPO pois é fixo 'NFE'
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
                         <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
@@ -375,7 +375,8 @@ export default function ConsultaNotas() {
     endDateProtheus: ''
   });
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Inicializando como undefined para satisfazer a tipagem do PieChart
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
@@ -474,12 +475,14 @@ export default function ConsultaNotas() {
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
+        // CORREÇÃO: undefined
+        setActiveIndex(undefined);
     } else {
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+        // CORREÇÃO: undefined
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
     }
   }, [filtroStatus, dadosGraficoStatus]);
 
@@ -496,7 +499,8 @@ export default function ConsultaNotas() {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+    // CORREÇÃO: undefined
+    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
   };
 
   const handleChartClick = (data: any) => {

@@ -630,7 +630,8 @@ const ModalVariedade: React.FC<ModalVariedadeProps> = ({ visible, mode, initialD
                               min={0}
                               style={{ width: '100%' }}
                               placeholder="Ex: 125"
-                              parser={numberParser} // Limpa letras
+                              // CORREÇÃO: Cast para 'any' para resolver o conflito de tipo (string vs number)
+                              parser={numberParser as any} 
                            />
                         </Form.Item>
                     </div>

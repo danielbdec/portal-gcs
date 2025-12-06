@@ -1,29 +1,33 @@
-// page.tsx (Refatorado para Forçar Filtros Permanentes)
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Pagination } from "antd";
+import { Pagination, Tooltip, Spin } from "antd"; 
 import * as XLSX from 'xlsx';
 import {
-    PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector
+    PieChart, Pie, Cell, Legend, ResponsiveContainer, Sector, Tooltip as RechartsTooltip
 } from "recharts";
 import {
     RefreshCcw, FileText, AlertTriangle, Search, Building2, Hash,
     Truck, Calendar, BadgeCheck, MessageSquare, User, Settings2, ChevronsUpDown,
     ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart, Landmark, Lock,
+    CheckSquare, Square,
+    Sun, Moon 
 } from "lucide-react";
+import { LoadingOutlined } from "@ant-design/icons"; 
 import ModalDetalhes from "./ModalDetalhes";
+import NotificationModal from "./NotificationModal"; // Importado
 import React from "react";
+import { createPortal } from "react-dom";
 import "antd/dist/reset.css";
-import PriorityRibbonTabs from "./PriorityRibbonTabs";
+import PriorityRibbonTabs, { RIBBON_STATUS_LIST } from "./PriorityRibbonTabs";
 
 // --- COMPONENTES AUXILIARES DE SEGURANÇA E UI ---
 
 const LoadingSpinner = ({ text }: { text: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
-        <div style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div className="auth-spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--gcs-gray-medium)', borderTop: '4px solid var(--gcs-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <div style={{ marginTop: '1rem', fontWeight: 'bold', color: 'var(--gcs-blue)' }}>
             {text}
         </div>
@@ -121,6 +125,7 @@ interface Nota {
   status_compras?: string;
   status_fiscal?: string;
   dt_lcto_protheus?: string;
+  conferido?: 'S' | 'N' | null;
 }
 
 const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
@@ -172,13 +177,37 @@ const StatusSetorDots = ({ statusUnidade, statusCompras, statusFiscal }: {
     );
 };
 
+// ================== INÍCIO DAS ALTERAÇÕES DE ANCORAGEM ==================
+
+/** Encontra o ancestral rolável mais próximo (overflow: auto|scroll) */
+function getScrollParent(node: HTMLElement | null): HTMLElement | null {
+  if (!node) return null;
+  const style = (el: HTMLElement) => getComputedStyle(el);
+  let cur: HTMLElement | null = node.parentElement;
+  while (cur && cur !== document.body) {
+    const s = style(cur);
+    const overflowY = s.overflowY;
+    const overflow = s.overflow;
+    const isScrollable =
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflow === "auto" ||
+      overflow === "scroll";
+    if (isScrollable) return cur;
+    cur = cur.parentElement;
+  }
+  return document.scrollingElement as HTMLElement;
+}
+
 const FilterPopover = ({
+    allFiliais,
     allTipos,
     allCompradores,
     allStatusLancamento,
     onApplyFilters,
     initialFilters
 }: {
+    allFiliais: string[],
     allTipos: string[],
     allCompradores: string[],
     allStatusLancamento: string[],
@@ -186,7 +215,7 @@ const FilterPopover = ({
     initialFilters: any
 }) => {
     const [isOpen, setIsOpen] = useState(false);
-    // Removido estado local 'filial' pois é um filtro permanente agora
+    const [filial, setFilial] = useState(initialFilters.filial || 'Todas');
     const [tipo, setTipo] = useState(initialFilters.tipo || 'Todos');
     const [responsavel, setResponsavel] = useState(initialFilters.responsavel || 'Todos');
     const [statusLancamento, setStatusLancamento] = useState(initialFilters.statusLancamento || 'Todos');
@@ -194,131 +223,280 @@ const FilterPopover = ({
     const [endDate, setEndDate] = useState(initialFilters.endDate || '');
     const [startDateProtheus, setStartDateProtheus] = useState(initialFilters.startDateProtheus || '');
     const [endDateProtheus, setEndDateProtheus] = useState(initialFilters.endDateProtheus || '');
+    
     const popoverRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null); // Referência ao botão
+    const [isBrowser, setIsBrowser] = useState(false); // Para garantir que o portal só rode no cliente
 
-    // Removido filiaisUnicas
+    // --- Nova lógica de ancoragem ---
+    const scrollParentRef = useRef<HTMLElement | null>(null);
+    const POPOVER_WIDTH = 360;
+    const [relPos, setRelPos] = useState<{ top: number; left: number }>({
+        top: -9999,
+        left: -9999,
+    });
+    // --- Fim da nova lógica ---
+
+    const filiaisUnicas = useMemo(() => allFiliais, [allFiliais]);
     const tiposUnicos = useMemo(() => allTipos, [allTipos]);
     const responsaveisUnicos = useMemo(() => allCompradores, [allCompradores]);
     const statusUnicos = useMemo(() => allStatusLancamento, [allStatusLancamento]);
 
-
-    const handleApply = () => {
-        onApplyFilters({
-            // filial não é mais enviado daqui
-            tipo, responsavel, statusLancamento,
-            startDate, endDate,
-            startDateProtheus, endDateProtheus
-        });
-        setIsOpen(false);
-    };
-
-    const handleClear = () => {
-        // filial não é resetada aqui
-        setTipo('Todos');
-        setResponsavel('Todos');
-        setStatusLancamento('Todos');
-        setStartDate('');
-        setEndDate('');
-        setStartDateProtheus('');
-        setEndDateProtheus('');
-
-        onApplyFilters({
-            // filial não é mais enviado daqui
-            tipo: 'Todos', responsavel: 'Todos',
-            statusLancamento: 'Todos', startDate: '', endDate: '',
-            startDateProtheus: '', endDateProtheus: ''
-        });
-        setIsOpen(false);
-    };
-
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
+        setIsBrowser(true);
+    }, []);
+
+    // --- Nova lógica de ancoragem ---
+    const computeRelativePosition = useCallback(() => {
+        if (!buttonRef.current || !scrollParentRef.current) return;
+
+        const btnRect = buttonRef.current.getBoundingClientRect();
+        const parentRect = scrollParentRef.current.getBoundingClientRect();
+
+        // posição do botão dentro do parent (compensa padding/scroll)
+        const topInParent = btnRect.bottom - parentRect.top + 8; // 8px abaixo do botão
+        const leftInParent = btnRect.right - parentRect.left - POPOVER_WIDTH; // alinhar pela direita
+
+        setRelPos({
+            top: Math.max(0, topInParent),
+            left: Math.max(0, leftInParent),
+        });
+    }, []);
+
+    // Ao abrir: encontra o parent rolável e calcula posição
+    useEffect(() => {
+        if (!isOpen) return;
+        const btn = buttonRef.current;
+        const parent = getScrollParent(btn as any) as HTMLElement | null;
+        scrollParentRef.current = parent || (document.scrollingElement as HTMLElement);
+
+        computeRelativePosition();
+
+        // Ajusta em resize e em mudanças de layout do parent
+        const onResize = () => computeRelativePosition();
+        window.addEventListener("resize", onResize);
+
+    // Observa mudanças de tamanho/posicionamento do botão
+    const ro = new ResizeObserver(() => computeRelativePosition());
+    if (btn) ro.observe(btn);
+
+    return () => {
+        window.removeEventListener("resize", onResize);
+        ro.disconnect();
+    };
+}, [isOpen, computeRelativePosition]);
+// --- Fim da nova lógica ---
+
+
+const handleApply = () => {
+    onApplyFilters({
+        filial, tipo, responsavel, statusLancamento,
+        startDate, endDate,
+        startDateProtheus, endDateProtheus
+    });
+    setIsOpen(false);
+};
+
+const handleClear = () => {
+    setFilial('Todas');
+    setTipo('Todos');
+    setResponsavel('Todos');
+    setStatusLancamento('Todos');
+    setStartDate('');
+    setEndDate('');
+    setStartDateProtheus('');
+    setEndDateProtheus('');
+
+    onApplyFilters({
+        filial: 'Todas', tipo: 'Todos', responsavel: 'Todos',
+        statusLancamento: 'Todos', startDate: '', endDate: '',
+        startDateProtheus: '', endDateProtheus: ''
+    });
+    setIsOpen(false);
+};
+
+useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        const isButton = target.closest('.btn-filter-toggle');
+        
+        if (popoverRef.current && !popoverRef.current.contains(event.target as Node) && !isButton) {
+            setIsOpen(false);
+        }
+    };
+    
+    if (isOpen) {
         document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [popoverRef]);
+    }
+    
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+}, [isOpen]);
 
-    return (
-        <div style={{ position: 'relative' }} ref={popoverRef}>
-            <button onClick={() => setIsOpen(!isOpen)} title="Filtros Avançados" className="btn btn-outline-gray" style={{padding: '9px'}}>
-                <Filter size={20} />
-            </button>
 
-            {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    width: '360px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    border: '1px solid var(--gcs-border-color)',
-                    zIndex: 100,
-                    padding: '1rem'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
-                        <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Inicial</label>
-                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Final</label>
-                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Inicial</label>
-                            <input type="date" value={startDateProtheus} onChange={(e) => setStartDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Final</label>
-                            <input type="date" value={endDateProtheus} onChange={(e) => setEndDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
-                        </div>
-                    </div>
-
-                    {/* Removido o select de Filial */}
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
-                        <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {tiposUnicos.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Responsável</label>
-                        <select value={responsavel} onChange={(e) => setResponsavel(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {responsaveisUnicos.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Status da Nota</label>
-                        <select value={statusLancamento} onChange={(e) => setStatusLancamento(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
-                            {statusUnicos.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                        <button onClick={handleClear} className="btn btn-outline-gray" style={{padding: '8px 16px'}}>Limpar</button>
-                        <button onClick={handleApply} className="btn btn-green" style={{padding: '8px 16px'}}>Aplicar</button>
-                    </div>
-                </div>
-            )}
+// Conteúdo do popover
+const popoverContent = (
+    <div 
+        ref={popoverRef}
+        className="filter-popover-content"
+        style={{
+            position: 'absolute',
+            top: relPos.top,
+            left: relPos.left,
+            width: '360px',
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            border: '1px solid var(--gcs-border-color)',
+            zIndex: 99999999, 
+            padding: '1rem',
+        }}
+    >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h4 style={{ margin: 0, color: 'var(--gcs-blue)' }}>Filtros Avançados</h4>
+            <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--gcs-gray-dark)" /></button>
         </div>
-    );
+
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Inicial</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Receb. Final</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+            </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Inicial</label>
+                <input type="date" value={startDateProtheus} onChange={(e) => setStartDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Dt. Imp. Protheus Final</label>
+                <input type="date" value={endDateProtheus} onChange={(e) => setEndDateProtheus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }} />
+            </div>
+        </div>
+
+        <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Filial</label>
+            <select value={filial} onChange={(e) => setFilial(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                {filiaisUnicas.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+        </div>
+
+        <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Tipo</label>
+            <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                {tiposUnicos.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+        </div>
+
+        <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Responsável</label>
+            <select value={responsavel} onChange={(e) => setResponsavel(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                {responsaveisUnicos.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+        </div>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>Status da Nota</label>
+            <select value={statusLancamento} onChange={(e) => setStatusLancamento(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--gcs-border-color)' }}>
+                {statusUnicos.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+            <button onClick={handleClear} className="btn btn-outline-gray" style={{padding: '8px 16px'}}>Limpar</button>
+            <button onClick={handleApply} className="btn btn-green" style={{padding: '8px 16px'}}>Aplicar</button>
+        </div>
+    </div>
+);
+
+// --- Nova lógica de ancoragem ---
+// Renderiza o popover dentro do SCROLL PARENT
+const renderPopoverInParent = () => {
+    if (!isOpen || !isBrowser) return null;
+    const parent = scrollParentRef.current;
+    if (!parent) return null;
+    return createPortal(popoverContent, parent);
+};
+// --- Fim da nova lógica ---
+
+return (
+    <div style={{ position: 'relative' }}>
+        <button 
+            // --- Nova lógica de ancoragem (onClick) ---
+            onClick={() => {
+              const next = !isOpen;
+              setIsOpen(next);
+              if (!isOpen) {
+                // calcula e ancora no parent imediatamente
+                setTimeout(() => {
+                  const btn = buttonRef.current;
+                  const parent = getScrollParent(btn as any) as HTMLElement | null;
+                  scrollParentRef.current = parent || (document.scrollingElement as HTMLElement);
+                  computeRelativePosition();
+                }, 0);
+              }
+            }}
+            title="Filtros Avançados" 
+            className="btn btn-outline-gray btn-filter-toggle" 
+            style={{padding: '9px'}}
+            ref={buttonRef} // Anexar a referência ao botão
+        >
+            <Filter size={20} />
+        </button>
+
+        {/* --- Nova lógica de ancoragem (Render) --- */}
+        {renderPopoverInParent()}
+      
+    </div>
+);
+};
+// ================== FIM DAS ALTERAÇÕES DE ANCORAGEM ==================
+
+
+const ConfirmationModal = ({
+isOpen,
+onClose,
+onConfirm,
+message,
+title = "Confirmação Necessária",
+icon = <AlertTriangle size={40} color="#f7941d" />,
+confirmText = "OK, Entendi",
+confirmColor = "#dc3545",
+showCancelButton = true
+}: {
+isOpen: boolean,
+onClose: () => void,
+onConfirm: () => void,
+message: string,
+title?: string,
+icon?: React.ReactNode,
+confirmText?: string,
+confirmColor?: string,
+showCancelButton?: boolean
+}) => {
+if (!isOpen) return null;
+return (
+    <>
+        <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2147483648 }}></div>
+        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 2147483649, maxWidth: '450px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                {icon}
+            </div>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#333' }}>{title}</h3>
+            <p style={{ color: '#666', lineHeight: 1.6 }}>{message}</p>
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+                {showCancelButton && (
+                    <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc', background: '#f1f1f1', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                )}
+                <button onClick={onConfirm} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>{confirmText}</button>
+            </div>
+        </div>
+    </>
+);
 };
 
 
@@ -342,8 +520,14 @@ export default function ConsultaNotas() {
   const [totaisAbas, setTotaisAbas] = useState<Record<string, number>>({});
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nota | null; direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
 
+  const [isConfirmConferenciaOpen, setIsConfirmConferenciaOpen] = useState(false);
+  const [conferenciaNota, setConferenciaNota] = useState<Nota | null>(null);
+  const [newConferenciaStatus, setNewConferenciaStatus] = useState<'S' | 'N' | null>(null);
+  const [isSubmittingConferencia, setIsSubmittingConferencia] = useState(false);
+  const [notification, setNotification] = useState({ visible: false, type: 'success' as 'success' | 'error', message: '' });
+
   const [advancedFilters, setAdvancedFilters] = useState({
-    // filial removida dos filtros avançados
+    filial: 'Todas',
     tipo: 'Todos',
     responsavel: 'Todos',
     statusLancamento: 'Todos',
@@ -353,7 +537,8 @@ export default function ConsultaNotas() {
     endDateProtheus: ''
   });
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // CORREÇÃO: Alterado para number | undefined
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const [chartKey, setChartKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [timeAgo, setTimeAgo] = useState('');
@@ -361,10 +546,75 @@ export default function ConsultaNotas() {
   const [totalPendentes, setTotalPendentes] = useState<number>(0);
   const [totalNotasHoje, setTotalNotasHoje] = useState<number>(0);
 
-  // Removido allFiliais do estado
+  const [allFiliais, setAllFiliais] = useState<string[]>(['Todos']);
   const [allTipos, setAllTipos] = useState<string[]>(['Todos']);
   const [allCompradores, setAllCompradores] = useState<string[]>(['Todos']);
   const [allStatusLancamento, setAllStatusLancamento] = useState<string[]>(['Todos']);
+
+  const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
+  const hasFetchedTheme = useRef(false);
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+
+  useEffect(() => {
+    const fetchThemeData = async () => {
+      if (!session?.user?.email) return;
+
+      try {
+        const res = await fetch("/api/portal/consulta-tema", { method: "POST" });
+        if (!res.ok) throw new Error('Falha ao buscar tema');
+        
+        const userData = await res.json(); 
+        
+        if (userData && userData.tema) {
+          const apiTheme = userData.tema === 'E' ? 'dark' : 'light';
+          setTheme(apiTheme);
+        } else {
+          setTheme('light');
+        }
+      } catch (err) {
+        console.error("Erro ao buscar tema, usando 'light' como padrão:", err);
+        setTheme('light');
+      }
+    };
+
+    if (status === "authenticated" && session && !hasFetchedTheme.current) {
+      hasFetchedTheme.current = true;
+      fetchThemeData();
+    }
+  }, [status, session]); 
+
+  useEffect(() => {
+    if (theme) {
+      localStorage.setItem('theme', theme);
+      document.body.classList.remove('light', 'dark');
+      document.body.classList.add(theme);
+    }
+  }, [theme]); 
+
+  const handleThemeChange = async (newTheme: 'light' | 'dark') => {
+    if (!session?.user?.email || isSavingTheme || newTheme === theme) return;
+
+    const oldTheme = theme;
+    setIsSavingTheme(true);
+    setTheme(newTheme); 
+
+    try {
+      const response = await fetch('/api/portal/altera-tema', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tema: newTheme }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.status !== 'ok') {
+        throw new Error(result.message || 'Falha ao salvar o tema.');
+      }
+    } catch (error: any) {
+      console.error("Erro ao salvar tema:", error);
+      setTheme(oldTheme); 
+    } finally {
+      setIsSavingTheme(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -379,9 +629,7 @@ export default function ConsultaNotas() {
   }, [buscaRaw]);
 
   const handleApplyAdvancedFilters = (filters: any) => {
-    // Não aplica mais filtro de filial daqui
-    const { filial, ...restFilters } = filters;
-    setAdvancedFilters(restFilters);
+    setAdvancedFilters(filters);
     setPaginaAtual(1);
   };
 
@@ -396,16 +644,16 @@ export default function ConsultaNotas() {
       return;
     }
     if (status === 'authenticated') {
-      const user = session.user;
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.notasEnviadas');
+      const user: any = session.user; 
+      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralDeNotas');
 
       if (hasAccess) {
         setAuthStatus('authorized');
       } else {
-        setAuthStatus('unauthorized');
+        router.push('/login'); 
       }
     } else {
-        router.push('/login');
+        router.push('/login'); 
     }
   }, [status, session, router]);
 
@@ -417,10 +665,7 @@ export default function ConsultaNotas() {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  const statusDisponiveis = useMemo(() => {
-    // Aba "Enviadas" (pendente) removida, pois esta página SÓ mostra enviadas.
-    return ["Todos", "Compras", "Fiscal", "Erro I.A.", "Não Recebidas", "Importado", "Manual", "Falha ERP"];
-  }, []);
+  const statusDisponiveis = RIBBON_STATUS_LIST;
 
 
   const statusCounts = useMemo(() => {
@@ -430,22 +675,23 @@ export default function ConsultaNotas() {
 
 
   const dadosGraficoStatus = useMemo(() => {
-    // Filtra para remover a aba "Enviadas" dos dados do gráfico também
     return statusDisponiveis
-      .filter(key => key !== "Todos" && key !== "Enviadas" && (statusCounts[key] || 0) > 0)
-      .map(name => ({ name, value: statusCounts[name] }));
-  }, [statusCounts, statusDisponiveis]);
+      .filter(key => key !== "Todos" && (statusCounts[key] || 0) > 0)
+      .map(name => ({ name, value: statusCounts[name] })); 
+  }, [statusCounts, statusDisponiveis]); 
+
 
   const areFiltersApplied = useMemo(() => {
     const isStatusFiltered = filtroStatus !== "Todos";
     const isSearchFiltered = busca.trim() !== "";
-    // Verifica se advancedFilters tem algum valor diferente do padrão (excluindo filial)
-    const isAdvancedFiltered = Object.entries(advancedFilters).some(([key, value]) => {
-        if (key === 'startDate' || key === 'endDate' || key === 'startDateProtheus' || key === 'endDateProtheus') {
-            return value !== '';
-        }
-        return value !== 'Todos';
-    });
+    const isAdvancedFiltered = advancedFilters.filial !== 'Todas' ||
+                               advancedFilters.responsavel !== 'Todos' ||
+                               advancedFilters.tipo !== 'Todos' ||
+                               advancedFilters.statusLancamento !== 'Todos' ||
+                               advancedFilters.startDate !== '' ||
+                               advancedFilters.endDate !== '' ||
+                               advancedFilters.startDateProtheus !== '' ||
+                               advancedFilters.endDateProtheus !== '';
 
     return isStatusFiltered || isSearchFiltered || isAdvancedFiltered;
   }, [filtroStatus, busca, advancedFilters]);
@@ -453,18 +699,20 @@ export default function ConsultaNotas() {
 
   useEffect(() => {
     if (filtroStatus === 'Todos') {
-        setActiveIndex(null);
+        // CORREÇÃO: Usar undefined
+        setActiveIndex(undefined);
     } else {
         const newActiveIndex = dadosGraficoStatus.findIndex(
             (data) => data.name === filtroStatus
         );
-        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+        // CORREÇÃO: Usar undefined
+        setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
     }
   }, [filtroStatus, dadosGraficoStatus]);
 
   useEffect(() => {
     setChartKey(prevKey => prevKey + 1);
-  }, [filtroStatus]);
+  }, [filtroStatus, theme]); 
 
 
   const onPieEnter = (_: any, index: number) => {
@@ -475,7 +723,8 @@ export default function ConsultaNotas() {
     const newActiveIndex = dadosGraficoStatus.findIndex(
         (data) => data.name === filtroStatus
     );
-    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : null);
+    // CORREÇÃO: Usar undefined
+    setActiveIndex(newActiveIndex !== -1 ? newActiveIndex : undefined);
   };
 
   const handleChartClick = (data: any) => {
@@ -515,57 +764,32 @@ export default function ConsultaNotas() {
       try {
         setLoading(true);
 
-        // Base da requisição com filtros permanentes
-        const baseBody: any = {
+        const body: any = {
           page: paginaAtual,
           pageSize,
           sortBy: sortKeyToBackend(sortConfig.key),
           sortDir: sortConfig.direction || 'asc',
-          filial: '0402',
-          // status_envio_unidade: 'SIM', // <-- REMOVIDO
-        };
-
-        // Adiciona filtros avançados (exceto filial)
-        const advancedBody = {
           termo: (busca || '').trim() || undefined,
-          tipo: advancedFilters.tipo === 'Todos' ? undefined : advancedFilters.tipo,
+          filial: advancedFilters.filial === 'Todas' ? undefined : advancedFilters.filial,
+          tipo: advancedFilters.tipo === 'Todas' ? undefined : advancedFilters.tipo,
           responsavel: advancedFilters.responsavel === 'Todos' ? undefined : advancedFilters.responsavel,
           statusLancamento: advancedFilters.statusLancamento === 'Todos' ? undefined : advancedFilters.statusLancamento,
           startDate: advancedFilters.startDate || undefined,
           endDate: advancedFilters.endDate || undefined,
           startDateProtheus: advancedFilters.startDateProtheus || undefined,
-          endDateProtheus: advancedFilters.endDateProtheus || undefined,
+          endDateProtheus: advancedFilters.endDateProtheus || undefined
         };
 
-        // Adiciona filtros da ABA, se aplicável
-        let tabBody = {};
         if (filtroStatus && filtroStatus !== 'Todos') {
             const statusNf = statusFiltroToStatusNf(filtroStatus);
             if (statusNf) {
-                tabBody = { status_nf: statusNf };
+                body.status_nf = statusNf;
             } else {
-                if (filtroStatus === 'Compras') {
-                   tabBody = { only_compras_pendentes: true };
-                }
-                if (filtroStatus === 'Fiscal') {
-                   tabBody = { only_fiscal_pendentes: true };
-                }
-                // Nenhuma ação para outros filtros de aba (como "Enviadas" que foi removido)
+                if (filtroStatus === 'Compras')  body.only_compras_pendentes  = true;
+                if (filtroStatus === 'Fiscal')   body.only_fiscal_pendentes   = true;
+                if (filtroStatus === 'Enviadas') body.only_enviadas_pendentes = true;
             }
         }
-
-        // Combina todos os filtros, garantindo que os permanentes não sejam sobrescritos
-        const body = {
-            ...baseBody,
-            ...advancedBody,
-            ...tabBody, // Filtros da aba são adicionados por último
-            // Garante que os filtros permanentes estejam presentes mesmo que advanced/tab tentem mudar
-            filial: '0402',
-            // status_envio_unidade: 'SIM', // <-- REMOVIDO
-        };
-
-        // Remove chaves com valor undefined
-        Object.keys(body).forEach(key => body[key] === undefined && delete body[key]);
 
         console.log("==> Enviando body para API:", JSON.stringify(body, null, 2));
 
@@ -585,21 +809,28 @@ export default function ConsultaNotas() {
         setTotalPendentes(Number(payload?.pendentes_total ?? 0));
         setTotalNotasHoje(Number(payload?.notas_hoje ?? 0));
 
-        // Atualiza listas de filtros (exceto filial)
-        // Adiciona 'Todos' no início e remove duplicatas
-        const updateFilterList = (currentList: string[], newList: string[] | undefined): string[] => {
-            const validNewItems = Array.isArray(newList) ? newList.filter(item => item && item !== 'Todos') : [];
-            const combined = ['Todos', ...new Set(validNewItems)];
-            // Se a lista atual for apenas ['Todos'] e a nova lista não trouxer nada, mantém ['Todos']
-            if (currentList.length === 1 && currentList[0] === 'Todos' && combined.length === 1) {
-                return currentList;
-            }
-            return combined;
-        };
+        // Atualiza listas de filtros APENAS se vierem dados válidos
+        if (Array.isArray(payload?.distinct_filiais) && payload.distinct_filiais.length > 0) {
+            setAllFiliais(payload.distinct_filiais);
+        } else if (!advancedFilters.filial || advancedFilters.filial === 'Todas') { // Reseta se não houver filtro aplicado
+             setAllFiliais(['Todos']);
+        }
+        if (Array.isArray(payload?.distinct_tipos) && payload.distinct_tipos.length > 0) {
+             setAllTipos(payload.distinct_tipos);
+        } else if (!advancedFilters.tipo || advancedFilters.tipo === 'Todos') {
+             setAllTipos(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_compradores) && payload.distinct_compradores.length > 0) {
+             setAllCompradores(payload.distinct_compradores);
+        } else if (!advancedFilters.responsavel || advancedFilters.responsavel === 'Todos') {
+             setAllCompradores(['Todos']);
+        }
+         if (Array.isArray(payload?.distinct_status) && payload.distinct_status.length > 0) {
+             setAllStatusLancamento(payload.distinct_status);
+        } else if (!advancedFilters.statusLancamento || advancedFilters.statusLancamento === 'Todos') {
+             setAllStatusLancamento(['Todos']);
+        }
 
-        setAllTipos(updateFilterList(allTipos, payload?.distinct_tipos));
-        setAllCompradores(updateFilterList(allCompradores, payload?.distinct_compradores));
-        setAllStatusLancamento(updateFilterList(allStatusLancamento, payload?.distinct_status));
 
         setChartKey(prevKey => prevKey + 1);
         setLastUpdated(new Date());
@@ -610,7 +841,8 @@ export default function ConsultaNotas() {
         setTotaisAbas({});
         setTotalPendentes(0);
         setTotalNotasHoje(0);
-        // Reseta filtros (exceto filial)
+        // Reseta filtros em caso de erro grave
+        setAllFiliais(['Todos']);
         setAllTipos(['Todos']);
         setAllCompradores(['Todos']);
         setAllStatusLancamento(['Todos']);
@@ -631,6 +863,7 @@ export default function ConsultaNotas() {
 
   const notasPaginadas = notas; // A paginação agora é feita no backend
 
+  // Cores sólidas
   const coresStatus: Record<string, string> = {
     "Erro I.A.": "#ff6f61",
     "Não Recebidas": "var(--gcs-orange)",
@@ -639,7 +872,18 @@ export default function ConsultaNotas() {
     "Falha ERP": "#8B0000",
     "Compras": "#FFC107",
     "Fiscal": "#00314A",
-    // "Enviadas" removido das cores
+    "Enviadas": "#17a2b8",
+  };
+  
+  const coresStatusDonut: Record<string, string> = {
+    "Erro I.A.": "url(#gradVermelho)",
+    "Não Recebidas": "url(#gradLaranja)",
+    "Importado": "url(#gradVerde)",
+    "Manual": "url(#gradCinza)",
+    "Falha ERP": "url(#gradVermelho)",
+    "Compras": "url(#gradAmarelo)", 
+    "Fiscal": "url(#gradAzul)",
+    "Enviadas": "url(#gradAzulClaro)",
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof Nota }) => {
@@ -653,12 +897,13 @@ export default function ConsultaNotas() {
   };
 
   const handleExportXLSX = () => {
-    const headers = ["Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
+    const headers = ["Conferido", "Status da Nota", "Filial", "Nota", "Série", "Tipo", "Fornecedor", "Recebimento", "Lançamento Protheus", "Status Envio Unidade", "Status Compras", "Status Fiscal", "Observação", "Responsável", "Chave"];
 
     const data = notasPaginadas.map(nota => {
       return [
+        nota.conferido === 'S' ? 'Sim' : 'Não',
         nota.status_lancamento || '',
-        nota.filial, // Filial ainda é exportada
+        nota.filial,
         nota.nf,
         nota.serie,
         nota.tipo_nf || '',
@@ -678,7 +923,7 @@ export default function ConsultaNotas() {
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
     worksheet['!cols'] = [
-        { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
+        { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
         { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
         { wch: 20 }, { wch: 50 }, { wch: 25 }, { wch: 50 },
     ];
@@ -688,11 +933,99 @@ export default function ConsultaNotas() {
     XLSX.writeFile(workbook, "Consulta_Notas_Fiscais_Pagina.xlsx");
   };
 
+  // --- FUNÇÕES DE CONFERÊNCIA (CHECKBOX) ---
+
+  const handleCheckboxClick = (nota: Nota) => {
+      if (isSubmittingConferencia) return;
+      const newStatus = nota.conferido === 'S' ? 'N' : 'S';
+      setConferenciaNota(nota);
+      setNewConferenciaStatus(newStatus);
+      setIsConfirmConferenciaOpen(true);
+  };
+
+  const handleCloseConferencia = () => {
+      if (isSubmittingConferencia) return;
+      setIsConfirmConferenciaOpen(false);
+      setConferenciaNota(null);
+      setNewConferenciaStatus(null);
+  };
+
+  const handleConfirmConferencia = async () => {
+      console.log("handleConfirmConferencia: Iniciando..."); 
+      if (!session?.user?.email) {
+          console.error("handleConfirmConferencia: Erro - Sessão ou email do usuário não encontrado.");
+          setNotification({ visible: true, type: 'error', message: 'Erro: Sessão do usuário não encontrada. Faça login novamente.' });
+          setIsConfirmConferenciaOpen(false);
+          return;
+      }
+      console.log("handleConfirmConferencia: Sessão OK, Email:", session.user.email); 
+      if (!conferenciaNota || !newConferenciaStatus) {
+          console.error("handleConfirmConferencia: Erro - Dados da nota ou novo status ausentes.");
+          setNotification({ visible: true, type: 'error', message: 'Erro: Informações da nota não encontradas. Tente novamente.' });
+          setIsConfirmConferenciaOpen(false);
+          return;
+      }
+      console.log("handleConfirmConferencia: Dados da nota OK:", { chave: conferenciaNota.chave, novoStatus: newConferenciaStatus }); 
+
+      setIsSubmittingConferencia(true);
+      console.log("handleConfirmConferencia: Enviando para API /api/nfe/nfe-conferencia..."); 
+
+      try {
+          const bodyPayload = {
+              chave: conferenciaNota.chave,
+              email_solicitante: session.user.email,
+              conferido: newConferenciaStatus
+          };
+          console.log("handleConfirmConferencia: Payload:", JSON.stringify(bodyPayload));
+
+          const response = await fetch('/api/nfe/nfe-conferencia', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(bodyPayload)
+          });
+          console.log("handleConfirmConferencia: Resposta da API recebida, Status HTTP:", response.status);
+
+          let result: any = {};
+          try {
+              result = await response.json();
+              console.log("handleConfirmConferencia: Corpo da Resposta (JSON):", result);
+          } catch (jsonError) {
+              const textResponse = await response.text().catch(() => "Erro ao ler corpo da resposta");
+              console.error("handleConfirmConferencia: Resposta não é JSON. Resposta como Texto:", textResponse); 
+              result = { status: 'error', message: `Erro ${response.status}: ${response.statusText}. Resposta do servidor não é JSON.` };
+          }
+
+          if (response.ok && result?.status === 'ok') {
+              console.log("handleConfirmConferencia: Sucesso! Status HTTP OK e status interno 'ok'.");
+              setNotification({ visible: true, type: 'success', message: `Nota ${newConferenciaStatus === 'S' ? 'marcada' : 'desmarcada'} com sucesso!` });
+              fetchNotas(); // Recarrega os dados
+          } else {
+              console.error("handleConfirmConferencia: Falha - Resposta não OK ou status interno diferente de 'ok'.");
+              const errorMessage = result?.message || `Erro ao se comunicar com o servidor (HTTP ${response.status})`;
+              throw new Error(errorMessage);
+          }
+
+      } catch (error: any) {
+          console.error("handleConfirmConferencia: Erro no bloco catch:", error); 
+          setNotification({ visible: true, type: 'error', message: error.message || 'Não foi possível realizar a operação.' });
+      } finally {
+          console.log("handleConfirmConferencia: Bloco finally executado.");
+          setIsSubmittingConferencia(false);
+          setIsConfirmConferenciaOpen(false);
+          setConferenciaNota(null);
+          setNewConferenciaStatus(null);
+      }
+  };
+
+  const handleCloseNotification = () => {
+      setNotification({ visible: false, type: 'success', message: '' });
+      console.log("handleCloseNotification: Notificação fechada.");
+  };
   // --- FIM DAS FUNÇÕES DE CONFERÊNCIA ---
 
 
   const renderLegendText = (value: string) => {
-    return <span style={{ marginLeft: '4px' }}>{value}</span>;
+    return <span style={{ marginLeft: '4px' }} className="recharts-legend-item-text">{value}</span>;
   };
 
   useEffect(() => {
@@ -723,9 +1056,9 @@ export default function ConsultaNotas() {
     const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
     const sin = Math.sin(-RADIAN * midAngle);
     const cos = Math.cos(-RADIAN * midAngle);
-    const sx = cx + (outerRadius + 10) * cos;
+    const sx = cx + (outerRadius + 10) * cos; 
     const sy = cy + (outerRadius + 10) * sin;
-    const mx = cx + (outerRadius + 30) * cos;
+    const mx = cx + (outerRadius + 30) * cos; 
     const my = cy + (outerRadius + 30) * sin;
     const ex = mx + (cos >= 0 ? 1 : -1) * 22;
     const ey = my;
@@ -743,8 +1076,73 @@ export default function ConsultaNotas() {
     );
   };
 
+  const ConferidoCheckbox = ({ conferido, onClick }: { conferido: 'S' | 'N' | null | undefined, onClick: () => void }) => {
+    const isChecked = conferido === 'S';
+    const color = isChecked ? 'var(--gcs-green)' : 'var(--gcs-gray-dark)';
+
+    return (
+        <button
+            onClick={onClick}
+            title={isChecked ? "Desmarcar conferência" : "Marcar como conferido"}
+            disabled={isSubmittingConferencia} 
+            style={{
+                background: 'none',
+                border: 'none', 
+                cursor: isSubmittingConferencia ? 'wait' : 'pointer',
+                padding: '4px', 
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: color, 
+                opacity: isSubmittingConferencia ? 0.5 : 1, 
+            }}
+            className="conferido-checkbox-btn"
+        >
+            {isChecked ? (
+                <CheckSquare size={20} />
+            ) : (
+                <Square size={20} />
+            )}
+        </button>
+    );
+  };
+
 
   return (<>
+    <svg width="0" height="0" style={{ position: 'absolute', zIndex: -1 }}>
+        <defs>
+          <linearGradient id="gradLaranja" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f79b4d" />
+            <stop offset="100%" stopColor="#F58220" />
+          </linearGradient>
+          <linearGradient id="gradVerde" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#9DDE5B" />
+            <stop offset="100%" stopColor="#5FB246" />
+          </linearGradient>
+          <linearGradient id="gradVermelho" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ff6f61" />
+            <stop offset="100%" stopColor="#E11D2E" />
+          </linearGradient>
+          <linearGradient id="gradAmarelo" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FDE68A" />
+            <stop offset="100%" stopColor="#FACC15" />
+          </linearGradient>
+          <linearGradient id="gradAzul" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1F4E79" />
+            <stop offset="100%" stopColor="#00314A" />
+          </linearGradient>
+          <linearGradient id="gradAzulClaro" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#17a2b8" />
+            <stop offset="100%" stopColor="#1F4E79" />
+          </linearGradient>
+          <linearGradient id="gradCinza" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6c757d" />
+            <stop offset="100%" stopColor="#343a40" />
+          </linearGradient>
+        </defs>
+    </svg>
+
+    {/* --- BLOCO DE ESTILO GLOBAL ATUALIZADO --- */}
     <style>{`
         :root {
             --gcs-blue: #00314A;
@@ -761,16 +1159,19 @@ export default function ConsultaNotas() {
             --gcs-red-light-bg: #f8d7da;
             --gcs-red-border: #f1c2c7;
             --gcs-red-text: #b22c38;
-
+            --gcs-brand-red: #E11D2E;
             --gcs-orange-light-bg: #fff8e1;
             --gcs-orange-border: #FDBA74;
             --gcs-orange-text: #F58220;
-
+            --gcs-brand-orange: #EA580C;
             --gcs-blue-light-bg: #f1f5fb;
             --gcs-blue-border: #a3b8d1;
             --gcs-blue-text: #00314A;
+            --gcs-brand-blue: #1F4E79;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- ESTILOS DE BASE (COMUNS) --- */
         .btn { cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease-in-out; border: 1px solid transparent; padding: 10px 20px; border-radius: 8px; }
         .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .btn:disabled { cursor: not-allowed; opacity: 0.6; }
@@ -791,7 +1192,7 @@ export default function ConsultaNotas() {
         .btn-outline-gray:hover:not(:disabled) { border-color: var(--gcs-gray-dark); background-color: var(--gcs-gray-light); }
         .btn-outline-blue { background-color: #fff; color: var(--gcs-blue); border-color: var(--gcs-border-color); }
         .btn-outline-blue:hover:not(:disabled) { border-color: var(--gcs-blue); background-color: #f1f5fb; }
-
+        .filter-tabs-container { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
         .tab-button { background: none; border: none; cursor: pointer; padding: 8px 12px 12px 12px; font-size: 1rem; font-weight: 500; color: var(--gcs-gray-dark); position: relative; transition: all 0.2s ease-in-out; }
         .tab-button::after { content: ''; position: absolute; bottom: -2px; right: 0; width: 100%; height: 100%; border-style: solid; border-color: transparent; border-image: none; opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in-out; pointer-events: none; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.2)); }
         .tab-button:hover:not(.active) { transform: translateY(-2px); color: var(--gcs-blue); }
@@ -805,7 +1206,6 @@ export default function ConsultaNotas() {
             border-left: 3px solid transparent;
             border-top-right-radius: 8px;
         }
-
         .th-sortable { cursor: pointer; transition: color 0.2s ease-in-out; user-select: none; display: flex; align-items: center; }
         .th-sortable:hover { color: #ffffffd0; }
         .ant-pagination-item-active { background-color: var(--gcs-blue) !important; border-color: var(--gcs-blue) !important; }
@@ -842,6 +1242,7 @@ export default function ConsultaNotas() {
                     drop-shadow(5px 5px 0px rgba(0,0,0,0.06));
         }
 
+        /* ESTILOS PARA OS CARDS */
         .kpi-card, .chart-card, .main-content-card, .tabs-card, .content-card {
             background-color: #fff;
             border-radius: 12px;
@@ -934,9 +1335,9 @@ export default function ConsultaNotas() {
 
       <div className="header-wrapper" style={{ display: 'flex', alignItems: 'stretch', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
-        <div
-            className="chart-card clickable-chart chart-3d-effect"
-            style={{
+        <div 
+            className="chart-card clickable-chart chart-3d-effect" 
+            style={{ 
                 flexShrink: 0,
                 display: 'flex',
                 flexDirection: 'column',
@@ -967,7 +1368,7 @@ export default function ConsultaNotas() {
                             onClick={handleChartClick}
                         >
                             {dadosGraficoStatus.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={coresStatus[entry.name] || '#ccc'} />
+                                <Cell key={`cell-${index}`} fill={coresStatusDonut[entry.name] || coresStatus[entry.name] || '#ccc'} />
                             ))}
                         </Pie>
                         <Legend
@@ -982,11 +1383,11 @@ export default function ConsultaNotas() {
                 </ResponsiveContainer>
             </div>
         </div>
-
+        
         <div className="main-content-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }}>
             <h2 className="page-title" style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--gcs-blue)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <FileText size={32} color="var(--gcs-blue)" />
-                <span>Notas Fiscais - BA (Filial 0402)</span> {/* Título revertido */}
+                <span>Central de Notas</span>
             </h2>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -1006,7 +1407,7 @@ export default function ConsultaNotas() {
                             <RefreshCcw size={20} />
                         </button>
                         <FilterPopover
-                            // allFiliais removido das props
+                            allFiliais={allFiliais}
                             allTipos={allTipos}
                             allCompradores={allCompradores}
                             allStatusLancamento={allStatusLancamento}
@@ -1068,12 +1469,7 @@ export default function ConsultaNotas() {
           statusCounts={statusCounts as any}
           onChange={(key) => {
             if (key === "outras") return;
-            // Aba "Enviadas" removida da lógica de clique
-            if (key !== "Enviadas") {
-                handleFiltroStatusChange(key);
-            } else {
-                 handleFiltroStatusChange("Todos"); // Clicar em "Enviadas" (se ainda existir no layout) volta para "Todos"
-            }
+            handleFiltroStatusChange(key);
           }}
         />
       </div>
@@ -1087,7 +1483,7 @@ export default function ConsultaNotas() {
         </div>
       ) : notasPaginadas.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--gcs-gray-dark)", marginTop: "4rem", fontSize: '1.1rem' }}>
-          Nenhuma nota encontrada para os filtros aplicados (Filial 0402).
+          Nenhuma nota encontrada para os filtros aplicados.
         </div>
       ) : (
         <>
@@ -1095,8 +1491,9 @@ export default function ConsultaNotas() {
             <table className="responsive-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: '14px' }}>
               <thead style={{ backgroundColor: "var(--gcs-blue)", color: "#fff", textAlign: "left" }}>
                 <tr>
-                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
-                  {/* Coluna Filial removida da tabela, pois é sempre 0402 */}
+                  <th style={{ padding: "16px 12px", textAlign: 'center', borderTopLeftRadius: '12px' }}><div className="th-sortable" style={{justifyContent: 'center'}}><CheckSquare size={16} style={{marginRight: '8px'}} /> Conferido</div></th>
+                  <th style={{ padding: "16px 12px", textAlign: 'center' }}><div className="th-sortable" style={{justifyContent: 'center'}}><BadgeCheck size={16} style={{marginRight: '8px'}} /> Status da Nota</div></th>
+                  <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('filial')} className="th-sortable"><Building2 size={16} style={{marginRight: '8px'}} /> Filial <SortIcon columnKey="filial" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nf')} className="th-sortable"><Hash size={16} style={{marginRight: '8px'}} /> Nota / Série <SortIcon columnKey="nf" /></div></th>
                   <th style={{ padding: "16px 12px", textAlign: 'center' }}><div onClick={() => requestSort('tipo_nf')} className="th-sortable" style={{justifyContent: 'center'}}><FileText size={16} style={{marginRight: '8px'}} /> Tipo <SortIcon columnKey="tipo_nf" /></div></th>
                   <th style={{ padding: "16px 12px" }}><div onClick={() => requestSort('nome_fornecedor')} className="th-sortable"><Truck size={16} style={{marginRight: '8px'}} /> Fornecedor <SortIcon columnKey="nome_fornecedor" /></div></th>
@@ -1121,15 +1518,28 @@ export default function ConsultaNotas() {
                       statusNotaCor = 'var(--gcs-orange)';
                   }
 
+                  const dateTooltipContent = (
+                    <div style={{fontSize: '12px', textAlign: 'left'}}>
+                        <div style={{marginBottom: '4px'}}><strong>Recebimento:</strong> {nota.dt_recebimento} {nota.hr_Recebimento}</div>
+                        <div><strong>Lançamento:</strong> {formatProtheusDateTime(nota.dt_lcto_protheus)}</div>
+                    </div>
+                  );
+
                   return (
                     <tr
-                      key={nota.chave} // Usar a chave como key é mais seguro
+                      key={nota.chave}
                       className="data-row"
                       style={{
                         borderTop: "1px solid var(--gcs-border-color)",
                         backgroundColor: index % 2 === 0 ? "#ffffff" : "var(--gcs-gray-light)"
                       }}
                     >
+                      <td data-label="Conferido" className="td-conferido" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
+                          <ConferidoCheckbox
+                              conferido={nota.conferido}
+                              onClick={() => handleCheckboxClick(nota)}
+                          />
+                      </td>
                       <td data-label="Status da Nota" className="td-status" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         <span
                           className="status-badge"
@@ -1138,10 +1548,10 @@ export default function ConsultaNotas() {
                           {statusNotaTexto}
                         </span>
                       </td>
-                      {/* Coluna Filial removida */}
+                      <td data-label="Filial" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.filial}</td>
                       <td data-label="Nota / Série" style={{ padding: '14px 12px', verticalAlign: 'middle', whiteSpace: "nowrap" }}>
-                          <span style={{fontWeight: 'bold', color: '#343a40'}}>{nota.nf}</span>
-                          <span style={{color: 'var(--gcs-gray-dark)'}}> / {nota.serie}</span>
+                          <span className="table-note-number">{nota.nf}</span>
+                          <span className="table-note-series"> / {nota.serie}</span>
                       </td>
                       <td data-label="Tipo" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                         {nota.tipo_nf ? (
@@ -1158,10 +1568,13 @@ export default function ConsultaNotas() {
                         )}
                       </td>
                       <td data-label="Fornecedor" style={{ padding: '14px 12px', verticalAlign: 'middle', fontSize: '13px' }}>{nota.nome_fornecedor}</td>
-                      <td data-label="Recebimento" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>{nota.dt_recebimento} {nota.hr_Recebimento}</td>
-                      <td data-label="Lançamento Protheus" style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
-                        {formatProtheusDateTime(nota.dt_lcto_protheus)}
+                      
+                      <td data-label="Datas" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
+                        <Tooltip title={dateTooltipContent} placement="top">
+                            <span style={{cursor: 'help'}}><Calendar size={18} /></span>
+                        </Tooltip>
                       </td>
+                      
                       <td data-label="Status Setor" style={{ padding: '14px 12px', verticalAlign: 'middle', textAlign: 'center' }}>
                           <StatusSetorDots
                               statusUnidade={nota.status_envio_unidade}
@@ -1214,6 +1627,29 @@ export default function ConsultaNotas() {
       onActionSuccess={fetchNotas}
       statusCompras={notaSelecionada?.status_compras}
       observacao={notaSelecionada?.observacao}
+    />
+
+    <NotificationModal
+        visible={notification.visible}
+        type={notification.type}
+        message={notification.message}
+        onClose={handleCloseNotification}
+    />
+
+    <ConfirmationModal
+        isOpen={isConfirmConferenciaOpen}
+        onClose={handleCloseConferencia}
+        onConfirm={handleConfirmConferencia}
+        title="Confirmar Conferência"
+        message={
+            newConferenciaStatus === 'S'
+                ? "Com essa ação você está confirmando que realizou a conferência dessa nota no Protheus. Deseja continuar?"
+                : "Você tem certeza que deseja desmarcar a conferência desta nota?"
+        }
+        confirmText={isSubmittingConferencia ? "Processando..." : (newConferenciaStatus === 'S' ? "Sim, Continuar" : "Sim, Desmarcar")}
+        confirmColor={newConferenciaStatus === 'S' ? "#28a745" : "#dc3545"}
+        showCancelButton={!isSubmittingConferencia}
+        icon={newConferenciaStatus === 'S' ? <CheckSquare size={40} color="#28a745" /> : <AlertTriangle size={40} color="#f7941d" />}
     />
   </>);
 

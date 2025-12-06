@@ -130,28 +130,46 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
-  // Popula o formulário
-  useEffect(() => {
-    if (visible) {
-        if (mode === 'edit' && initialData) {
-            form.setFieldsValue({
-                ...initialData,
-                status: initialData?.status || 'Inativo',
-            });
-            fetchItensDoPlano(initialData.id!); 
-            
-        } else if (mode === 'add') {
-            const defaultData = { status: 'Aberto' };
-            form.resetFields();
-            form.setFieldsValue(defaultData); 
-            setPlanejamentoItens([]); 
-        }
-        fetchLookups();
-    }
-  }, [visible, mode, initialData, form]);
-  
-  
-  const fetchItensDoPlano = async (planoId: number) => {
+  // --- Função auxiliar para agrupar (movida para fora ou useCallback se necessário, mas aqui está ok pois não depende de state complexo que muda) ---
+  const addGrupoBloco = useCallback((itens: any[], mapPivos: Map<number, string>) => {
+      // Cria uma cópia do map para atualizar se necessário
+      const pMap = new Map(mapPivos);
+      const novosItensComGrupos: any[] = [];
+      let currentBloco: string | null = null;
+      
+      // Ordena por bloco antes de agrupar, caso não venha ordenado
+      const itensOrdenados = [...itens].sort((a, b) => {
+          const blocoA = a.bloco || 'Sem Bloco';
+          const blocoB = b.bloco || 'Sem Bloco';
+          return blocoA.localeCompare(blocoB);
+      });
+      
+      itensOrdenados.forEach((item) => {
+          if(item.nome) {
+            pMap.set(item.id_pivo_talhao || item.id, item.nome);
+          }
+          const bloco = item.bloco || 'Sem Bloco';
+          
+          if (bloco !== currentBloco) {
+              novosItensComGrupos.push({
+                  id: `bloco-${bloco}`, 
+                  isGroup: true,
+                  bloco: bloco,
+              });
+              currentBloco = bloco;
+          }
+          novosItensComGrupos.push({
+              ...item,
+              isGroup: false, 
+          });
+      });
+      
+      // Atualiza o estado do mapa apenas se houver mudanças reais (opcional, aqui retornamos o map atualizado se quiser usar)
+      return { itens: novosItensComGrupos, map: pMap };
+  }, []);
+
+  // --- Funções de Fetch (useCallback para evitar recriação no useEffect) ---
+  const fetchItensDoPlano = useCallback(async (planoId: number) => {
     setLoadingItens(true);
     try {
         const itensRes = await fetch("/api/gestao-agricola/planejamento/gestao-planej-item-consulta", { method: "POST", cache: "no-store" });
@@ -166,24 +184,42 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
             
             const pivosRes = await fetch("/api/gestao-agricola/pivo/consulta", { method: "POST", cache: "no-store" });
             const pivosData: PivoTalhao[] = (pivosRes.ok && pivosRes.status !== 204) ? await pivosRes.json() : [];
-            const pivoBlocoMap = new Map<number, string | null>();
-            pivosData.forEach(p => pivoBlocoMap.set(p.id, p.bloco || null));
             
+            // Mapa auxiliar local para buscar blocos
+            const pivoBlocoMap = new Map<number, string | null>();
+            // Mapa auxiliar local para nomes
+            const pivoNomeMap = new Map<number, string>();
+
+            pivosData.forEach(p => {
+                pivoBlocoMap.set(p.id, p.bloco || null);
+                pivoNomeMap.set(p.id, p.nome);
+            });
+            
+            // Atualiza o estado global de mapas se necessário (será feito no addGrupoBloco também)
+            setPivosMap(prev => {
+                const newMap = new Map(prev);
+                pivosData.forEach(p => newMap.set(p.id, p.nome));
+                return newMap;
+            });
+
             const itensComBloco = itensFiltrados.map(item => ({
                 ...item,
-                bloco: pivoBlocoMap.get(item.id_pivo_talhao) || 'Sem Bloco'
-            })).sort((a, b) => a.bloco.localeCompare(b.bloco));
+                bloco: pivoBlocoMap.get(item.id_pivo_talhao) || 'Sem Bloco',
+                nome: pivoNomeMap.get(item.id_pivo_talhao) // Garante que o nome vá para o agrupador
+            }));
 
-            setPlanejamentoItens(addGrupoBloco(itensComBloco));
+            // Usa a função de agrupamento
+            const resultado = addGrupoBloco(itensComBloco, pivoNomeMap);
+            setPlanejamentoItens(resultado.itens);
         }
     } catch (error: any) {
         message.error(`Erro ao carregar itens: ${error.message}`);
     } finally {
         setLoadingItens(false);
     }
-  };
+  }, [addGrupoBloco]); // addGrupoBloco é dependência estável
 
-  const fetchLookups = async () => {
+  const fetchLookups = useCallback(async () => {
     try {
         const [pivosRes, variedadesRes] = await Promise.all([
             fetch("/api/gestao-agricola/pivo/consulta", { method: "POST", cache: "no-store" }),
@@ -214,8 +250,31 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
     } catch (error: any) {
         message.error(`Erro ao carregar dados de lookup: ${error.message}`);
     }
-  };
+  }, []);
 
+
+  // Popula o formulário
+  useEffect(() => {
+    if (visible) {
+        if (mode === 'edit' && initialData) {
+            form.setFieldsValue({
+                ...initialData,
+                status: initialData?.status || 'Inativo',
+            });
+            fetchItensDoPlano(initialData.id!); 
+            
+        } else if (mode === 'add') {
+            // CORREÇÃO AQUI: Tipagem explícita para evitar erro
+            const defaultData: Partial<PlanejamentoCabec> = { status: 'Aberto' };
+            form.resetFields();
+            form.setFieldsValue(defaultData); 
+            setPlanejamentoItens([]); 
+        }
+        fetchLookups();
+    }
+  }, [visible, mode, initialData, form, fetchItensDoPlano, fetchLookups]); 
+  
+  
   useEffect(() => {
     if (visible && modalRef.current) {
         const modal = modalRef.current;
@@ -260,33 +319,6 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
       };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const addGrupoBloco = (itens: any[]) => {
-      const pMap = new Map(pivosMap);
-      const novosItensComGrupos: any[] = [];
-      let currentBloco: string | null = null;
-      
-      itens.forEach((item) => {
-          if(item.nome) {
-            pMap.set(item.id_pivo_talhao || item.id, item.nome);
-          }
-          const bloco = item.bloco || 'Sem Bloco';
-          
-          if (bloco !== currentBloco) {
-              novosItensComGrupos.push({
-                  id: `bloco-${bloco}`, 
-                  isGroup: true,
-                  bloco: bloco,
-              });
-              currentBloco = bloco;
-          }
-          novosItensComGrupos.push({
-              ...item,
-              isGroup: false, 
-          });
-      });
-      setPivosMap(pMap); 
-      return novosItensComGrupos;
-  }
 
   const handleBuscarPivos = async () => {
     const formValues = form.getFieldsValue();
@@ -338,8 +370,13 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
                 };
             });
             
-            const itensComGrupos = addGrupoBloco(novosItens);
-            setPlanejamentoItens(itensComGrupos);
+            // Atualiza o mapa localmente para garantir o agrupamento correto
+            const tempMap = new Map(pivosMap);
+            pivosData.forEach(p => tempMap.set(p.id, p.nome));
+            setPivosMap(tempMap);
+
+            const resultado = addGrupoBloco(novosItens, tempMap);
+            setPlanejamentoItens(resultado.itens);
             message.success(`${pivosData.length} pivôs/talhões carregados.`);
 
         } catch (error: any) {
@@ -412,7 +449,8 @@ const ModalPlanejamentoDetalhe: React.FC<ModalPlanejamentoDetalheProps> = ({
               color: 'inherit' 
           }}>
               <Inbox size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
-              <p>Nenhum item adicionado. Clique em "Buscar Pivôs" para carregar.</p>
+              {/* CORREÇÃO: Aspas escapadas */}
+              <p>Nenhum item adicionado. Clique em &quot;Buscar Pivôs&quot; para carregar.</p>
           </div>
       );
   };

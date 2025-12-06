@@ -2,6 +2,19 @@
 "use client";
 import React, { useEffect, useMemo } from "react";
 
+// --- CORREÇÃO: Adicionada a exportação da lista de status ---
+export const RIBBON_STATUS_LIST = [
+  "Todos",
+  "Compras",
+  "Fiscal",
+  "Enviadas",
+  "Erro I.A.",
+  "Não Recebidas",
+  "Importado",
+  "Manual",
+  "Falha ERP",
+];
+
 type Counts = Record<string, number>;
 type Props = {
   filtroStatus: string;

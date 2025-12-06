@@ -131,7 +131,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   if (status === "unauthenticated") {
-    signIn("azure-ad", { callbackUrl: pathname });
+    signIn("azure-ad", { callbackUrl: pathname || "/" });
     return (
       <div
         style={{
@@ -493,15 +493,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   startScroll("up");
                   (e.currentTarget as HTMLDivElement).style.opacity =
                     arrowHoverStyle.opacity!.toString();
+                  // CORREÇÃO: Cast para string para evitar erro de tipo
                   (e.currentTarget as HTMLDivElement).style.background =
-                    arrowHoverStyle.background!;
+                    arrowHoverStyle.background as string;
                 }}
                 onMouseLeave={(e) => {
                   stopScroll();
                   (e.currentTarget as HTMLDivElement).style.opacity =
                     arrowStyle.opacity!.toString();
+                  // CORREÇÃO: Cast para string para evitar erro de tipo
                   (e.currentTarget as HTMLDivElement).style.background =
-                    arrowStyle.background!;
+                    arrowStyle.background as string;
                 }}
               >
                 <ChevronUp size={20} />
@@ -544,15 +546,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   startScroll("down");
                   (e.currentTarget as HTMLDivElement).style.opacity =
                     arrowHoverStyle.opacity!.toString();
+                  // CORREÇÃO: Cast para string para evitar erro de tipo
                   (e.currentTarget as HTMLDivElement).style.background =
-                    arrowHoverStyle.background!;
+                    arrowHoverStyle.background as string;
                 }}
                 onMouseLeave={(e) => {
                   stopScroll();
                   (e.currentTarget as HTMLDivElement).style.opacity =
                     arrowStyle.opacity!.toString();
+                  // CORREÇÃO: Cast para string para evitar erro de tipo
                   (e.currentTarget as HTMLDivElement).style.background =
-                    arrowStyle.background!;
+                    arrowStyle.background as string;
                 }}
               >
                 <ChevronDown size={20} />

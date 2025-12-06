@@ -1,34 +1,28 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react'; // <-- Importa useRef e useEffect
+import React, { useState, useEffect, useRef } from 'react';
 import { Spin } from 'antd';
 import { Trees, Plus, ChevronRight } from 'lucide-react';
 
 // --- Importa o novo modal ---
-import ModalAddCultura from './ModalAddCultura';
+import ModalAddCultura from './ModalAddCultura'; 
 
-// --- Interfaces e Dados Simulados (ATUALIZADO) ---
+// --- Interface da Cultura ---
 interface Cultura {
   id: number;
   nome: string;
-  sigla: string; // Ex: 'PI' ou 'BA'
+  sigla: string;
 }
-
-const MOCK_CULTURAS: Cultura[] = [
-  { id: 1, nome: 'Soja', sigla: 'PI' },
-  { id: 2, nome: 'Milho', sigla: 'PI' },
-  { id: 3, nome: 'Algodao', sigla: 'BA' },
-];
-// --- Fim da Atualização ---
 
 // --- Props do Componente ---
 interface ListaCulturasProps {
+  cadernoId: number | null;
   selectedCulturaId: number | null;
-  onSelectCultura: (id: number) => void;
+  onSelectCultura: (id: number | null) => void;
 }
 
-const ListaCulturas: React.FC<ListaCulturasProps> = ({ selectedCulturaId, onSelectCultura }) => {
-  const [culturas, setCulturas] = useState<Cultura[]>(MOCK_CULTURAS);
+const ListaCulturas: React.FC<ListaCulturasProps> = ({ cadernoId, selectedCulturaId, onSelectCultura }) => {
+  const [culturas, setCulturas] = useState<Cultura[]>([]);
   const [loading, setLoading] = useState(false);
 
   // --- Estados para o novo modal ---
@@ -39,67 +33,100 @@ const ListaCulturas: React.FC<ListaCulturasProps> = ({ selectedCulturaId, onSele
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [buttonPosition, setButtonPosition] = useState<{ x: number, y: number } | null>(null);
 
-  // TODO: Implementar fetch para buscar culturas reais
-  // useEffect(() => {
-  //   setLoading(true);
-  //   fetch('/api/caderno-agricola/culturas')
-  //     .then(res => res.json())
-  //     .then(data => setCulturas(data))
-  //     .finally(() => setLoading(false));
-  // }, []);
+  // --- useEffect para buscar dados da API ---
+  useEffect(() => {
+    // Se o cadernoId não estiver definido, limpa a lista.
+    if (cadernoId === null || cadernoId === undefined) {
+      setCulturas([]);
+      setLoading(false);
+      onSelectCultura(null);
+      return;
+    }
+
+    const fetchCulturas = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch("/api/caderno-agricola/caderno-agricola-cultura-consulta", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_caderno: cadernoId }),
+        });
+
+        // 204 - Sem conteúdo (caderno vazio, sucesso)
+        if (response.status === 204) {
+          setCulturas([]);
+          onSelectCultura(null);
+          return;
+        }
+
+        if (!response.ok) {
+          console.error("Falha ao buscar culturas", response.statusText);
+          throw new Error("Falha ao buscar culturas");
+        }
+
+        const data: Cultura[] = await response.json();
+        setCulturas(data);
+
+        // Auto-seleciona o primeiro item da lista se houver
+        if (data.length > 0) {
+          onSelectCultura(data[0].id);
+        } else {
+          onSelectCultura(null);
+        }
+        
+      } catch (error) {
+        console.error("Erro ao buscar culturas:", error);
+        setCulturas([]);
+        onSelectCultura(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCulturas();
+    // Dependência 'onSelectCultura' adicionada para corrigir warning do React Hook
+  }, [cadernoId, onSelectCultura]);
 
 
-  // --- Lógica de Abertura do Modal (Corrigida) ---
-
+  // --- Lógica de Abertura do Modal ---
   const handleIncluirCultura = () => {
-    // 1. Apenas captura a posição do botão e salva no estado
     if (addButtonRef.current) {
       const rect = addButtonRef.current.getBoundingClientRect();
       setButtonPosition({ x: rect.right, y: rect.top });
-      // NÃO abre o modal aqui
     }
   };
 
-  // 2. Este useEffect "escuta" a mudança no buttonPosition
   useEffect(() => {
-    // 3. SE a posição foi definida (não é null), ENTÃO abre o modal
     if (buttonPosition !== null) {
       setIsAddModalOpen(true);
     }
-  }, [buttonPosition]); // Dependência: buttonPosition
+  }, [buttonPosition]);
 
   const handleCloseModal = () => {
-    // 4. Reseta ambos os estados ao fechar
     setIsAddModalOpen(false);
     setButtonPosition(null); 
   };
 
   const handleSaveCultura = async (formData: any) => {
     console.log("Dados recebidos do modal para salvar:", formData); 
-    
     setIsSaving(true);
-    
-    // TODO: Implementar chamada de API real aqui
-    
+    // Simulação de delay de rede
     await new Promise(res => setTimeout(res, 1000)); 
-    
     console.log("API de inclusão de cultura (simulada) OK");
-    
     setIsSaving(false);
-    handleCloseModal(); // Usa a nova função de fechar (que reseta ambos)
+    handleCloseModal();
     
-    // TODO: Chamar o fetchCulturas() para atualizar a lista
+    // TODO: Aqui você deve implementar a recarga da lista (fetchCulturas)
+    // Para isso, seria ideal extrair a função fetchCulturas para fora do useEffect ou usar um trigger state.
   };
   
-  // --- Fim da Lógica de Abertura ---
-
   return (
     <>
       <div className="culturas-sidebar">
         <div className="culturas-header">
             <h3><Trees size={18} /> Culturas</h3>
             <button 
-                ref={addButtonRef} // <-- Adiciona a ref ao botão
+                ref={addButtonRef}
                 className="btn-add-cultura" 
                 title="Incluir Nova Cultura"
                 onClick={handleIncluirCultura}
@@ -113,30 +140,47 @@ const ListaCulturas: React.FC<ListaCulturasProps> = ({ selectedCulturaId, onSele
               <div style={{textAlign: 'center', padding: '2rem'}}>
                   <Spin />
               </div>
+          ) : culturas.length > 0 ? (
+              culturas.map((cultura) => {
+                  const isSelected = selectedCulturaId === cultura.id;
+                  return (
+                    <button
+                        key={cultura.id}
+                        // Adiciona classe 'active' se selecionado
+                        className={`culturas-list-item ${isSelected ? 'active' : ''}`}
+                        // Usa data-active em vez de aria-selected para evitar erro de acessibilidade em botões
+                        data-active={isSelected}
+                        onClick={() => onSelectCultura(cultura.id)}
+                    >
+                        <ChevronRight size={14} />
+                        <span>{cultura.nome} {cultura.sigla}</span>
+                    </button>
+                  );
+              })
           ) : (
-              culturas.map((cultura) => (
-                  <button
-                      key={cultura.id}
-                      className="culturas-list-item"
-                      aria-selected={selectedCulturaId === cultura.id}
-                      onClick={() => onSelectCultura(cultura.id)}
-                  >
-                      <ChevronRight size={14} />
-                      {/* --- ATUALIZADO AQUI --- */}
-                      <span>{cultura.nome} {cultura.sigla}</span>
-                  </button>
-              ))
+             <div 
+                className="culturas-list-fallback"
+                style={{
+                    padding: '1rem', 
+                    textAlign: 'center', 
+                    fontStyle: 'italic', 
+                    fontSize: '13px',
+                    lineHeight: 1.4,
+                    color: '#6c757d'
+                }}>
+                Clique em <Plus size={12} style={{display: 'inline-block', verticalAlign: 'middle', margin: '0 2px'}} /> para
+                adicionar uma cultura a este caderno.
+            </div>
           )}
         </div>
       </div>
 
-      {/* --- Renderiza o novo modal (ele fica oculto até ser chamado) --- */}
       <ModalAddCultura
         visible={isAddModalOpen}
-        onClose={handleCloseModal} // <-- Usa a nova função de fechar
+        onClose={handleCloseModal}
         onSave={handleSaveCultura}
         isSaving={isSaving}
-        positionHint={buttonPosition} // <-- Passa a posição como prop
+        positionHint={buttonPosition}
       />
     </>
   );

@@ -8,6 +8,7 @@
  * - Atualizada a 'interface Variedade' para refletir os dados reais da API.
  * - Atualizadas as colunas da tabela para exibir os novos campos.
  * - ATUALIZAÇÃO 2: handleSaveVariedade corrigido para enviar os novos campos.
+ * - ATUALIZAÇÃO 3: Tipagem de 'status' ajustada para compatibilidade com o Modal.
  * =========================================================================
  */
 "use client";
@@ -39,7 +40,7 @@ import ModalVariedadeDetalhes from "./ModalVariedadeDetalhes";
 import NotificationModal from "./NotificationModal";
 
 
-// --- INTERFACE DO ITEM (Corrigida para API real) ---
+// --- INTERFACE DO ITEM (Corrigida para API real e Modal) ---
 interface Variedade {
   id: number;
   key: string;
@@ -47,11 +48,14 @@ interface Variedade {
   cultura: string; // Vem de 'cultura'
   obtentor: string; // Novo campo
   ciclo_maturacao_dias: number; // Novo campo
-  status: string; // "Aberto" ou "Inativo"
+  // CORREÇÃO: Tipagem de status ajustada para literais
+  status: 'Aberto' | 'Inativo'; 
   status_original: 'A' | 'I';
   // Campos do modal que não vêm da lista principal
   id_cultura?: number;
+  nome_comercial?: string; // Adicionado para passar ao modal corretamente
 }
+
 type StatusFiltro = 'Aberto' | 'Inativo' | 'Todos';
 
 
@@ -259,7 +263,7 @@ export default function GestaoVariedadePage() {
       message.error(`Não foi possível carregar as variedades: ${error instanceof Error ? error.message : String(error)}`);
       data = [];
     } finally {
-      const statusMap: Record<string, string> = { 'A': 'Aberto' };
+      const statusMap: Record<string, 'Aberto' | 'Inativo'> = { 'A': 'Aberto' };
 
       // Mapeamento corrigido para os campos da API
       const processedData: Variedade[] = data.map((item) => ({
@@ -269,6 +273,7 @@ export default function GestaoVariedadePage() {
         cultura: item.cultura || 'Não Informada',
         obtentor: item.obtentor || 'N/A',
         ciclo_maturacao_dias: item.ciclo_maturacao_dias || 0,
+        // CORREÇÃO: Garante que o status seja um dos literais válidos
         status: statusMap[item.status] || 'Inativo',
         status_original: item.status as 'A' | 'I',
         // Passa os dados brutos para o 'initialData' do modal

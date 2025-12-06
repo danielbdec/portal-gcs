@@ -56,6 +56,9 @@
  * - Removidas colunas "Safra" e "Cultura" da tabela.
  * - Removida lógica de busca por "Safra" e "Cultura" no filtro e placeholder.
  * - Gráfico alterado de "Área por Cultura" para "Área por Bloco".
+ * 21. CORREÇÃO TIPAGEM:
+ * - Alterado PivoTalhao para usar '?' em vez de '| null' para campos opcionais
+ * - Ajustado fetchPivos para mapear null para undefined.
  * =========================================================================
  */
 "use client";
@@ -82,38 +85,38 @@ import {
     ArrowUp, ArrowDown, Filter, X, FileDown, TrendingUp, Send, ShoppingCart,
     CheckSquare, Square, Sun, Moon, Plus, MoreVertical, Edit, Trash2, Eye,
     Hash, FileBadge, CalendarDays, MapPin, Trees, AreaChart,
-    Landmark // 10. Ícone Landmark adicionado
+    Landmark 
 } from "lucide-react";
 import { LoadingOutlined } from "@ant-design/icons";
-import "antd/dist/reset.css"; // <-- Restaurado
+import "antd/dist/reset.css"; 
 
 // --- Imports dos Modais ---
-// 7. FIX: Caminhos ajustados para a raiz
 import ModalPivo from "./ModalPivo";
 import ModalPivoDetalhes from "./ModalPivoDetalhes";
 import NotificationModal from "./NotificationModal";
 
 
 // --- INTERFACE DO ITEM ---
+// CORREÇÃO: Campos que podem vir null da API tipados como opcionais (undefined) para compatibilidade com componentes
 interface PivoTalhao {
   id: number;
   key: string;
   nome: string;
   safra: string;
-  filial: string; // 10. CAMPO ADICIONADO
-  bloco: string | null;
-  ha: number | null;
+  filial: string; 
+  bloco?: string; // Alterado de string | null para string | undefined (opcional)
+  ha?: number;    // Alterado de number | null para number | undefined (opcional)
   cultura: string | null;
   variedade: string | null;
-  gid_telemetria: string | null; // 19. CAMPO ADICIONADO
-  kml: string | null; // 19. CAMPO ADICIONADO
+  gid_telemetria?: string; // Alterado de string | null para string | undefined (opcional)
+  kml?: string;            // Alterado de string | null para string | undefined (opcional)
   status: string; // "Aberto" ou "Inativo"
   status_original: 'A' | 'I';
   dt_inclusao: string;
   dt_alteracao: string | null;
   [key: string]: any;
 }
-// ATUALIZAÇÃO 1: StatusFiltro corrigido
+
 type StatusFiltro = 'Aberto' | 'Inativo' | 'Todos';
 
 
@@ -197,7 +200,6 @@ const FiltroAbasStatus = ({ filtroAtual, onChange }: {
   filtroAtual: StatusFiltro;
   onChange: (status: StatusFiltro) => void;
 }) => {
-  // ATUALIZAÇÃO 1: Abas corrigidas
   const abas: StatusFiltro[] = ['Aberto', 'Inativo', 'Todos'];
   return (
     <div className="tabs-card">
@@ -219,10 +221,10 @@ const FiltroAbasStatus = ({ filtroAtual, onChange }: {
 // --- PÁGINA PRINCIPAL DO CRUD ---
 
 export default function GestaoPivoPage() {
-  const { data: session, status } = useSession(); // <-- Implementação real
-  const router = useRouter(); // <-- Implementação real
+  const { data: session, status } = useSession(); 
+  const router = useRouter(); 
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
-  const [pivos, setPivos] = useState<PivoTalhao[]>([]); // Estado renomeado
+  const [pivos, setPivos] = useState<PivoTalhao[]>([]); 
 
   // --- Estados do Tema (Layout 1) ---
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
@@ -238,9 +240,9 @@ export default function GestaoPivoPage() {
 
   // --- Estados dos Modais ---
   const [isCrudModalOpen, setIsCrudModalOpen] = useState(false);
-  const [isDetalheModalOpen, setIsDetalheModalOpen] = useState(false); // Renomeado
+  const [isDetalheModalOpen, setIsDetalheModalOpen] = useState(false); 
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'delete'>('add');
-  const [currentItem, setCurrentItem] = useState<Partial<PivoTalhao> | null>(null); // Renomeado
+  const [currentItem, setCurrentItem] = useState<Partial<PivoTalhao> | null>(null); 
   
   // --- Estados de Paginação e Ordenação (Layout 1) ---
   const [paginaAtual, setPaginaAtual] = useState<number>(1);
@@ -248,13 +250,11 @@ export default function GestaoPivoPage() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof PivoTalhao | null; direction: 'asc' | 'desc' }>({ key: 'id', direction: 'asc' });
 
   // --- Estado de Filtro de Status ---
-  // ATUALIZAÇÃO 1: Filtro padrão corrigido
   const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>('Aberto');
 
   // --- Gráfico e KPIs ---
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
 
-  // ATUALIZAÇÃO 2: Decoupling. kpiDadosStatus é para os KPIs.
   const kpiDadosStatus = useMemo(() => {
     const abertos = pivos.filter(c => c.status === 'Aberto').length;
     const inativos = pivos.filter(c => c.status === 'Inativo').length;
@@ -264,7 +264,6 @@ export default function GestaoPivoPage() {
     ];
   }, [pivos]);
 
-  // ATUALIZAÇÃO 20: dadosGraficoBloco é o novo array para o gráfico.
   const dadosGraficoBloco = useMemo(() => {
     const blocoMap = new Map<string, number>();
     pivos.forEach(item => {
@@ -283,12 +282,10 @@ export default function GestaoPivoPage() {
         .sort((a, b) => b.value - a.value); // Ordena da maior para a menor
   }, [pivos]);
 
-  // ATUALIZAÇÃO 20: Total calculado para o Tooltip
   const totalAreaBloco = useMemo(() => {
       return dadosGraficoBloco.reduce((acc, entry) => acc + entry.value, 0);
   }, [dadosGraficoBloco]);
 
-  // ATUALIZAÇÃO 20: Mapa de cores de TEXTO para o Tooltip
   const coresBlocoTexto: Record<string, string> = {
       "BLOCO A": "#EAB308",
       "BLOCO B": "#5FB246",
@@ -297,7 +294,6 @@ export default function GestaoPivoPage() {
       "N/A": "#888888",
   };
 
-  // ATUALIZAÇÃO 20: Cores para o gráfico de Bloco (Chaves em MAIÚSCULAS)
   const coresBlocoDonut: Record<string, string> = {
       "BLOCO A": "url(#gradAmarelo)",
       "BLOCO B": "url(#gradVerde)",
@@ -305,12 +301,11 @@ export default function GestaoPivoPage() {
       "BLOCO D": "url(#gradLaranja)",
       "N/A": "url(#gradCinza)",
   };
-  const DEFAULT_COR_BLOCO = "url(#gradCinza)"; // Fallback
+  const DEFAULT_COR_BLOCO = "url(#gradCinza)";
 
 
   // --- LÓGICA DE TEMA (Layout 1) ---
   useEffect(() => {
-    // Simulação de busca de tema
     const storedTheme = localStorage.getItem('theme') as 'light' | 'dark';
     setTheme(storedTheme || 'light');
     hasFetchedTheme.current = true;
@@ -330,9 +325,8 @@ export default function GestaoPivoPage() {
     setIsSavingTheme(true);
     setTheme(newTheme);
     try {
-      // Simulação: assumindo que a API de tema existe
       console.log(`[MockAPI] Tema salvo como: ${newTheme}`);
-      await new Promise(res => setTimeout(res, 300)); // Simula delay
+      await new Promise(res => setTimeout(res, 300)); 
     } catch (error: any) {
       setTheme(oldTheme);
     } finally {
@@ -346,7 +340,6 @@ export default function GestaoPivoPage() {
     if (status === 'loading') { setAuthStatus('loading'); return; }
     if (status === 'authenticated') {
       const user: any = session.user;
-      // --- *** PERMISSÃO ALTERADA *** ---
       const hasAccess = user?.is_admin === true || user?.funcoes?.includes('gestao.agricola.pivo');
       if (hasAccess) { setAuthStatus('authorized'); }
       else { setAuthStatus('unauthorized'); }
@@ -360,7 +353,6 @@ export default function GestaoPivoPage() {
     setLoading(true);
     let data: any[] = [];
     try {
-      // --- *** ENDPOINT CORRETO *** ---
       const response = await fetch("/api/gestao-agricola/pivo/consulta", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -368,13 +360,11 @@ export default function GestaoPivoPage() {
       });
 
       if (response.status === 204) {
-          data = []; // Resposta vazia, mas OK
+          data = []; 
       } else if (!response.ok) {
-          // Se a API falhar (ex: 404, 500), lança um erro para o catch
           throw new Error(`Falha na API: ${response.statusText}`);
       } else {
           data = await response.json();
-          // Se a resposta for OK mas o JSON for inválido (ex: string vazia)
           if (!Array.isArray(data)) {
             console.warn("Resposta da API não é um array, tratando como vazio.");
             data = [];
@@ -382,22 +372,23 @@ export default function GestaoPivoPage() {
       }
     } catch (error) {
       console.error("Erro ao buscar pivôs/talhões:", error);
-      // 8. CORREÇÃO CRÍTICA: Não usar mock. Apenas mostrar erro.
       message.error(`Não foi possível carregar os pivôs/talhões: ${error instanceof Error ? error.message : String(error)}`);
-      data = []; // Garante que a lista fique vazia em caso de falha
+      data = []; 
     } finally {
-      // ATUALIZAÇÃO 1: Mapeamento de status corrigido
       const statusMap: Record<string, string> = { 'A': 'Aberto' };
       setPivos(data.map((item, index) => ({
         ...item,
         key: item.id?.toString() ?? `key-${index}`,
         nome: item.nome || 'N/A',
         safra: item.safra || 'N/A',
-        filial: item.filial || 'N/A', // 10. CAMPO ADICIONADO
-        gid_telemetria: item.gid_telemetria || null, // 19. CAMPO ADICIONADO
-        kml: item.kml || null, // 19. CAMPO ADICIONADO
-        status: statusMap[item.status] || 'Inativo', // A = Aberto, tudo mais = Inativo
-        status_original: item.status || 'I', // Default para Inativo se status não vier
+        filial: item.filial || 'N/A', 
+        // CORREÇÃO: Mapeando null para undefined
+        gid_telemetria: item.gid_telemetria || undefined, 
+        kml: item.kml || undefined, 
+        bloco: item.bloco || undefined,
+        ha: item.ha || undefined,
+        status: statusMap[item.status] || 'Inativo',
+        status_original: item.status || 'I', 
       })));
       setLoading(false);
     }
@@ -414,15 +405,12 @@ export default function GestaoPivoPage() {
   const pivosFiltrados = useMemo(() => {
     let dadosFiltrados = [...pivos];
     
-    // 1. Filtrar por Status (Aba)
     if (filtroStatus !== 'Todos') {
       dadosFiltrados = dadosFiltrados.filter(c => c.status === filtroStatus);
     }
     
-    // 2. Filtrar por busca (Input)
     const termo = buscaDebounced.toLowerCase().trim();
     if (termo) {
-        // ATUALIZAÇÃO 20: Removido 'safra' e 'cultura' da busca
         dadosFiltrados = dadosFiltrados.filter(c =>
             c.nome.toLowerCase().includes(termo) ||
             c.filial.toLowerCase().includes(termo) ||
@@ -431,7 +419,6 @@ export default function GestaoPivoPage() {
         );
     }
 
-    // 3. Ordenar
     if (sortConfig.key) {
         dadosFiltrados.sort((a, b) => {
             const aValue = a[sortConfig.key!];
@@ -458,13 +445,11 @@ export default function GestaoPivoPage() {
       return pivosFiltrados.slice(inicio, fim);
   }, [pivosFiltrados, paginaAtual, pageSize]);
 
-  // Handler para Trocar Aba
   const handleFiltroStatusChange = (status: StatusFiltro) => {
     setFiltroStatus(status);
-    setPaginaAtual(1); // Reseta a paginação
+    setPaginaAtual(1); 
   };
 
-  // Handlers dos Modais
   const handleOpenCrudModal = (mode: 'add' | 'edit' | 'delete', item?: PivoTalhao) => {
     setModalMode(mode);
     setCurrentItem(item || null);
@@ -478,7 +463,6 @@ export default function GestaoPivoPage() {
   };
   const handleCloseDetalheModal = () => setIsDetalheModalOpen(false);
   
-  // Handler de Salvar (para o ModalPivo)
   const handleSavePivo = async (data: any, mode: 'add' | 'edit' | 'delete') => {
     if (!session?.user?.email) {
       setNotification({ visible: true, type: 'error', message: 'Sessão expirada. Faça login novamente.' });
@@ -492,8 +476,6 @@ export default function GestaoPivoPage() {
     
     try {
       const now = new Date().toISOString();
-
-      // Mapeia o status de 'Aberto'/'Inativo' para 'A'/'I'
       const statusApi = data.status === 'Aberto' ? 'A' : 'I';
 
       if (mode === 'add') {
@@ -515,7 +497,6 @@ export default function GestaoPivoPage() {
         throw new Error("Modo de operação inválido.");
       }
       
-      // --- CÓDIGO REAL DA API (ATIVADO) ---
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -524,28 +505,21 @@ export default function GestaoPivoPage() {
 
       let result: any;
       try {
-          // Tenta parsear JSON
           result = await response.json();
       } catch (e) {
-          // Se falhar (ex: resposta vazia ou texto)
           const errorText = await response.text().catch(() => "Erro desconhecido no servidor.");
-          // Se a resposta foi 200/OK mas sem JSON, considera sucesso
           if (response.ok) {
               result = { status: 'ok', message: successMessage };
           } else {
-              // Se foi um erro HTTP e sem JSON
               throw new Error(`[HTTP ${response.status}] ${response.statusText || errorText}`);
           }
       }
       
-      // Alguns webhooks podem retornar um array, outros um objeto
       const firstResult = Array.isArray(result) ? result[0] : result;
       
-      // Sucesso se a API HTTP deu OK e o corpo (se existir) não indica erro
       if (!response.ok || (firstResult && firstResult.status === 'error')) {
         throw new Error(firstResult?.message || `Falha ao ${action} o item.`);
       }
-      // --- FIM DO CÓDIGO REAL ---
 
       setNotification({ visible: true, type: 'success', message: successMessage });
       handleCloseCrudModal();
@@ -559,14 +533,13 @@ export default function GestaoPivoPage() {
     }
   };
   
-  // --- COMPONENTES DE ORDENAÇÃO (Layout 1) ---
   const requestSort = (key: keyof PivoTalhao) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
-    setPaginaAtual(1); // Resetar para a primeira página ao ordenar
+    setPaginaAtual(1); 
   };
 
   const SortIcon = ({ columnKey }: { columnKey: keyof PivoTalhao }) => {
@@ -579,20 +552,15 @@ export default function GestaoPivoPage() {
     return <ArrowDown size={14} style={{ marginLeft: '4px' }} />;
   };
 
-  // --- Função para formatar legenda ---
   const renderLegendText = (value: string) => {
     return <span style={{ marginLeft: '4px' }} className="recharts-legend-item-text">{value}</span>;
   };
 
-  // --- Gráfico (Layout 1) ---
-
-  // ATUALIZAÇÃO 17: Tooltip Customizado (Glassmorphism)
   const CustomTooltip = ({ active, payload }: any) => {
       if (active && payload && payload.length) {
           const value = payload[0].value;
           const name = payload[0].name;
           
-          // --- CORREÇÃO 17: Cálculo manual do percentual ---
           const percent = (totalAreaBloco > 0) 
               ? ((value / totalAreaBloco) * 100).toFixed(1) 
               : '0.0';
@@ -603,18 +571,16 @@ export default function GestaoPivoPage() {
               borderRadius: '8px',
               padding: '10px 12px',
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 999, // Garante que fique acima de tudo
-              // --- Glassmorphism ---
+              zIndex: 999, 
               backdropFilter: 'blur(10px)',
               WebkitBackdropFilter: 'blur(10px)',
-              // --- Cores ---
               background: isDark ? 'rgba(25, 39, 53, 0.85)' : 'rgba(255, 255, 255, 0.85)',
               border: isDark ? '1px solid var(--gcs-dark-border)' : '1px solid var(--gcs-border-color)',
               overflow: 'hidden',
           };
           
           const titleStyle: React.CSSProperties = {
-              color: coresBlocoTexto[name] || '#888888', // Cor da fatia
+              color: coresBlocoTexto[name] || '#888888', 
               fontSize: '14px',
               fontWeight: 'bold',
               margin: 0,
@@ -650,14 +616,11 @@ export default function GestaoPivoPage() {
       return null;
   };
 
-  // ATUALIZAÇÃO 12: renderActiveShape simplificado (apenas destaca a fatia)
   const renderActiveShape = (props: any) => {
     const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
     return (
       <g>
-        {/* Fatias (setores) */}
         <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        {/* Destaque (borda externa) */}
         <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 4} outerRadius={outerRadius + 8} fill={fill} />
       </g>
     );
@@ -690,19 +653,16 @@ export default function GestaoPivoPage() {
   }
 
   return (<>
-    {/* --- SVG DEFINITIONS (Layout 1) --- */}
     <svg width="0" height="0" style={{ position: 'absolute', zIndex: -1 }}>
         <defs>
           <linearGradient id="gradLaranja" x1="0" y1="0" x2="0" y2="1"> <stop offset="0%" stopColor="#f79b4d" /> <stop offset="100%" stopColor="#F58220" /> </linearGradient>
           <linearGradient id="gradVerde" x1="0" y1="0" x2="0" y2="1"> <stop offset="0%" stopColor="#9DDE5B" /> <stop offset="100%" stopColor="#5FB246" /> </linearGradient>
-          {/* ATUALIZAÇÃO 3: Novas cores de gradiente */}
           <linearGradient id="gradAmarelo" x1="0" y1="0" x2="0" y2="1"> <stop offset="0%" stopColor="#FDE047" /> <stop offset="100%" stopColor="#EAB308" /> </linearGradient>
           <linearGradient id="gradAzulClaro" x1="0" y1="0" x2="0" y2="1"> <stop offset="0%" stopColor="#7DD3FC" /> <stop offset="100%" stopColor="#38BDF8" /> </linearGradient>
           <linearGradient id="gradCinza" x1="0" y1="0" x2="0" y2="1"> <stop offset="0%" stopColor="#B0B0B0" /> <stop offset="100%" stopColor="#888888" /> </linearGradient>
         </defs>
     </svg>
 
-    {/* --- STYLES (Merge de Layout 1 e 2) --- */}
     <style>{`
         /* --- Variáveis (Layout 1) --- */
         :root {
@@ -937,7 +897,8 @@ export default function GestaoPivoPage() {
                             activeIndex={activeIndex} 
                             activeShape={renderActiveShape} // Shape simplificado
                             onMouseEnter={(_, index) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
+                            // ALTERAÇÃO: setando para undefined em vez de null
+                            onMouseLeave={() => setActiveIndex(undefined)}
                         >
                             {dadosGraficoBloco.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={coresBlocoDonut[entry.name] || DEFAULT_COR_BLOCO} />

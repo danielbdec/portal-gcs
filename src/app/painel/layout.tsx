@@ -14,7 +14,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
     if (status === "unauthenticated") {
       router.replace("/login");
     }
-  }, [status]);
+  }, [status, router]);
 
   if (status === "loading") {
     return <p style={{ padding: "2rem" }}>Carregando sessão...</p>;

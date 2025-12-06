@@ -19,6 +19,8 @@ interface ItemNota {
     qtd?: number;
     moeda?: number;
     data_ultima_ptax?: string;
+    registro_pedido?: number | null;
+    ultima_ptax?: number | null;
 }
 
 interface PedidoEncontrado {
@@ -302,7 +304,8 @@ const PedidoSearchModal = ({ isOpen, onClose, onSelect, searchResults, isLoading
                                     </div>
                                     <div style={{ fontSize: '0.9em', color: '#6c757d', marginTop: '4px' }}>{p.Produto}</div>
                                     <div style={{ fontSize: '0.8em', color: '#888', textAlign: 'right' }}>
-                                        <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda)}
+                                        {/* --- CORREÇÃO AQUI: Adicionado "?? null" --- */}
+                                        <strong>Valor:</strong> {formatCurrency(p.Valor, p.moeda ?? null)}
                                         {p.moeda === 2 && typeof p.Valor === 'number' && typeof p.ultima_ptax === 'number' && (
                                             <Meta>
                                                 (aprox. {formatCurrency(p.Valor * p.ultima_ptax, 1)} @ {p.ultima_ptax.toFixed(4)})
@@ -430,12 +433,13 @@ const ManualPedidoModal = ({
                         valor_unitario_xml: item.valor_unitario_xml ?? null,
                         qtd: item.qtd ?? null,
                         moeda: item.moeda ?? null,
-                        ultima_ptax: null, 
-                        data_ultima_ptax: null,
+                        
+                        ultima_ptax: shouldPrepopulate ? (item.ultima_ptax ?? null) : null,
+                        data_ultima_ptax: shouldPrepopulate ? (item.data_ultima_ptax ?? null) : null,
                         num_pedido: shouldPrepopulate ? item.num_pedido : null,
                         descricao_pedido_api: shouldPrepopulate ? item.descricao_pedido : null,
                         valor_pedido_api: shouldPrepopulate ? (item.valor_unitario_ped ?? null) : null,
-                        registro_pedido: null,
+                        registro_pedido: shouldPrepopulate ? (item.registro_pedido ?? null) : null,
                     };
                 });
                 setItensManuais(initialItensManuais);
