@@ -2,7 +2,11 @@ import https from "https";
 import fs from "fs";
 import next from "next";
 
-const dev = process.env.NODE_ENV !== "production";
+// Força modo produção dentro do processo
+process.env.NODE_ENV = "production";
+
+// Como este server é só pra produção, mantemos dev fixo em false
+const dev = false;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
