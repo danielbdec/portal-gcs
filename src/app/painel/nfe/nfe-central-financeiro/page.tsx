@@ -391,7 +391,7 @@ export default function ConsultaNotas() {
     }
     if (status === 'authenticated') {
       const user = session.user;
-      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralCompras'); // Permissão alterada
+      const hasAccess = user?.is_admin === true || user?.funcoes?.includes('nfEntrada.centralFinanceiro'); // Permissão alterada
 
       if (hasAccess) {
         setAuthStatus('authorized');
